@@ -40,10 +40,12 @@
 #                    (auto-désactivé pour les instances éphémères sslip.io)
 #   SSO_ENV_FILE   fichier des identifiants EirbConnect, HORS du repo
 #                    (défaut: ~/.config/multi-inventory/eirbconnect.env, chmod 600)
-#   EIRBCONNECT_REALM / EIRBCONNECT_CLIENT_ID / EIRBCONNECT_SECRET
-#                    identifiants OIDC. Si absents (env + fichier), ils sont DEMANDÉS
-#                    une seule fois puis enregistrés dans SSO_ENV_FILE (jamais committé).
-#   EIRBCONNECT_BASE_URL  base Keycloak (défaut: https://connect.eirb.fr)
+#   EIRBCONNECT_CLIENT_ID / EIRBCONNECT_SECRET
+#                    LES SEULES infos à toi : si absentes (env + fichier), elles sont
+#                    DEMANDÉES une seule fois puis enregistrées dans SSO_ENV_FILE (jamais committé).
+#   EIRBCONNECT_REALM     realm Keycloak EirbConnect — constante PUBLIQUE (défaut: eirb)
+#   EIRBCONNECT_BASE_URL  hôte Keycloak EirbConnect — constante (défaut: https://connect.vpn.eirb.fr)
+#                          (realm + hôte viennent de la doc Eirbware ; tu n'as PAS à les saisir)
 #   OIDC_PROVIDER_ID      id interne du provider (défaut: eirbconnect ; sert aussi
 #                          dans l'URL de callback /accounts/oidc/<id>/login/callback/)
 #
@@ -77,7 +79,10 @@ MAIN_SUBDOMAIN="${MAIN_SUBDOMAIN:-inventaire}"
 # ====== EirbConnect (SSO OpenID Connect) ======
 ENABLE_SSO="${ENABLE_SSO:-1}"
 SSO_ENV_FILE="${SSO_ENV_FILE:-$HOME/.config/multi-inventory/eirbconnect.env}"
-EIRBCONNECT_BASE_URL="${EIRBCONNECT_BASE_URL:-https://connect.eirb.fr}"
+# Constantes EirbConnect issues de la doc Eirbware (realm + hôte). Publiques et fixes :
+# tu n'as donc PAS à les saisir. Surchargeables par variable d'env si Eirbware change.
+EIRBCONNECT_REALM="${EIRBCONNECT_REALM:-eirb}"
+EIRBCONNECT_BASE_URL="${EIRBCONNECT_BASE_URL:-https://connect.vpn.eirb.fr}"
 OIDC_PROVIDER_ID="${OIDC_PROVIDER_ID:-eirbconnect}"
 
 # Charge les identifiants EirbConnect.
@@ -88,15 +93,14 @@ load_sso_credentials() {
     # shellcheck source=/dev/null
     . "$SSO_ENV_FILE"
   fi
-  if [ -z "${EIRBCONNECT_CLIENT_ID:-}" ] || [ -z "${EIRBCONNECT_SECRET:-}" ] || [ -z "${EIRBCONNECT_REALM:-}" ]; then
+  # On ne demande QUE le client_id et le secret (le realm et l'hôte sont des constantes).
+  if [ -z "${EIRBCONNECT_CLIENT_ID:-}" ] || [ -z "${EIRBCONNECT_SECRET:-}" ]; then
     if [ -t 0 ]; then
       echo ">> Identifiants EirbConnect (demandés une seule fois, stockés HORS du repo)"
-      [ -z "${EIRBCONNECT_REALM:-}" ]     && read -rp  "   Realm Keycloak (connect.eirb.fr) : " EIRBCONNECT_REALM
-      [ -z "${EIRBCONNECT_CLIENT_ID:-}" ] && read -rp  "   Client ID                        : " EIRBCONNECT_CLIENT_ID
-      [ -z "${EIRBCONNECT_SECRET:-}" ]    && { read -rsp "   Client secret                    : " EIRBCONNECT_SECRET; echo; }
+      [ -z "${EIRBCONNECT_CLIENT_ID:-}" ] && read -rp  "   Client ID     : " EIRBCONNECT_CLIENT_ID
+      [ -z "${EIRBCONNECT_SECRET:-}" ]    && { read -rsp "   Client secret : " EIRBCONNECT_SECRET; echo; }
       mkdir -p "$(dirname "$SSO_ENV_FILE")"
       ( umask 077; cat > "$SSO_ENV_FILE" <<EOF
-EIRBCONNECT_REALM='$EIRBCONNECT_REALM'
 EIRBCONNECT_CLIENT_ID='$EIRBCONNECT_CLIENT_ID'
 EIRBCONNECT_SECRET='$EIRBCONNECT_SECRET'
 EOF
