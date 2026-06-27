@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # create-asso.sh — Déploie une asso COMPLÈTE en une seule commande :
-#                  InvenTree (optimisé mémoire) + Scanette, derrière le Caddy frontal.
+#                  InvenTree (optimisé mémoire) + Scanette + SSO EirbConnect, derrière le Caddy frontal.
 #
 # Tout est rangé dans ~/<nom>/ :
 #   ~/<nom>/
@@ -34,36 +34,51 @@
 #   WITH_SCANETTE  1 (défaut) = déploie aussi la Scanette ; 0 = InvenTree seul
 #   MAIN_ASSO      asso principale au sous-domaine fixe (défaut: eirspace)
 #   MAIN_SUBDOMAIN sous-domaine fixe de l'asso principale (défaut: inventaire)
+#   ADMIN_EMAIL    email du compte admin (défaut: l'expéditeur SMTP ; admin@<nom>.local sans SSO)
 #
-#   --- EirbConnect (SSO OpenID Connect) ---
+#   --- EirbConnect (SSO OpenID Connect, via le broker Dex) ---
 #   ENABLE_SSO     1 (défaut) = branche EirbConnect ; 0 = pas de SSO
 #                    (auto-désactivé pour les instances éphémères sslip.io)
-#   SSO_ENV_FILE   fichier des identifiants EirbConnect, HORS du repo
-#                    (défaut: ~/.config/multi-inventory/eirbconnect.env, chmod 600)
-#   EIRBCONNECT_CLIENT_ID / EIRBCONNECT_SECRET
-#                    LES SEULES infos à toi : si absentes (env + fichier), elles sont
-#                    DEMANDÉES une seule fois puis enregistrées dans SSO_ENV_FILE (jamais committé).
-#   EIRBCONNECT_REALM     realm Keycloak EirbConnect — constante PUBLIQUE (défaut: eirb)
-#   EIRBCONNECT_BASE_URL  hôte Keycloak EirbConnect — constante (défaut: https://connect.vpn.eirb.fr)
-#                          (realm + hôte viennent de la doc Eirbware ; tu n'as PAS à les saisir)
-#   OIDC_PROVIDER_ID      id interne du provider (défaut: eirbconnect ; sert aussi
-#                          dans l'URL de callback /accounts/oidc/<id>/login/callback/)
+#
+#   Le SSO passe par un broker Dex (https://auth.<domaine>/oauth2), auto-déployé au
+#   premier run. Un SEUL client est enregistré côté Eirbware ; Dex redistribue l'identité
+#   à chaque InvenTree, donc plus jamais besoin d'Eirbware pour une nouvelle asso.
+#
+#   Identifiants demandés UNE SEULE FOIS puis stockés hors repo (~/.config/multi-inventory/) :
+#     - EirbConnect : client_id + secret     -> eirbconnect.env
+#     - SMTP        : serveur/identifiant/mdp -> smtp.env   (requis pour l'auto-création)
+#
+#   Modèle d'accès : auto-création + en attente. Un membre inconnu se connecte -> son
+#   compte est créé SANS groupe -> l'admin lui assigne un groupe = approuvé. L'identité
+#   est le 'sub' OIDC (pas l'email) -> insensible aux multiples adresses de l'école.
+#
+#   Détails : lib/sso.sh (fonctions) et auth/INTEGRATION.md.
+#   Surcharges éventuelles : AUTH_DOMAIN (défaut auth.<BASE_DOMAIN>), SMTP_ENV_FILE,
+#   SSO_ENV_FILE, EIRBCONNECT_REALM, EIRBCONNECT_BASE_URL, OIDC_PROVIDER_ID.
 #
 # Exemples :
 #   ./create-asso.sh eirspace                     -> https://inventaire.eirspace.fr  (asso principale)
 #   ./create-asso.sh eirspace inventaire          -> https://inventaire.eirspace.fr  (identique, explicite)
 #   ./create-asso.sh pixeirb  inventaire-pixeirb  -> https://inventaire-pixeirb.eirspace.fr
 #   ./create-asso.sh vost                         -> https://inventaire-vost.eirspace.fr
-#   ./create-asso.sh demo     tmp                 -> https://demo.<ip>.sslip.io  (éphémère)
+#   ./create-asso.sh demo     tmp                 -> https://demo.<ip>.sslip.io  (éphémère, sans SSO)
 #   ENABLE_SSO=0 ./create-asso.sh vost            -> sans SSO
 #
 # Idempotent : relancer = mettre à jour (l'.env est préservé, l'app rebuild, le frontal
-#              recharge, le bloc SSO du config.yaml est remplacé et non dupliqué).
+#              recharge, le bloc SSO du config.yaml + le client Dex sont remplacés, pas dupliqués).
 #
 set -euo pipefail
 
-# ====== Emplacement du repo (pour trouver scanette-src/) ======
+# ====== Emplacement du repo (pour trouver scanette-src/ et lib/) ======
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ====== Fonctions SSO / Dex / SMTP (broker partagé) ======
+if [ ! -f "$SCRIPT_DIR/lib/sso.sh" ]; then
+  echo "ERREUR : $SCRIPT_DIR/lib/sso.sh introuvable. Récupère le dossier lib/ du repo." >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$SCRIPT_DIR/lib/sso.sh"
 
 # ====== Configuration ======
 BASE_DOMAIN="${BASE_DOMAIN:-eirspace.fr}"          # vide ("") => sslip.io
@@ -84,6 +99,9 @@ SSO_ENV_FILE="${SSO_ENV_FILE:-$HOME/.config/multi-inventory/eirbconnect.env}"
 EIRBCONNECT_REALM="${EIRBCONNECT_REALM:-eirb}"
 EIRBCONNECT_BASE_URL="${EIRBCONNECT_BASE_URL:-https://connect.vpn.eirb.fr}"
 OIDC_PROVIDER_ID="${OIDC_PROVIDER_ID:-eirbconnect}"
+
+# Email du compte admin (résolu plus bas : expéditeur SMTP si SSO, sinon admin@<nom>.local).
+ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 
 # Charge les identifiants EirbConnect.
 # Priorité : variables d'environnement > fichier local (hors repo) > saisie interactive.
@@ -198,6 +216,9 @@ if [ "$ENABLE_SSO" = "1" ]; then
     load_sso_credentials
     if [ -n "${EIRBCONNECT_CLIENT_ID:-}" ] && [ -n "${EIRBCONNECT_SECRET:-}" ] && [ -n "${EIRBCONNECT_REALM:-}" ]; then
       SSO_READY=1
+      # SMTP demandé une seule fois (requis pour l'auto-création de comptes SSO).
+      load_smtp_credentials
+      [ -z "$ADMIN_EMAIL" ] && ADMIN_EMAIL="${SMTP_SENDER:-admin@$NAME.local}"
     else
       echo ">> SSO demandé mais identifiants EirbConnect manquants (mode non interactif ?) : on continue SANS SSO." >&2
     fi
@@ -214,6 +235,21 @@ if [ -f .env ]; then
   echo ">> .env existant conservé (identifiants inchangés)"
 else
   KEEP_ENV=0
+  # Bloc email : SMTP réel si SSO, sinon gabarit commenté.
+  if [ "$SSO_READY" = "1" ]; then
+    EMAIL_BLOCK="$(smtp_env_block)"
+    ADMIN_EMAIL_LINE="INVENTREE_ADMIN_EMAIL=${ADMIN_EMAIL:-$SMTP_SENDER}"
+  else
+    ADMIN_EMAIL_LINE="INVENTREE_ADMIN_EMAIL=admin@$NAME.local"
+    EMAIL_BLOCK="# --- Email/SMTP non configuré (SSO désactivé). Active le SSO pour le renseigner. ---
+#INVENTREE_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+#INVENTREE_EMAIL_HOST=
+#INVENTREE_EMAIL_PORT=587
+#INVENTREE_EMAIL_USERNAME=
+#INVENTREE_EMAIL_PASSWORD=
+#INVENTREE_EMAIL_TLS=True
+#INVENTREE_EMAIL_SENDER=noreply@$NAME.local"
+  fi
   cat > .env <<EOF
 COMPOSE_PROJECT_NAME=$NAME
 INVENTREE_TAG=stable
@@ -227,17 +263,8 @@ INVENTREE_BACKGROUND_WORKERS=1
 INVENTREE_GUNICORN_WORKERS=1
 INVENTREE_ADMIN_USER=$ADMIN_USER
 INVENTREE_ADMIN_PASSWORD=$ADMIN_PW
-INVENTREE_ADMIN_EMAIL=admin@$NAME.local
-# --- Email : requis pour ACTIVER le SSO côté InvenTree. Décommente + remplis ton SMTP,
-# --- sinon le toggle "Enable SSO" peut refuser de s'allumer. (Le login SSO lui-même
-# --- n'envoie pas d'email : il rattache juste un compte existant par son adresse.)
-#INVENTREE_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-#INVENTREE_EMAIL_HOST=
-#INVENTREE_EMAIL_PORT=587
-#INVENTREE_EMAIL_USERNAME=
-#INVENTREE_EMAIL_PASSWORD=
-#INVENTREE_EMAIL_TLS=True
-#INVENTREE_EMAIL_SENDER=noreply@$NAME.local
+$ADMIN_EMAIL_LINE
+$EMAIL_BLOCK
 INVENTREE_DB_ENGINE=postgresql
 INVENTREE_DB_NAME=$NAME
 INVENTREE_DB_HOST=inventree-db
@@ -344,49 +371,9 @@ docker compose run --rm -T inventree-server invoke update
 echo ">> Réglage background workers=1"
 sudo sed -i '/^background:/,/^[^[:space:]]/ s/^\(\s*workers:\).*/\1 1/' "$DIR/$NAME-data/config.yaml"
 
-# ====== Injection EirbConnect (SSO OIDC) dans config.yaml ======
-# config.yaml vient d'être généré par 'invoke update'. On y ajoute, ENTRE MARQUEURS
-# (donc idempotent : un re-run remplace le bloc au lieu de le dupliquer), le provider
-# OpenID Connect d'EirbConnect.
-#   EMAIL_AUTHENTICATION: true  => un login SSO se rattache au compte InvenTree qui a le
-#   MÊME email. C'est ta whitelist : seuls les comptes pré-créés (avec l'email renvoyé par
-#   EirbConnect) peuvent entrer ; les autres tombent sur "sign up closed".
-#   (Sûr ici car l'IdP est le Keycloak de l'école, de confiance, qui maîtrise les emails.)
-CONFIG_YAML="$DIR/$NAME-data/config.yaml"
-if [ "$SSO_READY" = "1" ]; then
-  echo ">> Injection EirbConnect (OIDC) dans config.yaml"
-  SSO_SERVER_URL="$EIRBCONNECT_BASE_URL/realms/$EIRBCONNECT_REALM/.well-known/openid-configuration"
-  # retire un éventuel ancien bloc (re-run), puis réécrit le bloc courant
-  sudo sed -i '/# >>> EIRBCONNECT-SSO >>>/,/# <<< EIRBCONNECT-SSO <<</d' "$CONFIG_YAML"
-  sudo tee -a "$CONFIG_YAML" >/dev/null <<EOF
-# >>> EIRBCONNECT-SSO >>>
-social_backends:
-  - 'allauth.socialaccount.providers.openid_connect'
-social_providers:
-  openid_connect:
-    OAUTH_PKCE_ENABLED: true
-    EMAIL_AUTHENTICATION: true
-    APPS:
-      - provider_id: $OIDC_PROVIDER_ID
-        name: EirbConnect
-        client_id: '$EIRBCONNECT_CLIENT_ID'
-        secret: '$EIRBCONNECT_SECRET'
-        settings:
-          server_url: '$SSO_SERVER_URL'
-# <<< EIRBCONNECT-SSO <<<
-EOF
-fi
-
 # ====== Démarrage InvenTree ======
+# (Le bloc SSO du config.yaml est injecté plus bas par setup_asso_sso, qui relance proprement.)
 docker compose up -d
-
-# Le serveur ne lit config.yaml qu'au DÉMARRAGE : si le SSO a été (re)injecté, on force un
-# restart du serveur et du worker pour qu'ils prennent en compte EirbConnect (indispensable
-# sur un re-run où les conteneurs tournaient déjà).
-if [ "$SSO_READY" = "1" ]; then
-  echo ">> Redémarrage server+worker pour appliquer le SSO"
-  docker compose restart inventree-server inventree-worker
-fi
 
 # ====== Scanette ======
 if [ "$WITH_SCANETTE" = "1" ]; then
@@ -502,6 +489,13 @@ EOF
 fi
 ( cd "$FRONT" && docker compose up -d --force-recreate )
 
+# ====== SSO EirbConnect (broker Dex) : tout automatisé ======
+# Déploie/maj Dex, enregistre le client de cette asso, injecte le bloc OIDC dans config.yaml,
+# relit le .env (SMTP) + config.yaml, et active les toggles SSO en base. (cf. lib/sso.sh)
+if [ "$SSO_READY" = "1" ]; then
+  setup_asso_sso "$NAME" "$HOST" "$DIR"
+fi
+
 # ====== Récap ======
 echo ""
 echo ">> ============================================================"
@@ -516,16 +510,10 @@ else
 fi
 if [ "$SSO_READY" = "1" ]; then
   echo ">> ------------------------------------------------------------"
-  echo ">>  EirbConnect (SSO) : 3 étapes manuelles restantes"
-  echo ">>   1) Fais AUTORISER cette redirect URI côté Keycloak (Eirbware) :"
-  echo ">>        https://$HOST/accounts/oidc/$OIDC_PROVIDER_ID/login/callback/"
-  echo ">>      (selon la version d'allauth, elle peut être sans le segment"
-  echo ">>       '$OIDC_PROVIDER_ID' -> vérifie via un login test le redirect_uri envoyé)"
-  echo ">>   2) Connecte-toi (admin) -> Admin Center -> Login settings :"
-  echo ">>        active 'Enable SSO'  +  DÉSACTIVE 'Enable SSO registration'"
-  echo ">>        (si 'Enable SSO' refuse de s'allumer -> configure l'email dans ~/$NAME/.env)"
-  echo ">>   3) Login test EirbConnect -> note l'email renvoyé -> crée les comptes membres"
-  echo ">>        avec CET email (Users -> add user, sans mot de passe, + un groupe)"
+  echo ">>  EirbConnect (SSO) : prêt, tout est automatique."
+  echo ">>    - bouton 'EirbConnect' sur https://$HOST"
+  echo ">>    - un membre inconnu se connecte -> son compte est créé SANS groupe"
+  echo ">>    - tu l'approuves : Admin Center -> Users -> (lui assigner un groupe)"
 fi
 echo ">> ============================================================"
 echo ">>  Contrôle : docker stats --no-stream  ;  free -h"
