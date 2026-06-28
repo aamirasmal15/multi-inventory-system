@@ -28,8 +28,17 @@
 #                    - (BASE_DOMAIN vide -> sslip.io)
 #   [mot-de-passe] mot de passe admin (généré automatiquement si absent)
 #
+# Réglages partagés (demandés au 1er run, stockés dans ~/.config/multi-inventory/settings.env,
+# ré-éditables d'un coup avec `./create-asso.sh --reconfigure`) :
+#   BASE_DOMAIN        ton domaine. DEMANDÉ au tout premier lancement puis mémorisé.
+#                        (surchargeable ponctuellement : BASE_DOMAIN=mondom.fr ./create-asso.sh ...
+#                         vide "" => sslip.io, tests sans domaine)
+#   INVENTREE_VERSION  version InvenTree ÉPINGLÉE (défaut: 1.4.0). Le système est validé sur 1.4.0 :
+#                        on reste dessus pour ne pas qu'une update casse tout. Pour tester/passer
+#                        UNE asso sur une autre version : INVENTREE_VERSION=1.5.0 ./create-asso.sh <nom>
+#                        (migrations jouées automatiquement). Pour changer le défaut partout : --reconfigure.
+#
 # Variables d'environnement (optionnelles) :
-#   BASE_DOMAIN    ton domaine (défaut: eirspace.fr ; vide "" => sslip.io, tests sans domaine)
 #   SCAN_SRC       dossier source de l'app Scanette (défaut: <repo>/scanette-src)
 #   WITH_SCANETTE  1 (défaut) = déploie aussi la Scanette ; 0 = InvenTree seul
 #   MAIN_ASSO      asso principale au sous-domaine fixe (défaut: eirspace)
@@ -63,11 +72,18 @@
 #   ./create-asso.sh vost                         -> https://inventaire-vost.eirspace.fr
 #   ./create-asso.sh demo     tmp                 -> https://demo.<ip>.sslip.io  (éphémère, sans SSO)
 #   ENABLE_SSO=0 ./create-asso.sh vost            -> sans SSO
+#   ./create-asso.sh --reconfigure                -> ré-éditer domaine + version + SMTP (et propager le SMTP)
+#   INVENTREE_VERSION=1.5.0 ./create-asso.sh vost -> mettre à jour CETTE asso vers 1.5.0 (test/upgrade manuel)
 #
 # Idempotent : relancer = mettre à jour (l'.env est préservé, l'app rebuild, le frontal
 #              recharge, le bloc SSO du config.yaml + le client Dex sont remplacés, pas dupliqués).
 #
 set -euo pipefail
+
+# On note si l'utilisateur a fixé le domaine / la version via l'environnement, AVANT de sourcer
+# la lib (qui pose un défaut). Sert à distinguer "override volontaire" de "valeur par défaut".
+_DOMAIN_SET="${BASE_DOMAIN+1}"
+_VER_SET="${INVENTREE_VERSION+1}"
 
 # ====== Emplacement du repo (pour trouver scanette-src/ et lib/) ======
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -80,8 +96,19 @@ fi
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/lib/sso.sh"
 
+# ====== Mode reconfiguration : ./create-asso.sh --reconfigure ======
+# Ré-édite domaine + version InvenTree épinglée + SMTP, et REPROPAGE le SMTP à toutes les assos.
+case "${1:-}" in
+  --reconfigure|reconfigure)
+    reconfigure_platform
+    exit 0
+    ;;
+esac
+
 # ====== Configuration ======
-BASE_DOMAIN="${BASE_DOMAIN:-eirspace.fr}"          # vide ("") => sslip.io
+# Domaine + version InvenTree épinglée : chargés depuis settings.env (demandés au 1er run).
+# Respecte un override d'env ponctuel (BASE_DOMAIN=... / INVENTREE_VERSION=...).
+load_platform_settings "$_DOMAIN_SET" "$_VER_SET"
 SCAN_SRC="${SCAN_SRC:-$SCRIPT_DIR/scanette-src}"
 WITH_SCANETTE="${WITH_SCANETTE:-1}"
 
@@ -230,9 +257,17 @@ wget -q https://raw.githubusercontent.com/inventree/InvenTree/stable/contrib/con
 sed -i 's|^{$INVENTREE_SITE_URL:"http://, https://"} {|:80 {|' Caddyfile
 
 # ====== .env (préservé s'il existe déjà, pour ne pas changer les mots de passe) ======
+UPGRADING=0
 if [ -f .env ]; then
   KEEP_ENV=1
   echo ">> .env existant conservé (identifiants inchangés)"
+  # Pinning / upgrade : si la version demandée diffère du tag actuel, on met à jour le tag.
+  CUR_TAG="$(sed -n 's/^INVENTREE_TAG=//p' .env | head -1)"
+  if [ -n "${INVENTREE_VERSION:-}" ] && [ "$CUR_TAG" != "$INVENTREE_VERSION" ]; then
+    echo ">> MISE À JOUR InvenTree : '$CUR_TAG' -> '$INVENTREE_VERSION' (migrations jouées par 'invoke update')."
+    sed -i "s/^INVENTREE_TAG=.*/INVENTREE_TAG=$INVENTREE_VERSION/" .env
+    UPGRADING=1
+  fi
 else
   KEEP_ENV=0
   # Bloc email : SMTP réel si SSO, sinon gabarit commenté.
@@ -252,7 +287,7 @@ else
   fi
   cat > .env <<EOF
 COMPOSE_PROJECT_NAME=$NAME
-INVENTREE_TAG=stable
+INVENTREE_TAG=$INVENTREE_VERSION
 INVENTREE_SITE_URL="https://$HOST"
 INVENTREE_WEB_PORT=8000
 INVENTREE_EXT_VOLUME=./$NAME-data
@@ -362,6 +397,12 @@ sed -i "s/__NAME__/$NAME/g" docker-compose.yml
 
 # ====== Validation YAML ======
 docker compose config >/dev/null && echo ">> YAML InvenTree OK"
+
+# ====== Upgrade : récupérer la nouvelle image AVANT les migrations ======
+if [ "$UPGRADING" = "1" ]; then
+  echo ">> Téléchargement de l'image InvenTree $INVENTREE_VERSION ..."
+  docker compose pull inventree-server inventree-worker || true
+fi
 
 # ====== Initialisation / migration de la base (le -T évite un crash de TTY) ======
 echo ">> invoke update (création/màj de la base, quelques minutes)..."
@@ -500,7 +541,7 @@ fi
 echo ""
 echo ">> ============================================================"
 echo ">>  Asso '$NAME' prête !"
-echo ">>    InvenTree : https://$HOST"
+echo ">>    InvenTree : https://$HOST   (version épinglée: $INVENTREE_VERSION)"
 [ "$WITH_SCANETTE" = "1" ] && echo ">>    Scanette  : https://$HOST/scan/   (recharge avec ?v=N pour casser le cache)"
 if [ "$KEEP_ENV" = "1" ]; then
   echo ">>    Identifiants : inchangés (voir ~/$NAME/.env)"
@@ -516,4 +557,7 @@ if [ "$SSO_READY" = "1" ]; then
   echo ">>    - tu l'approuves : Admin Center -> Users -> (lui assigner un groupe)"
 fi
 echo ">> ============================================================"
+echo ">>  Version InvenTree épinglée sur $INVENTREE_VERSION (les futures '$INVENTREE_VERSION' ne bougent pas tout seules)."
+echo ">>    - mettre à jour CETTE asso (test/upgrade) : INVENTREE_VERSION=x.y.z ./create-asso.sh $NAME"
+echo ">>    - changer domaine / version / SMTP partout : ./create-asso.sh --reconfigure"
 echo ">>  Contrôle : docker stats --no-stream  ;  free -h"
