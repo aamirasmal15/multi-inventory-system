@@ -2925,7 +2925,7 @@ async function api(path,{method="GET",body=null,basic=null}={}){
     btn.addEventListener('click', function(e){
       e.preventDefault();
       const next = encodeURIComponent(window.location.pathname || '/scan/');
-      window.location.href = '/accounts/eirbconnect/login/?process=login&next=' + next;
+      window.location.href = '/accounts/oidc/eirbconnect/login/?process=login&next=' + next;
     });
   }
 })();
