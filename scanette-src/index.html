@@ -2893,6 +2893,109 @@ async function api(path,{method="GET",body=null,basic=null}={}){
   return data;
 }
 
+// --- INTEGRATION EIRBCONNECT (SSO SCANETTE PKCE) ---
+(function() {
+    const baseDomain = window.location.hostname.split('.').slice(-2).join('.');
+    const AUTH_URL = 'https://auth.' + baseDomain + '/oauth2/auth';
+    const TOKEN_URL = 'https://auth.' + baseDomain + '/oauth2/token';
+    const CLIENT_ID = 'inventree-scanette';
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
+
+    function generateRandomString(length) {
+        const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+        let result = '';
+        const values = new Uint32Array(length);
+        crypto.getRandomValues(values);
+        for (let i = 0; i < length; i++) {
+            result += charset[values[i] % charset.length];
+        }
+        return result;
+    }
+
+    async function generateCodeChallenge(codeVerifier) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(codeVerifier);
+        const digest = await crypto.subtle.digest('SHA-256', data);
+        return btoa(String.fromCharCode(...new Uint8Array(digest)))
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    // Gestion du clic sur le bouton
+    const btn = document.getElementById('eirbConnectBtn');
+    if (btn) {
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const codeVerifier = generateRandomString(64);
+            const state = generateRandomString(16);
+            
+            window.localStorage.setItem('pkce_verifier', codeVerifier);
+            window.localStorage.setItem('pkce_state', state);
+
+            const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+            const authRedirectUrl = `${AUTH_URL}?response_type=code` +
+                `&client_id=${CLIENT_ID}` +
+                `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+                `&scope=openid profile email` +
+                `&state=${state}` +
+                `&code_challenge=${codeChallenge}` +
+                `&code_challenge_method=S256`;
+
+            window.location.href = authRedirectUrl;
+        });
+    }
+
+    // Interception du retour (à exécuter au démarrage)
+    async function handleLoginCallback() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+
+        if (code) {
+            const savedState = window.localStorage.getItem('pkce_state');
+            if (state !== savedState) {
+                console.error('Erreur State PKCE');
+                return;
+            }
+
+            const codeVerifier = window.localStorage.getItem('pkce_verifier');
+            
+            try {
+                const response = await fetch(TOKEN_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        grant_type: 'authorization_code',
+                        client_id: CLIENT_ID,
+                        code: code,
+                        redirect_uri: REDIRECT_URI,
+                        code_verifier: codeVerifier
+                    })
+                });
+
+                const tokens = await response.json();
+                
+                if (tokens.access_token) {
+                    // C'est bon ! On stocke le token
+                    window.localStorage.setItem('eir_token', tokens.access_token);
+                    
+                    // Nettoyer l'URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    // Masquer l'écran de login et forcer l'affichage du scan
+                    document.getElementById('screen-login').classList.remove('active');
+                    document.getElementById('screen-scan').classList.add('active');
+                }
+            } catch (error) {
+                console.error('Erreur Token:', error);
+            }
+        }
+    }
+
+    // On lance la vérification au chargement
+    handleLoginCallback();
+})();
+  
 /* ---- login ---- */
 async function login(){
   const u=$("#user").value.trim(),p=$("#pass").value;
