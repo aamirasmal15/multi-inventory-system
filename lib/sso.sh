@@ -395,8 +395,8 @@ setup_asso_sso() {
   dex_render_and_reload
   # 3) bloc OIDC InvenTree -> Dex
   inventree_inject_sso "$name" "$host" "$cfg" "$secret"
-  # 4) force la recréation du conteneur pour relire .env (SMTP) et config.yaml (SSO)
-  ( cd "$dir" && docker compose up -d --force-recreate >/dev/null 2>&1 ) || true
+  # 4) recrée SERVEUR + WORKER -> relisent le .env (SMTP) ET config.yaml (SSO), sans toucher db/cache
+  ( cd "$dir" && docker compose up -d --force-recreate inventree-server inventree-worker >/dev/null 2>&1 ) || true
   # 5) toggles SSO + email admin (base)
   inventree_post_db "$dir" "admin_$name" "${ADMIN_EMAIL:-$SMTP_SENDER}"
   echo ">> SSO prêt : bouton EirbConnect sur https://$host (auto-création -> compte sans groupe -> tu assignes un groupe)."
