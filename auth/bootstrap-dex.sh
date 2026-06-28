@@ -22,6 +22,18 @@ docker network create inventree-front 2>/dev/null || true
 . "$SCRIPT_DIR/../lib/sso.sh"
 
 dex_ensure_up
+
+# --- Enregistrement automatique de la Scanette comme client public ---
+mkdir -p "$DEX_CLIENTS_DIR"
+cat > "$DEX_CLIENTS_DIR/scanette.yaml" <<EOF
+  - id: 'inventree-scanette'
+    name: 'Scanette Multi-Inventory'
+    public: true
+    redirectURIs:
+      - 'https://scanette.$BASE_DOMAIN/'
+EOF
+# ---------------------------------------------------------------------
+
 dex_render_and_reload
 
 echo ""
