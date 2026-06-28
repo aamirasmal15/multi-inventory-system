@@ -339,6 +339,27 @@
     </div>
   </section>
 
+  <!-- EN ATTENTE D'APPROBATION -->
+  <section class="screen" id="screen-pending">
+    <div class="login-wrap">
+      <div class="login-top">
+        <span class="logo-box logo-lg"><img src="logo-white.png" alt="EIRSPACE" onerror="logoFallback(this)"></span>
+        <div class="brand" style="font-size:18px"><span class="bn">EIRSPACE</span><small>Inventaire · Scanette</small></div>
+        <div class="spacer"></div>
+      </div>
+      <h1 class="title">Compte en attente d'approbation</h1>
+      <div class="card" style="padding:18px;text-align:center">
+        <div style="margin:6px auto 14px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--primary-light);color:var(--primary)">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <p style="margin:0 0 6px;font-weight:600">Votre compte est en attente d'approbation.</p>
+        <p style="margin:0;color:var(--muted)">Veuillez contacter l'administrateur si le problème persiste.</p>
+      </div>
+      <button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="location.reload()">Réessayer</button>
+      <a class="btn btn-ghost btn-block" href="/accounts/logout/?next=/scan/" style="margin-top:8px;text-decoration:none;display:flex;align-items:center;justify-content:center">Se déconnecter</a>
+    </div>
+  </section>
+
   <!-- SCAN -->
   <section class="screen" id="screen-scan">
     <h1 class="title">Inventaire</h1>
@@ -2893,109 +2914,22 @@ async function api(path,{method="GET",body=null,basic=null}={}){
   return data;
 }
 
-// --- INTEGRATION EIRBCONNECT (SSO SCANETTE PKCE) ---
-(function() {
-    const baseDomain = window.location.hostname.split('.').slice(-2).join('.');
-    const AUTH_URL = 'https://auth.' + baseDomain + '/oauth2/auth';
-    const TOKEN_URL = 'https://auth.' + baseDomain + '/oauth2/token';
-    const CLIENT_ID = 'inventree-scanette';
-    const REDIRECT_URI = window.location.origin + window.location.pathname;
-
-    function generateRandomString(length) {
-        const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-        let result = '';
-        const values = new Uint32Array(length);
-        crypto.getRandomValues(values);
-        for (let i = 0; i < length; i++) {
-            result += charset[values[i] % charset.length];
-        }
-        return result;
-    }
-
-    async function generateCodeChallenge(codeVerifier) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(codeVerifier);
-        const digest = await crypto.subtle.digest('SHA-256', data);
-        return btoa(String.fromCharCode(...new Uint8Array(digest)))
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-
-    // Gestion du clic sur le bouton
-    const btn = document.getElementById('eirbConnectBtn');
-    if (btn) {
-        btn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const codeVerifier = generateRandomString(64);
-            const state = generateRandomString(16);
-            
-            window.localStorage.setItem('pkce_verifier', codeVerifier);
-            window.localStorage.setItem('pkce_state', state);
-
-            const codeChallenge = await generateCodeChallenge(codeVerifier);
-
-            const authRedirectUrl = `${AUTH_URL}?response_type=code` +
-                `&client_id=${CLIENT_ID}` +
-                `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-                `&scope=openid profile email` +
-                `&state=${state}` +
-                `&code_challenge=${codeChallenge}` +
-                `&code_challenge_method=S256`;
-
-            window.location.href = authRedirectUrl;
-        });
-    }
-
-    // Interception du retour (à exécuter au démarrage)
-    async function handleLoginCallback() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        const state = urlParams.get('state');
-
-        if (code) {
-            const savedState = window.localStorage.getItem('pkce_state');
-            if (state !== savedState) {
-                console.error('Erreur State PKCE');
-                return;
-            }
-
-            const codeVerifier = window.localStorage.getItem('pkce_verifier');
-            
-            try {
-                const response = await fetch(TOKEN_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        grant_type: 'authorization_code',
-                        client_id: CLIENT_ID,
-                        code: code,
-                        redirect_uri: REDIRECT_URI,
-                        code_verifier: codeVerifier
-                    })
-                });
-
-                const tokens = await response.json();
-                
-                if (tokens.access_token) {
-                    // C'est bon ! On stocke le token
-                    window.localStorage.setItem('eir_token', tokens.access_token);
-                    
-                    // Nettoyer l'URL
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                    
-                    // Masquer l'écran de login et forcer l'affichage du scan
-                    document.getElementById('screen-login').classList.remove('active');
-                    document.getElementById('screen-scan').classList.add('active');
-                }
-            } catch (error) {
-                console.error('Erreur Token:', error);
-            }
-        }
-    }
-
-    // On lance la vérification au chargement
-    handleLoginCallback();
+// --- INTEGRATION EIRBCONNECT (SSO via session InvenTree) ---
+// Le bouton passe par allauth d'InvenTree : /accounts/eirbconnect/login/
+// InvenTree cree/retrouve le compte, pose une session same-origin, puis
+// renvoie sur la Scanette. Au retour, le boot echange la session contre un
+// vrai token InvenTree (trySsoBootstrap), puis verifie les droits.
+(function(){
+  const btn = document.getElementById('eirbConnectBtn');
+  if(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      const next = encodeURIComponent(window.location.pathname || '/scan/');
+      window.location.href = '/accounts/eirbconnect/login/?process=login&next=' + next;
+    });
+  }
 })();
-  
+
 /* ---- login ---- */
 async function login(){
   const u=$("#user").value.trim(),p=$("#pass").value;
@@ -3799,8 +3733,71 @@ $("#reader")?.addEventListener("click",tapFocus);
 /* empêche le fond de défiler, mais laisse la liste défiler */
 $("#picker")?.addEventListener("touchmove",e=>{if(!e.target.closest("#pickerList"))e.preventDefault();},{passive:false});
 
+/* ---- SSO : echange une session EirbConnect contre un token InvenTree ---- */
+async function trySsoBootstrap(){
+  try{
+    // si EirbConnect a pose une session same-origin, /api/user/token/ la renvoie en token
+    const res = await fetch(API+"/api/user/token/", {credentials:"same-origin"});
+    if(res.status!==200) return false;
+    const data = await res.json().catch(()=>null);
+    if(!data || !data.token) return false;
+    TOKEN = data.token;
+    let uname = "";
+    try{
+      const me = await fetch(API+"/api/user/me/", {headers:{Authorization:"Token "+TOKEN}});
+      if(me.ok){ const m = await me.json(); uname = (m && (m.username || (m.user && m.user.username))) || ""; }
+    }catch(_){}
+    USERNAME = uname || "EirbConnect";
+    setCookie("eir_token", TOKEN, 30);
+    setCookie("eir_user", USERNAME, 30);
+    return true;
+  }catch(_){ return false; }
+}
+
+/* ---- verifie l'autorisation : "ok" | "pending" | "unauth" ---- */
+async function checkAuthorized(){
+  let res;
+  try{
+    res = await fetch(API+"/api/user/roles/", {
+      headers: TOKEN ? {Authorization:"Token "+TOKEN} : {},
+      credentials:"same-origin"
+    });
+  }catch(_){ return "ok"; }            // erreur reseau : on laisse api() gerer les vrais 401
+  if(res.status===401 || res.status===403) return "unauth";
+  if(!res.ok) return "ok";
+  const data = await res.json().catch(()=>null);
+  if(!data) return "ok";
+  if(data.is_staff || data.is_superuser) return "ok";
+  const roles = data.roles || {};
+  for(const k in roles){
+    const v = roles[k];
+    if(Array.isArray(v) ? v.length>0 : !!v) return "ok";
+  }
+  return "pending";                    // authentifie mais aucun groupe/role -> en attente
+}
+
+/* ---- ecran "compte en attente d'approbation" ---- */
+function showPending(){
+  const tb=$("#topbar"); if(tb) tb.style.display="none";
+  show("#screen-pending");
+}
+
 /* ---- boot ---- */
-if(TOKEN&&USERNAME){enterApp();}else{show("#screen-login");setTimeout(()=>$("#user").focus(),300);}
+(async function boot(){
+  // pas de token en cookie -> on tente l'echange via une session EirbConnect
+  if(!(TOKEN && USERNAME)){
+    await trySsoBootstrap();
+  }
+  if(TOKEN){
+    const st = await checkAuthorized();
+    if(st==="ok"){ enterApp(); return; }
+    if(st==="pending"){ showPending(); return; }
+    // token invalide -> on nettoie et on retombe sur le login
+    delCookie("eir_token"); delCookie("eir_user"); TOKEN=""; USERNAME="";
+  }
+  show("#screen-login");
+  setTimeout(()=>{ const u=$("#user"); if(u) u.focus(); }, 300);
+})();
 </script>
 </body>
 </html>
