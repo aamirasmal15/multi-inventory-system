@@ -147,7 +147,7 @@
   .stepper input{text-align:center;font-weight:700;font-size:28px;padding:10px;color:var(--green)}
 
   /* ---- toast / spinner ---- */
-  .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 18px);transform:translate(-50%,160%);visibility:hidden;opacity:0;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:11px 15px;border-radius:var(--radius);font-size:13px;z-index:50;box-shadow:var(--shadow-md);max-width:90%;text-align:center;transition:transform .3s cubic-bezier(.2,.9,.3,1),opacity .2s,visibility .2s}
+  .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 60px);transform:translate(-50%,160%);visibility:hidden;opacity:0;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:11px 15px;border-radius:var(--radius);font-size:13px;z-index:50;box-shadow:var(--shadow-md);max-width:90%;text-align:center;transition:transform .3s cubic-bezier(.2,.9,.3,1),opacity .2s,visibility .2s}
   .toast.show{transform:translate(-50%,0);visibility:visible;opacity:1}
   .toast.ok{border-color:var(--green);background:var(--green-light)} .toast.bad{border-color:var(--red);background:var(--red-light)}
   .spin{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite}
@@ -179,6 +179,8 @@
   .picker-btn:hover{border-color:var(--primary)}
   .picker{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px}
   body.noscroll{overflow:hidden}
+  .login-or{display:flex;align-items:center;gap:12px;margin:16px 2px 14px;color:var(--muted);font-size:12px}
+  .login-or::before,.login-or::after{content:"";flex:1;height:1px;background:var(--border)}
   input.ro{background:var(--surface-2);color:var(--muted);cursor:not-allowed}
   .stock-banner{display:flex;gap:12px;align-items:center;padding:13px;margin-bottom:14px;border:1px solid var(--red);border-left:4px solid var(--red);background:var(--red-light);border-radius:var(--radius)}
   .stock-banner.add{border-color:var(--border);border-left-color:var(--primary);background:var(--surface-2)}
@@ -314,7 +316,7 @@
         <div class="spacer"></div>
         <button class="iconbtn" id="themeBtnLogin" title="Thème"></button>
       </div>
-      <h1 class="title">Identifie-toi avec ton compte InvenTree</h1>
+      <h1 class="title">Connectez-vous avec votre compte InvenTree</h1>
       <div class="err" id="loginErr"></div>
       <div class="card" style="padding:18px">
         <div class="field">
@@ -330,6 +332,10 @@
           Se connecter
         </button>
       </div>
+      <div class="login-or"><span>ou</span></div>
+      <button class="btn btn-ghost btn-block" id="eirbConnectBtn">
+        Se connecter avec EirbConnect
+      </button>
     </div>
   </section>
 
@@ -2898,7 +2904,7 @@ async function login(){
     if(!data||!data.token)throw new Error("Réponse inattendue du serveur.");
     TOKEN=data.token;USERNAME=u;setCookie("eir_token",TOKEN,30);setCookie("eir_user",USERNAME,30);
     enterApp();
-  }catch(e){showErr($("#loginErr"),(e.status===401||/invalid|inattendue/i.test(e.message))?"Identifiants incorrects.":e.message);}
+  }catch(e){showErr($("#loginErr"),(e.status===401||/invalid|inattendue/i.test(e.message))?"Identifiant ou mot de passe incorrect.":e.message);}
   finally{btn.disabled=false;btn.innerHTML=html;}
 }
 function logout(silent){TOKEN="";USERNAME="";delCookie("eir_token");delCookie("eir_user");$("#topbar").style.display="none";$("#pass").value="";show("#screen-login");if(silent)showErr($("#loginErr"),"Session expirée, reconnecte-toi.");}
