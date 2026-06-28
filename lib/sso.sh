@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# lib/sso.sh — fonctions partagées : broker Dex (EirbConnect) + SSO InvenTree + SMTP.
+# lib/sso.sh — fonctions partagées : broker Dex (EirbConnect) + SSO InvenTree + SMTP + réglages plateforme.
 #
 # Sourcé par create-asso.sh et delete-asso.sh. NE S'EXÉCUTE PAS seul.
 # Hérite des variables de create-asso.sh quand sourcé (BASE_DOMAIN, EIRBCONNECT_*, etc.) ;
 # défauts fournis ci-dessous pour un usage standalone (auth/bootstrap-dex.sh).
 #
 # État runtime (hors repo) :
+#   ~/.config/multi-inventory/settings.env      domaine + version InvenTree épinglée (partagés)
 #   ~/.config/multi-inventory/eirbconnect.env   creds EirbConnect (déjà gérés par create-asso.sh)
 #   ~/.config/multi-inventory/smtp.env          creds SMTP (demandés une fois ici)
 #   ~/.config/multi-inventory/dex-clients/*.yaml 1 fragment de staticClient Dex par asso
@@ -19,6 +20,7 @@
 : "${SSO_ENV_FILE:=$HOME/.config/multi-inventory/eirbconnect.env}"
 
 MIC_DIR="$HOME/.config/multi-inventory"
+SETTINGS_ENV_FILE="${SETTINGS_ENV_FILE:-$MIC_DIR/settings.env}"
 SMTP_ENV_FILE="${SMTP_ENV_FILE:-$MIC_DIR/smtp.env}"
 DEX_CLIENTS_DIR="$MIC_DIR/dex-clients"
 DEX_DIR="${DEX_DIR:-$HOME/auth-dex}"
@@ -26,6 +28,95 @@ FRONT="${FRONT:-$HOME/front}"
 AUTH_DOMAIN="${AUTH_DOMAIN:-auth.$BASE_DOMAIN}"
 DEX_ISSUER="https://$AUTH_DOMAIN/oauth2"
 MSS_CLAMP="${MSS_CLAMP:-1240}"           # clamp MSS pour fiabiliser la route VPS->EirbConnect
+
+# Version InvenTree épinglée par défaut (le système est validé sur 1.4.0).
+: "${INVENTREE_PINNED_DEFAULT:=1.4.0}"
+
+# ============================================================ RÉGLAGES PLATEFORME
+# settings.env = source unique du domaine ET de la version InvenTree épinglée.
+# Édités d'un coup via `./create-asso.sh --reconfigure`.
+
+_save_platform_settings() {
+  mkdir -p "$MIC_DIR"
+  ( umask 077; cat > "$SETTINGS_ENV_FILE" <<EOF
+# Réglages partagés de la plateforme (édités via ./create-asso.sh --reconfigure)
+BASE_DOMAIN='${BASE_DOMAIN}'
+INVENTREE_VERSION='${INVENTREE_VERSION:-$INVENTREE_PINNED_DEFAULT}'
+EOF
+  ); chmod 600 "$SETTINGS_ENV_FILE"
+}
+
+# Charge BASE_DOMAIN + INVENTREE_VERSION.
+# Priorité : override d'environnement (variable settée, même vide) > settings.env > saisie (1er run) > défaut.
+# $1 / $2 = "1" si la variable a été fixée par l'utilisateur AVANT le source de la lib
+#           (sinon la lib lui aura déjà collé un défaut, on ne saurait plus distinguer).
+load_platform_settings() {
+  local domain_was_set="${1:-}" version_was_set="${2:-}"
+  mkdir -p "$MIC_DIR"
+  local saved_domain="" saved_ver=""
+  if [ -f "$SETTINGS_ENV_FILE" ]; then
+    saved_domain="$(sed -n "s/^BASE_DOMAIN='\(.*\)'$/\1/p" "$SETTINGS_ENV_FILE" | head -1)"
+    saved_ver="$(sed -n "s/^INVENTREE_VERSION='\(.*\)'$/\1/p" "$SETTINGS_ENV_FILE" | head -1)"
+  fi
+
+  # --- Domaine ---
+  if [ -z "$domain_was_set" ]; then            # pas d'override utilisateur -> settings / saisie
+    if [ -n "$saved_domain" ]; then
+      BASE_DOMAIN="$saved_domain"
+    elif [ -t 0 ]; then
+      echo ">> Premier lancement : quel est TON nom de domaine ?"
+      echo "   (les assos sortent en sous-domaines, ex: inventaire.<domaine> ; le broker SSO sur auth.<domaine>)"
+      read -rp  "   Domaine [eirspace.fr] : " _d; BASE_DOMAIN="${_d:-eirspace.fr}"
+    else
+      BASE_DOMAIN="${saved_domain:-eirspace.fr}"
+    fi
+  fi
+
+  # --- Version InvenTree épinglée ---
+  if [ -z "$version_was_set" ]; then
+    INVENTREE_VERSION="${saved_ver:-$INVENTREE_PINNED_DEFAULT}"
+  fi
+
+  # Re-dérive les domaines dépendants (le domaine vient peut-être d'être saisi/chargé).
+  AUTH_DOMAIN="auth.$BASE_DOMAIN"
+  DEX_ISSUER="https://$AUTH_DOMAIN/oauth2"
+
+  _save_platform_settings
+}
+
+# Reconfiguration globale : domaine + version + SMTP, puis propagation du SMTP à TOUTES les assos.
+reconfigure_platform() {
+  mkdir -p "$MIC_DIR"
+  [ -f "$SETTINGS_ENV_FILE" ] && . "$SETTINGS_ENV_FILE"
+  : "${BASE_DOMAIN:=eirspace.fr}"; : "${INVENTREE_VERSION:=$INVENTREE_PINNED_DEFAULT}"
+
+  echo "================ Reconfiguration de la plateforme ================"
+  echo "Tape Entrée pour garder la valeur [entre crochets]."
+  echo ""
+  read -rp "  Domaine de base               [$BASE_DOMAIN] : " _d
+  BASE_DOMAIN="${_d:-$BASE_DOMAIN}"
+  read -rp "  Version InvenTree épinglée    [$INVENTREE_VERSION] : " _v
+  INVENTREE_VERSION="${_v:-$INVENTREE_VERSION}"
+  AUTH_DOMAIN="auth.$BASE_DOMAIN"; DEX_ISSUER="https://$AUTH_DOMAIN/oauth2"
+  _save_platform_settings
+  echo ">> settings.env mis à jour : domaine=$BASE_DOMAIN, version InvenTree=$INVENTREE_VERSION"
+  echo ""
+
+  echo "------------------------- SMTP -------------------------"
+  load_smtp_credentials 1            # 1 = force la ressaisie (montre les valeurs actuelles en défaut)
+  echo ""
+
+  echo "------------- Propagation du SMTP aux assos -------------"
+  apply_smtp_to_all_assos
+  echo ""
+
+  echo "================================================================="
+  echo ">> Domaine : les assos DÉJÀ déployées gardent leur sous-domaine actuel."
+  echo ">>   Le nouveau domaine ne s'applique qu'aux PROCHAINES créations."
+  echo ">>   (migrer une asso existante vers le nouveau domaine = la relancer : ./create-asso.sh <nom>)"
+  echo ">> Version : pour mettre à jour UNE asso : INVENTREE_VERSION=x.y.z ./create-asso.sh <nom>"
+  echo ">>   Le défaut ($INVENTREE_VERSION) ne touche que les futures créations / re-runs sans surcharge."
+}
 
 # ------------------------------------------------------- creds EirbConnect (réutilise SSO_ENV_FILE)
 _load_eirbconnect() {
@@ -47,18 +138,33 @@ EOF
   fi
 }
 
-# ------------------------------------------------------------------ SMTP (une fois)
+# ------------------------------------------------------------------ SMTP
+# $1 = "1" -> force la ressaisie même si déjà configuré (pour --reconfigure).
 load_smtp_credentials() {
+  local force="${1:-0}"
   mkdir -p "$MIC_DIR"
   [ -f "$SMTP_ENV_FILE" ] && . "$SMTP_ENV_FILE"
-  if [ -z "${SMTP_HOST:-}" ] || [ -z "${SMTP_USER:-}" ] || [ -z "${SMTP_PASS:-}" ]; then
+
+  if [ "$force" = "1" ] || [ -z "${SMTP_HOST:-}" ] || [ -z "${SMTP_USER:-}" ] || [ -z "${SMTP_PASS:-}" ]; then
     if [ -t 0 ]; then
-      echo ">> Réglages email SMTP (une seule fois, stockés HORS du repo)"
-      read -rp  "   Serveur SMTP  [ssl0.ovh.net] : " _h; SMTP_HOST="${_h:-ssl0.ovh.net}"
-      read -rp  "   Port          [587]          : " _p; SMTP_PORT="${_p:-587}"
-      read -rp  "   Identifiant (adresse complète, ex: contact@$BASE_DOMAIN) : " SMTP_USER
-      read -rsp "   Mot de passe de la BOÎTE mail : " SMTP_PASS; echo
-      read -rp  "   Expéditeur    [$SMTP_USER]    : " _s; SMTP_SENDER="${_s:-$SMTP_USER}"
+      if [ "$force" = "1" ]; then
+        echo ">> Reconfiguration SMTP (sera réappliquée à TOUTES les assos)."
+      else
+        echo ">> Réglages email SMTP — demandés UNE SEULE FOIS, stockés hors repo (chmod 600)."
+      fi
+      echo "   Tape simplement Entrée pour garder la valeur proposée [entre crochets]."
+      local d_host="${SMTP_HOST:-ssl0.ovh.net}" d_port="${SMTP_PORT:-587}"
+      local d_user="${SMTP_USER:-contact@$BASE_DOMAIN}" d_send="${SMTP_SENDER:-${SMTP_USER:-}}"
+      read -rp  "   Serveur SMTP                     [$d_host] : " _h; SMTP_HOST="${_h:-$d_host}"
+      read -rp  "   Port (587 STARTTLS / 465 SSL)    [$d_port] : " _p; SMTP_PORT="${_p:-$d_port}"
+      read -rp  "   Identifiant = adresse mail complète [$d_user] : " _u; SMTP_USER="${_u:-$d_user}"
+      if [ -n "${SMTP_PASS:-}" ]; then
+        read -rsp "   Mot de passe de la BOÎTE mail (Entrée = inchangé) : " _pw; echo
+        [ -n "$_pw" ] && SMTP_PASS="$_pw"
+      else
+        read -rsp "   Mot de passe de la BOÎTE mail (le mdp du webmail, pas le compte OVH) : " SMTP_PASS; echo
+      fi
+      read -rp  "   Expéditeur affiché (From)        [$d_send] : " _s; SMTP_SENDER="${_s:-$d_send}"
       ( umask 077; cat > "$SMTP_ENV_FILE" <<EOF
 SMTP_HOST='$SMTP_HOST'
 SMTP_PORT='$SMTP_PORT'
@@ -67,7 +173,7 @@ SMTP_PASS='$SMTP_PASS'
 SMTP_SENDER='$SMTP_SENDER'
 EOF
       ); chmod 600 "$SMTP_ENV_FILE"
-      echo ">> Enregistrés dans $SMTP_ENV_FILE (chmod 600, non versionné)"
+      echo ">> SMTP enregistré dans $SMTP_ENV_FILE (chmod 600, non versionné)."
     else
       echo "!! SMTP non configuré et pas de terminal -> l'auto-création SSO sera bloquée." >&2
     fi
@@ -89,6 +195,24 @@ INVENTREE_EMAIL_TLS=${tls}
 INVENTREE_EMAIL_SSL=${ssl}
 INVENTREE_EMAIL_SENDER=${SMTP_SENDER}
 EOF
+}
+
+# Réapplique le SMTP courant au .env de CHAQUE asso InvenTree puis recrée le conteneur.
+# (Ne touche pas à INVENTREE_ADMIN_EMAIL.)
+apply_smtp_to_all_assos() {
+  load_smtp_credentials            # s'assure que les valeurs sont chargées
+  local count=0 env d
+  for env in "$HOME"/*/.env; do
+    [ -f "$env" ] || continue
+    grep -q '^INVENTREE_DB_ENGINE=' "$env" || continue   # marqueur "asso InvenTree"
+    d="$(dirname "$env")"
+    sed -i '/^#\?[[:space:]]*INVENTREE_EMAIL_/d' "$env"
+    smtp_env_block >> "$env"
+    ( cd "$d" && docker compose up -d >/dev/null 2>&1 ) || true
+    count=$((count+1))
+    echo "   - $(basename "$d") : SMTP réappliqué + conteneur relancé."
+  done
+  echo ">> SMTP propagé à $count asso(s)."
 }
 
 # ------------------------------------------------------------------ Dex : infra
@@ -271,10 +395,8 @@ setup_asso_sso() {
   dex_render_and_reload
   # 3) bloc OIDC InvenTree -> Dex
   inventree_inject_sso "$name" "$host" "$cfg" "$secret"
-  # 4) recrée server+worker -> relit le .env (SMTP) ET config.yaml (SSO) en une fois
-  #    (restart seul ne relit PAS le .env ; up -d simple ne recrée pas sur un simple
-  #     changement de config.yaml -> on force la recréation des 2 services concernés)
-  ( cd "$dir" && docker compose up -d --force-recreate inventree-server inventree-worker >/dev/null 2>&1 ) || true
+  # 4) recrée le conteneur -> relit le .env (SMTP) + config.yaml (SSO)
+  ( cd "$dir" && docker compose up -d >/dev/null 2>&1 ) || true
   # 5) toggles SSO + email admin (base)
   inventree_post_db "$dir" "admin_$name" "${ADMIN_EMAIL:-$SMTP_SENDER}"
   echo ">> SSO prêt : bouton EirbConnect sur https://$host (auto-création -> compte sans groupe -> tu assignes un groupe)."
