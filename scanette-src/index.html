@@ -356,7 +356,7 @@
         <p style="margin:0;color:var(--muted)">Veuillez contacter l'administrateur si le problème persiste.</p>
       </div>
       <button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="location.reload()">Réessayer</button>
-      <a class="btn btn-ghost btn-block" href="/accounts/logout/?next=/scan/" style="margin-top:8px;text-decoration:none;display:flex;align-items:center;justify-content:center">Se déconnecter</a>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="ssoLogout()">Se déconnecter</button>
     </div>
   </section>
 
@@ -2915,17 +2915,35 @@ async function api(path,{method="GET",body=null,basic=null}={}){
 }
 
 // --- INTEGRATION EIRBCONNECT (SSO via session InvenTree) ---
-// Le bouton passe par allauth d'InvenTree : /accounts/eirbconnect/login/
-// InvenTree cree/retrouve le compte, pose une session same-origin, puis
-// renvoie sur la Scanette. Au retour, le boot echange la session contre un
-// vrai token InvenTree (trySsoBootstrap), puis verifie les droits.
+// InvenTree tourne en HEADLESS_ONLY : les pages /accounts/.../login/ n'existent
+// PAS. Le login SSO passe par l'API headless d'allauth (celle que la PUI utilise) :
+//   POST /api/auth/v1/auth/provider/redirect   -> 302 direct vers Dex -> EirbConnect.
+// On reproduit donc le clic du bouton EirbConnect de la page de login InvenTree :
+// un form POST (provider + callback_url + CSRF). Le navigateur suit le 302 et file
+// droit sur le portail Eirbware. Au retour sur /scan/, InvenTree a pose une session
+// same-origin ; le boot l'echange contre un token (trySsoBootstrap) puis verifie les droits.
+async function loginEirbConnect(){
+  // amorce le cookie CSRF (le GET headless pose 'csrftoken', lisible en JS)
+  try{ await fetch(API+"/api/auth/v1/auth/session", {credentials:"same-origin"}); }catch(_){}
+  const csrf = getCookie("csrftoken");
+  const f = document.createElement("form");
+  f.method = "POST";
+  f.action = API+"/api/auth/v1/auth/provider/redirect";
+  const add=(n,v)=>{const i=document.createElement("input");i.type="hidden";i.name=n;i.value=v;f.appendChild(i);};
+  add("provider","eirbconnect");          // = provider_id cote InvenTree (ne jamais renommer)
+  add("callback_url","/scan/");           // retour same-origin apres login (URL "safe")
+  add("process","login");
+  if(csrf) add("csrfmiddlewaretoken", csrf);
+  document.body.appendChild(f);
+  f.submit();
+}
 (function(){
   const btn = document.getElementById('eirbConnectBtn');
   if(btn){
     btn.addEventListener('click', function(e){
       e.preventDefault();
-      const next = encodeURIComponent(window.location.pathname || '/scan/');
-      window.location.href = '/accounts/oidc/eirbconnect/login/?process=login&next=' + next;
+      btn.disabled = true;
+      loginEirbConnect();
     });
   }
 })();
@@ -3780,6 +3798,21 @@ async function checkAuthorized(){
 function showPending(){
   const tb=$("#topbar"); if(tb) tb.style.display="none";
   show("#screen-pending");
+}
+
+/* ---- logout : tue la session InvenTree (headless) + cookies Scanette ---- */
+async function ssoLogout(){
+  try{ await fetch(API+"/api/auth/v1/auth/session", {credentials:"same-origin"}); }catch(_){}
+  const csrf = getCookie("csrftoken");
+  try{
+    await fetch(API+"/api/auth/v1/auth/session", {
+      method:"DELETE",
+      credentials:"same-origin",
+      headers: csrf ? {"X-CSRFToken": csrf} : {}
+    });
+  }catch(_){}                              // 401 attendu (deconnecte) -> on ignore
+  delCookie("eir_token"); delCookie("eir_user"); TOKEN=""; USERNAME="";
+  window.location.href = "/scan/";
 }
 
 /* ---- boot ---- */
