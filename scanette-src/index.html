@@ -2922,12 +2922,6 @@ async function api(path,{method="GET",body=null,basic=null}={}){
 // un form POST (provider + callback_url + CSRF). Le navigateur suit le 302 et file
 // droit sur le portail Eirbware. Au retour sur /scan/, InvenTree a pose une session
 // same-origin ; le boot l'echange contre un token (trySsoBootstrap) puis verifie les droits.
-
-// Endpoint de deconnexion d'EirbConnect (Keycloak ecole) — constante publique.
-// Sert au logout "complet" : couper la session EirbConnect en plus de celle d'InvenTree,
-// pour qu'un nouveau clic redemande les identifiants Eirbware.
-const EIRBCONNECT_LOGOUT = "https://connect.vpn.eirb.fr/realms/eirb/protocol/openid-connect/logout";
-
 async function loginEirbConnect(){
   // amorce le cookie CSRF (le GET headless pose 'csrftoken', lisible en JS)
   try{ await fetch(API+"/api/auth/v1/auth/session", {credentials:"same-origin"}); }catch(_){}
@@ -3806,9 +3800,8 @@ function showPending(){
   show("#screen-pending");
 }
 
-/* ---- logout COMPLET : session InvenTree (headless) PUIS session EirbConnect ---- */
+/* ---- logout : coupe la session InvenTree (headless) + cookies Scanette ---- */
 async function ssoLogout(){
-  // 1) couper la session InvenTree (allauth headless)
   try{ await fetch(API+"/api/auth/v1/auth/session", {credentials:"same-origin"}); }catch(_){}
   const csrf = getCookie("csrftoken");
   try{
@@ -3818,12 +3811,8 @@ async function ssoLogout(){
       headers: csrf ? {"X-CSRFToken": csrf} : {}
     });
   }catch(_){}                              // 401 attendu (deconnecte) -> on ignore
-  // 2) nettoyer la Scanette
   delCookie("eir_token"); delCookie("eir_user"); TOKEN=""; USERNAME="";
-  // 3) couper AUSSI la session EirbConnect (Keycloak), puis revenir sur la Scanette
-  //    -> au prochain clic "EirbConnect", l'ecole redemandera les identifiants
-  const back = window.location.origin + "/scan/";
-  window.location.href = EIRBCONNECT_LOGOUT + "?post_logout_redirect_uri=" + encodeURIComponent(back);
+  window.location.href = "/scan/";
 }
 
 /* ---- boot ---- */
