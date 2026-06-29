@@ -305,8 +305,12 @@ EOF
 }
 
 # Écrit/maj le fragment de client Dex de l'asso. Préserve le secret existant. Renvoie le secret sur stdout.
+#   dex_register_client <nom> <host_inventree> [<host_scanette>]
+# Le host Scanette (optionnel) ajoute ses propres redirectURIs : allauth construit le
+# redirect_uri à partir du Host de la requête, donc un login lancé depuis la Scanette
+# revient sur https://<scan_host>/accounts/.../callback/ -> il DOIT être autorisé ici.
 dex_register_client() {
-  local name="$1" host="$2" frag secret=""
+  local name="$1" host="$2" scan_host="${3:-}" frag secret=""
   mkdir -p "$DEX_CLIENTS_DIR"
   frag="$DEX_CLIENTS_DIR/$name.yaml"
   if [ -f "$frag" ]; then
@@ -323,6 +327,14 @@ dex_register_client() {
       - http://$host/accounts/oidc/$OIDC_PROVIDER_ID/login/callback/
       - https://$host/accounts/oidc/$OIDC_PROVIDER_ID/login/callback/
 EOF
+  if [ -n "$scan_host" ]; then
+    cat >> "$frag" <<EOF
+      - http://$scan_host/accounts/$OIDC_PROVIDER_ID/login/callback/
+      - https://$scan_host/accounts/$OIDC_PROVIDER_ID/login/callback/
+      - http://$scan_host/accounts/oidc/$OIDC_PROVIDER_ID/login/callback/
+      - https://$scan_host/accounts/oidc/$OIDC_PROVIDER_ID/login/callback/
+EOF
+  fi
   echo "$secret"
 }
 
@@ -380,18 +392,18 @@ print('SSO_DB_OK')"
 
 # ============================================================ ENTRÉE PRINCIPALE
 # Tout le SSO d'une asso en une fonction. À appeler en FIN de create-asso.sh (stack démarrée).
-#   setup_asso_sso <nom> <host> <dir>
+#   setup_asso_sso <nom> <host> <dir> [<scan_host>]
 setup_asso_sso() {
-  local name="$1" host="$2" dir="$3"
+  local name="$1" host="$2" dir="$3" scan_host="${4:-}"
   local cfg="$dir/$name-data/config.yaml" secret
   echo ">> SSO EirbConnect (via Dex) pour '$name' ..."
   # 1) SMTP + email admin dans le .env (idempotent) — requis pour l'auto-création
   load_smtp_credentials
   sed -i '/^#\?[[:space:]]*INVENTREE_EMAIL_/d; /^INVENTREE_ADMIN_EMAIL=/d' "$dir/.env"
   { smtp_env_block; echo "INVENTREE_ADMIN_EMAIL=${ADMIN_EMAIL:-$SMTP_SENDER}"; } >> "$dir/.env"
-  # 2) broker Dex + client de cette asso
+  # 2) broker Dex + client de cette asso (callbacks InvenTree + Scanette si fournie)
   dex_ensure_up
-  secret="$(dex_register_client "$name" "$host")"
+  secret="$(dex_register_client "$name" "$host" "$scan_host")"
   dex_render_and_reload
   # 3) bloc OIDC InvenTree -> Dex
   inventree_inject_sso "$name" "$host" "$cfg" "$secret"
@@ -400,4 +412,5 @@ setup_asso_sso() {
   # 5) toggles SSO + email admin (base)
   inventree_post_db "$dir" "admin_$name" "${ADMIN_EMAIL:-$SMTP_SENDER}"
   echo ">> SSO prêt : bouton EirbConnect sur https://$host (auto-création -> compte sans groupe -> tu assignes un groupe)."
+  [ -n "$scan_host" ] && echo ">>   (idem depuis la Scanette : https://$scan_host)"
 }
