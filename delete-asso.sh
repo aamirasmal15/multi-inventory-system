@@ -54,10 +54,12 @@ else
   echo ">> (dossier ~/$NAME introuvable, on continue le nettoyage)"
 fi
 
-# 3. Retirer le bloc de cette asso du Caddy frontal, puis recharger
-#    (le bloc — combiné /scan ou InvenTree seul — contient toujours "<nom>-proxy:80")
+# 3. Retirer les blocs de cette asso du Caddy frontal, puis recharger.
+#    Deux blocs possibles : InvenTree (contient "<nom>-proxy:80") et Scanette (contient
+#    "<nom>-scan:80"). Couvre aussi l'ancien bloc combiné `@scan` (il contenait les deux).
 if [ -f "$FRONT/Caddyfile" ]; then
-  awk -v alias="$NAME-proxy:80" 'BEGIN{RS="";ORS="\n\n"} $0 !~ alias' \
+  awk -v a1="$NAME-proxy:80" -v a2="$NAME-scan:80" \
+    'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2' \
     "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp"
   mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
   ( cd "$FRONT" && docker compose up -d --force-recreate ) || true

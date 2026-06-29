@@ -15,7 +15,8 @@
 #       ├── docker-compose.yml
 #       └── html/            fichiers de l'app, copiés depuis ./scanette-src/
 #
-#   InvenTree -> https://<domaine>        Scanette -> https://<domaine>/scan/
+#   InvenTree -> https://<domaine>        Scanette -> https://scanette[-<nom>].<BASE_DOMAIN>
+#   (la Scanette a désormais SON PROPRE sous-domaine ; elle proxifie InvenTree en same-origin)
 #
 # Usage :
 #   ./create-asso.sh <nom> [sous-domaine|tmp] [mot-de-passe-admin]
@@ -117,6 +118,8 @@ WITH_SCANETTE="${WITH_SCANETTE:-1}"
 # retombe toujours sur https://inventaire.eirspace.fr — même après réinstallation.
 MAIN_ASSO="${MAIN_ASSO:-eirspace}"
 MAIN_SUBDOMAIN="${MAIN_SUBDOMAIN:-inventaire}"
+# Sous-domaine FIXE de la Scanette de l'asso principale (les autres -> scanette-<nom>).
+MAIN_SCAN_SUBDOMAIN="${MAIN_SCAN_SUBDOMAIN:-scanette}"
 
 # ====== EirbConnect (SSO OpenID Connect) ======
 ENABLE_SSO="${ENABLE_SSO:-1}"
@@ -219,19 +222,28 @@ if [ "$WITH_SCANETTE" = "1" ]; then
   }
 fi
 
-# ====== Calcul de l'URL ======
+# ====== Calcul des URL (InvenTree + Scanette sur sous-domaine dédié) ======
+# SCAN_HOST surchargeable ponctuellement : SCAN_HOST=monscan.dom ./create-asso.sh ...
+_SCAN_SET="${SCAN_HOST+1}"
 if [ "$SUBDOMAIN" = "tmp" ] || [ -z "$BASE_DOMAIN" ]; then
   IP="$(curl -4 -s ifconfig.me)"; HOST="$NAME.${IP//./-}.sslip.io"   # éphémère / sans domaine
+  [ -n "$_SCAN_SET" ] || SCAN_HOST="scanette-$NAME.${IP//./-}.sslip.io"
 elif [ -n "$SUBDOMAIN" ]; then
-  HOST="$SUBDOMAIN.$BASE_DOMAIN"            # sous-domaine explicite (gagne toujours)
+  HOST="$SUBDOMAIN.$BASE_DOMAIN"            # sous-domaine InvenTree explicite (gagne toujours)
+  if [ -z "$_SCAN_SET" ]; then             # ... mais la Scanette suit la convention par nom
+    if [ "$NAME" = "$MAIN_ASSO" ]; then SCAN_HOST="$MAIN_SCAN_SUBDOMAIN.$BASE_DOMAIN"
+    else                                    SCAN_HOST="scanette-$NAME.$BASE_DOMAIN"; fi
+  fi
 elif [ "$NAME" = "$MAIN_ASSO" ]; then
   HOST="$MAIN_SUBDOMAIN.$BASE_DOMAIN"       # asso principale -> inventaire.eirspace.fr
+  [ -n "$_SCAN_SET" ] || SCAN_HOST="$MAIN_SCAN_SUBDOMAIN.$BASE_DOMAIN"   # -> scanette.eirspace.fr
 else
   HOST="inventaire-$NAME.$BASE_DOMAIN"      # défaut -> inventaire-<nom>.eirspace.fr
+  [ -n "$_SCAN_SET" ] || SCAN_HOST="scanette-$NAME.$BASE_DOMAIN"         # -> scanette-<nom>.eirspace.fr
 fi
 
 echo ">> Asso '$NAME'  ->  https://$HOST"
-[ "$WITH_SCANETTE" = "1" ] && echo ">>   Scanette    ->  https://$HOST/scan/"
+[ "$WITH_SCANETTE" = "1" ] && echo ">>   Scanette    ->  https://$SCAN_HOST"
 mkdir -p "$DIR" && cd "$DIR"
 
 # ====== SSO : identifiants prêts ? (on demande EN AMONT du long 'invoke update') ======
@@ -311,6 +323,21 @@ INVENTREE_CACHE_HOST=inventree-cache
 INVENTREE_CACHE_PORT=6379
 EOF
 fi
+
+# ====== Origines CSRF de confiance (InvenTree + Scanette) — idempotent, à CHAQUE run ======
+# La Scanette est sur un sous-domaine distinct : tout POST/PATCH (login SSO + écritures
+# de stock) arrive avec Origin=https://$SCAN_HOST. Django rejette le CSRF si cette origine
+# n'est pas dans CSRF_TRUSTED_ORIGINS. On la déclare donc ici (en plus de $HOST, déjà couvert
+# par INVENTREE_SITE_URL mais ré-affirmé par clarté). ALLOWED_HOSTS reste sur '*' (config.yaml)
+# pour ne pas casser les appels internes (inventree-server, worker, health-checks).
+# Réécrit à chaque run -> migre aussi les assos déjà déployées vers le modèle sous-domaine.
+if [ "$WITH_SCANETTE" = "1" ]; then
+  TRUSTED_ORIGINS="https://$HOST,https://$SCAN_HOST"
+else
+  TRUSTED_ORIGINS="https://$HOST"
+fi
+sed -i '/^INVENTREE_TRUSTED_ORIGINS=/d' .env
+echo "INVENTREE_TRUSTED_ORIGINS=$TRUSTED_ORIGINS" >> .env
 
 # ====== docker-compose.yml InvenTree (conteneurs renommés, ports retirés, réseau partagé) ======
 cat > docker-compose.yml <<'INVTPL'
@@ -428,7 +455,11 @@ if [ "$WITH_SCANETTE" = "1" ]; then
        ! -iname 'README*' ! -name '*.md' ! -name '.gitkeep' \
        -exec cp -f {} "$SCANDIR/html/" \;
 
-  # nginx : SPA sur /scan/, proxy /scan/api/ et /scan/media/ vers l'InvenTree interne
+  # nginx : sert la Scanette à la RACINE du sous-domaine, et proxifie InvenTree (same-origin).
+  # Clé du modèle : on force Host = $SCAN_HOST vers InvenTree. Du coup, vu du navigateur, tout
+  # (app + API + callbacks SSO) vit sur https://$SCAN_HOST -> session InvenTree propre à ce
+  # sous-domaine, et le redirect_uri OIDC qu'allauth construit pointe sur $SCAN_HOST (callback
+  # à enregistrer côté Dex, fait par lib/sso.sh).
   cat > "$SCANDIR/default.conf" <<'CONF'
 server {
     listen 80;
@@ -436,43 +467,41 @@ server {
     resolver 127.0.0.11 valid=30s ipv6=off;
 
     set $inv_upstream "__UPSTREAM__";
-    set $inv_host     "__HOST__";
+    set $inv_host     "__SCAN_HOST__";
 
-    # App (single-file) servie sous /scan/
-    location /scan/ {
-        alias /usr/share/nginx/html/;
-        try_files $uri $uri/ /usr/share/nginx/html/index.html;
+    client_max_body_size 25m;
+
+    # En-têtes communs pour tout ce qui part vers InvenTree (hérités par les location proxy).
+    proxy_http_version 1.1;
+    proxy_set_header Host              $inv_host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host  $inv_host;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+    proxy_set_header X-Real-IP         $remote_addr;
+
+    # --- App Scanette (single-file) servie à la racine ---
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-cache";
     }
-    location = /     { return 301 /scan/; }
-    location = /scan { return 301 /scan/; }
-
-    # API InvenTree (proxy same-origin -> pas de CORS)
-    location /scan/api/ {
-        rewrite ^/scan(/.*)$ $1 break;
-        proxy_pass $inv_upstream;
-        proxy_set_header Host              $inv_host;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-Forwarded-Host  $inv_host;
-        proxy_set_header X-Forwarded-For   $remote_addr;
-        proxy_http_version 1.1;
-        client_max_body_size 25m;
-    }
-    # Images / medias InvenTree
-    location /scan/media/ {
-        rewrite ^/scan(/.*)$ $1 break;
-        proxy_pass $inv_upstream;
-        proxy_set_header Host $inv_host;
-        proxy_http_version 1.1;
-    }
     # Décodeur WebAssembly servi avec le bon type MIME
-    location = /scan/zxing_reader.wasm {
+    location = /zxing_reader.wasm {
         default_type application/wasm;
         alias /usr/share/nginx/html/zxing_reader.wasm;
     }
+
+    # --- InvenTree, proxifié en same-origin (pas de CORS, session partagée avec l'app) ---
+    #   /api/      : API REST + endpoints headless allauth (/api/auth/v1/...)
+    #   /accounts/ : callback OIDC (allauth monte /accounts/<provider>/login/callback/ même en headless)
+    #   /static/ /media/ : assets servis par le Caddy interne d'InvenTree
+    location /api/      { proxy_pass $inv_upstream; }
+    location /accounts/ { proxy_pass $inv_upstream; }
+    location /static/   { proxy_pass $inv_upstream; }
+    location /media/    { proxy_pass $inv_upstream; }
 }
 CONF
-  sed -i "s|__UPSTREAM__|$UPSTREAM|g; s|__HOST__|$HOST|g" "$SCANDIR/default.conf"
+  sed -i "s|__UPSTREAM__|$UPSTREAM|g; s|__SCAN_HOST__|$SCAN_HOST|g" "$SCANDIR/default.conf"
 
   # Dockerfile : on copie tout le dossier html/ (donc index.html, wasm, logos, etc.)
   cat > "$SCANDIR/Dockerfile" <<'DOCK'
@@ -502,29 +531,27 @@ SCANTPL
   ( cd "$SCANDIR" && docker compose up -d --build )
 fi
 
-# ====== Bloc Caddy frontal (idempotent : on retire l'ancien, on réécrit le bon) ======
+# ====== Blocs Caddy frontaux (idempotent : on retire les anciens, on réécrit les bons) ======
+# On supprime TOUT bloc de cette asso : l'InvenTree (contient "$NAME-proxy:80") ET la Scanette
+# (contient "$NAME-scan:80"). Couvre aussi l'ancien bloc combiné `@scan` (il contenait les deux).
 if [ -f "$FRONT/Caddyfile" ]; then
-  awk -v alias="$NAME-proxy:80" 'BEGIN{RS="";ORS="\n\n"} $0 !~ alias' \
+  awk -v a1="$NAME-proxy:80" -v a2="$NAME-scan:80" \
+    'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2' \
     "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp" && mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
 fi
-if [ "$WITH_SCANETTE" = "1" ]; then
-  cat >> "$FRONT/Caddyfile" <<EOF
-
-$HOST {
-    @scan path /scan /scan/*
-    handle @scan {
-        reverse_proxy $NAME-scan:80
-    }
-    handle {
-        reverse_proxy $NAME-proxy:80
-    }
-}
-EOF
-else
-  cat >> "$FRONT/Caddyfile" <<EOF
+# Bloc InvenTree (toujours)
+cat >> "$FRONT/Caddyfile" <<EOF
 
 $HOST {
     reverse_proxy $NAME-proxy:80
+}
+EOF
+# Bloc Scanette (sous-domaine dédié) si demandée
+if [ "$WITH_SCANETTE" = "1" ]; then
+  cat >> "$FRONT/Caddyfile" <<EOF
+
+$SCAN_HOST {
+    reverse_proxy $NAME-scan:80
 }
 EOF
 fi
@@ -534,7 +561,11 @@ fi
 # Déploie/maj Dex, enregistre le client de cette asso, injecte le bloc OIDC dans config.yaml,
 # relit le .env (SMTP) + config.yaml, et active les toggles SSO en base. (cf. lib/sso.sh)
 if [ "$SSO_READY" = "1" ]; then
-  setup_asso_sso "$NAME" "$HOST" "$DIR"
+  if [ "$WITH_SCANETTE" = "1" ]; then
+    setup_asso_sso "$NAME" "$HOST" "$DIR" "$SCAN_HOST"
+  else
+    setup_asso_sso "$NAME" "$HOST" "$DIR"
+  fi
 fi
 
 # ====== Récap ======
@@ -542,7 +573,7 @@ echo ""
 echo ">> ============================================================"
 echo ">>  Asso '$NAME' prête !"
 echo ">>    InvenTree : https://$HOST   (version épinglée: $INVENTREE_VERSION)"
-[ "$WITH_SCANETTE" = "1" ] && echo ">>    Scanette  : https://$HOST/scan/   (recharge avec ?v=N pour casser le cache)"
+[ "$WITH_SCANETTE" = "1" ] && echo ">>    Scanette  : https://$SCAN_HOST   (recharge avec ?v=N pour casser le cache)"
 if [ "$KEEP_ENV" = "1" ]; then
   echo ">>    Identifiants : inchangés (voir ~/$NAME/.env)"
 else
@@ -553,6 +584,7 @@ if [ "$SSO_READY" = "1" ]; then
   echo ">> ------------------------------------------------------------"
   echo ">>  EirbConnect (SSO) : prêt, tout est automatique."
   echo ">>    - bouton 'EirbConnect' sur https://$HOST"
+  [ "$WITH_SCANETTE" = "1" ] && echo ">>      (et sur la Scanette : https://$SCAN_HOST)"
   echo ">>    - un membre inconnu se connecte -> son compte est créé SANS groupe"
   echo ">>    - tu l'approuves : Admin Center -> Users -> (lui assigner un groupe)"
 fi
