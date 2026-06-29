@@ -2931,7 +2931,7 @@ async function loginEirbConnect(){
   f.action = API+"/api/auth/v1/auth/provider/redirect";
   const add=(n,v)=>{const i=document.createElement("input");i.type="hidden";i.name=n;i.value=v;f.appendChild(i);};
   add("provider","eirbconnect");          // = provider_id cote InvenTree (ne jamais renommer)
-  add("callback_url","/scan/");           // retour same-origin apres login (URL "safe")
+  add("callback_url","/scan/?sso=1");     // retour same-origin marque (garde-fou cote boot)
   add("process","login");
   if(csrf) add("csrfmiddlewaretoken", csrf);
   document.body.appendChild(f);
@@ -3768,6 +3768,16 @@ async function trySsoBootstrap(){
     USERNAME = uname || "EirbConnect";
     setCookie("eir_token", TOKEN, 30);
     setCookie("eir_user", USERNAME, 30);
+    // DECOUPLAGE : on a le token -> on coupe la session Django partagee, sinon son
+    // cookie (meme origine que /scan/) lierait Scanette et InvenTree. Desormais la
+    // Scanette ne marche QU'au token (Authorization: Token) -> les 2 sont independants.
+    try{
+      const csrf = getCookie("csrftoken");
+      await fetch(API+"/api/auth/v1/auth/session", {
+        method:"DELETE", credentials:"same-origin",
+        headers: csrf ? {"X-CSRFToken": csrf} : {}
+      });
+    }catch(_){}
     return true;
   }catch(_){ return false; }
 }
@@ -3817,9 +3827,13 @@ async function ssoLogout(){
 
 /* ---- boot ---- */
 (async function boot(){
-  // pas de token en cookie -> on tente l'echange via une session EirbConnect
-  if(!(TOKEN && USERNAME)){
+  // Garde-fou : on ne mint un token depuis une session (et on ne coupe cette session)
+  // QUE si on revient vraiment d'un login Scanette (?sso=1). Sinon une session
+  // InvenTree web ouverte par ailleurs ne doit pas etre touchee -> systemes independants.
+  const backFromSso = /[?&]sso=1(?:&|$)/.test(window.location.search);
+  if(!(TOKEN && USERNAME) && backFromSso){
     await trySsoBootstrap();
+    history.replaceState(null, "", "/scan/");   // nettoie l'URL (retire ?sso=1)
   }
   if(TOKEN){
     const st = await checkAuthorized();
