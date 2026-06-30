@@ -2,15 +2,39 @@
 
 Salut 👋
 
-Ce repo, c'est l'outillage pour déployer une **plateforme d'inventaire multi-assos** sur un seul VPS :
-une instance **InvenTree** isolée par association (chacune sur son sous-domaine), une **Scanette**
-(app web de scan de codes-barres) par asso, et le **SSO de l'école (EirbConnect)** branché
-automatiquement. Une commande crée tout, une autre supprime tout proprement.
+## C'est quoi ce projet ?
+
+> 🙏 **Ce projet repose entièrement sur [InvenTree](https://inventree.org)**, l'excellent logiciel
+> **libre** de gestion d'inventaire. Tout le cœur « inventaire » (pièces, stock, commandes, API,
+> interface…) vient de chez eux — un grand merci à ses auteurs et à sa communauté. Ce repo n'est
+> qu'une **couche d'outillage** posée par-dessus pour l'auto-déployer en multi-assos.
+
+Concrètement, ce repo permet d'héberger sur **un seul serveur** une **gestion d'inventaire pour
+plein d'assos** de l'école. Chaque association repart avec **deux choses** :
+
+- **son propre InvenTree** : un site web d'inventaire **complet et isolé** (sa base, ses comptes,
+  ses données), sur son sous-domaine `https://inventaire[-<asso>].<domaine>` ;
+- **sa Scanette** : une petite app web pensée **mobile**, pour que les **membres** scannent les
+  codes-barres / QR codes et gèrent le stock depuis leur téléphone, sur
+  `https://scanette[-<asso>].<domaine>`.
+
+Le tout branché au **SSO de l'école (EirbConnect)** : les membres se connectent avec leur compte
+habituel. Une commande déploie une asso complète, une autre la supprime proprement.
 
 ```
-./create-asso.sh eirspace        # -> https://inventaire.eirspace.fr  (+ /scan/, + bouton EirbConnect)
+./create-asso.sh eirspace        # InvenTree -> https://inventaire.eirspace.fr
+                                 # Scanette  -> https://scanette.eirspace.fr   (bouton EirbConnect sur les deux)
 ./delete-asso.sh  eirspace        # supprime tout (avec confirmation)
 ```
+
+---
+
+## Sous le capot
+
+Ce repo, c'est l'outillage pour déployer la **plateforme d'inventaire multi-assos** sur un seul VPS :
+une instance **InvenTree** isolée par association (chacune sur son sous-domaine), une **Scanette**
+(app web de scan de codes-barres, sur son propre sous-domaine) par asso, et le **SSO de l'école
+(EirbConnect)** branché automatiquement.
 
 ---
 
@@ -22,16 +46,28 @@ asso, c'est la galère. La solution : un **broker Dex** posé entre EirbConnect 
 
 ```
 EirbConnect (Keycloak école)  ──(1 seul client + 1 seul callback)──►  Dex (auth.<domaine>/oauth2)
-                                                                         │  redistribue l'identité
-                                            ┌────────────────────────────┼────────────────────────────┐
-                                            ▼                            ▼                            ▼
-                                   InvenTree asso A             InvenTree asso B             Scanette (même origine,
-                                   (client Dex propre)          (client Dex propre)          hérite la session InvenTree)
+                                                                         │  redistribue l'identité,
+                                                                         │  1 client Dex par asso
+                              ┌──────────────────────────────────────────┴──────────────────────────────┐
+                              ▼                                                                           ▼
+                   Asso A : InvenTree + Scanette                                  Asso B : InvenTree + Scanette
+                   (1 client Dex, callbacks pour                                  (1 client Dex, callbacks pour
+                    inventaire-a.… ET scanette-a.…)                                inventaire-b.… ET scanette-b.…)
 ```
 
 Astuce clé : Dex est monté sur l'issuer `…/oauth2`, donc son callback devient `…/oauth2/callback`
 = **pile le seul callback déjà enregistré côté école**. Résultat : **plus jamais besoin d'Eirbware**
-pour ajouter une asso. Chaque InvenTree obtient un client Dex à nous (callbacks libres).
+pour ajouter une asso. Chaque asso obtient un client Dex à nous (callbacks libres), qui couvre
+**à la fois** son InvenTree et sa Scanette.
+
+### Pourquoi des sous-domaines séparés ?
+
+InvenTree et la Scanette d'une asso tournent sur **deux sous-domaines distincts**
+(`inventaire-<asso>` et `scanette-<asso>`). La Scanette **proxifie** l'API InvenTree à travers
+elle-même (same-origin sur son propre sous-domaine) : pas de CORS, et surtout des **sessions
+isolées**. Si les deux partageaient la même origine, leurs cookies de session Django se
+**marcheraient dessus** (se déconnecter de l'un déconnecterait l'autre dans le même navigateur).
+Les sous-domaines règlent ça proprement : chacun a sa session, les deux sont indépendants.
 
 ---
 
@@ -77,7 +113,7 @@ inventree-scanette/
 
 ~/front/                         # le Caddy frontal partagé (auto-créé)
 ├── docker-compose.yml
-└── Caddyfile                    # 1 bloc par asso + 1 bloc auth.<domaine> -> Dex
+└── Caddyfile                    # 2 blocs par asso (InvenTree + Scanette) + 1 bloc auth.<domaine> -> Dex
 
 ~/auth-dex/                      # le broker Dex (auto-généré)
 ├── docker-compose.yml
@@ -109,11 +145,26 @@ sudo usermod -aG docker $USER     # puis : déconnexion / reconnexion SSH (ou `n
 
 ### 2. Swap — filet de sécurité (recommandé)
 
+Une seule fois, sur le VPS :
+
 ```bash
-sudo swapon --show || { sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile \
-  && sudo mkswap /swapfile && sudo swapon /swapfile \
-  && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab ; }
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h        # doit montrer Swap: 4.0Gi
 ```
+
+> À lancer **une seule fois**. Si le swap existe déjà (re-run, ou VPS qui en fournit un),
+> `mkswap`/`swapon` renverront une erreur « busy » sans gravité (`sudo swapoff /swapfile` avant
+> si tu veux le refaire proprement). Et si `swapon` renvoie `Invalid argument` (fichier « à
+> trous » créé par `fallocate` sur certains FS), recrée-le avec `dd` :
+> ```bash
+> sudo swapoff /swapfile 2>/dev/null; sudo rm -f /swapfile
+> sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=progress
+> sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+> ```
 
 ### 3. DNS — wildcard vers le VPS
 
@@ -127,8 +178,11 @@ Le plus simple : un enregistrement **A** wildcard, qui couvre **tous** les sous-
 Vérifie avant de déployer :
 ```bash
 dig inventaire.<ton-domaine> +short      # doit renvoyer l'IP du VPS
+dig scanette.<ton-domaine>  +short        # idem (la Scanette est sur son propre sous-domaine)
 dig auth.<ton-domaine>      +short        # idem (pour le SSO)
 ```
+> Le wildcard `*` couvre **tout** d'un coup : `inventaire[-<nom>]`, **`scanette[-<nom>]`**, `auth`.
+> Rien de spécial à ajouter au DNS pour les Scanettes.
 > Pas de domaine ? Mode **`tmp`** (sslip.io) : `./create-asso.sh demo tmp` — aucune entrée DNS,
 > mais **sans SSO** (le callback ne serait pas autorisable côté école).
 
@@ -183,13 +237,13 @@ admin posé, et le SSO activé en base. La seule action manuelle qui reste : **a
 | Argument | Détail |
 |---|---|
 | `<nom>` | nom interne (dossier + conteneurs), ex. `eirspace`, `pixeirb`. `[a-z0-9-]`. |
-| `[sous-domaine]` | label du sous-domaine. `tmp` → instance **éphémère** (sslip.io, sans DNS, sans SSO). Absent → `inventaire.<domaine>` pour l'asso principale (`eirspace`), sinon `inventaire-<nom>.<domaine>`. |
+| `[sous-domaine]` | label du sous-domaine **InvenTree**. `tmp` → instance **éphémère** (sslip.io, sans DNS, sans SSO). Absent → `inventaire.<domaine>` pour l'asso principale (`eirspace`), sinon `inventaire-<nom>.<domaine>`. La **Scanette** suit toujours sa propre convention : `scanette.<domaine>` (asso principale) ou `scanette-<nom>.<domaine>` (surchargeable via `SCAN_HOST=…`). |
 | `[mot-de-passe]` | mot de passe admin (généré aléatoirement si absent). |
 
 ```bash
-./create-asso.sh eirspace                      # https://inventaire.eirspace.fr
-./create-asso.sh pixeirb  inventaire-pixeirb   # https://inventaire-pixeirb.eirspace.fr
-./create-asso.sh vost                          # https://inventaire-vost.eirspace.fr
+./create-asso.sh eirspace                      # InvenTree https://inventaire.eirspace.fr   · Scanette https://scanette.eirspace.fr
+./create-asso.sh pixeirb  inventaire-pixeirb   # InvenTree https://inventaire-pixeirb.eirspace.fr · Scanette https://scanette-pixeirb.eirspace.fr
+./create-asso.sh vost                          # InvenTree https://inventaire-vost.eirspace.fr · Scanette https://scanette-vost.eirspace.fr
 ```
 
 > Relancer `./create-asso.sh eirspace` = **mettre à jour** (identifiants inchangés, app rebuild,
@@ -240,8 +294,9 @@ défaut), puis **réapplique le SMTP** au `.env` de **chaque** asso et relance l
 ./delete-asso.sh <nom>      # demande de taper "oui" pour confirmer
 ```
 
-Arrête/supprime les conteneurs **Scanette + InvenTree**, retire la route frontale, **retire le
-client Dex** (fragment + régénération du broker), puis efface `~/<nom>/`.
+Arrête/supprime les conteneurs **Scanette + InvenTree**, retire ses **deux routes frontales**
+(InvenTree + Scanette), **retire le client Dex** (fragment + régénération du broker), puis efface
+`~/<nom>/`.
 
 > ⚠️ **DÉFINITIF** : sauvegarde avant (section suivante). Les autres assos, le broker Dex et le
 > réseau partagé ne sont pas touchés.
@@ -351,7 +406,9 @@ l'email) → insensible aux multiples adresses de l'école.
 | `INVENTREE_VERSION` | `settings.env` | `1.4.0` | version InvenTree épinglée ; surcharge par asso `INVENTREE_VERSION=… ./create-asso.sh <nom>` |
 | `WITH_SCANETTE` | env | `1` | `0` = InvenTree seul |
 | `ENABLE_SSO` | env | `1` | `0` = pas de SSO |
-| `MAIN_ASSO` / `MAIN_SUBDOMAIN` | env | `eirspace` / `inventaire` | l'asso principale au sous-domaine fixe |
+| `MAIN_ASSO` / `MAIN_SUBDOMAIN` | env | `eirspace` / `inventaire` | l'asso principale au sous-domaine InvenTree fixe |
+| `MAIN_SCAN_SUBDOMAIN` | env | `scanette` | sous-domaine fixe de la **Scanette** de l'asso principale (les autres → `scanette-<nom>`) |
+| `SCAN_HOST` | env | (calculé) | force l'hôte complet de la Scanette : `SCAN_HOST=… ./create-asso.sh <nom>` |
 | `ADMIN_EMAIL` | env | expéditeur SMTP | email du compte admin |
 
 ---
@@ -362,11 +419,12 @@ l'email) → insensible aux multiples adresses de l'école.
 |---|---|
 | `permission denied … docker.sock` | `sudo usermod -aG docker $USER` + reconnexion (ou `newgrp docker`) |
 | Caddy n'obtient pas le certificat | `dig <sous-domaine> +short` doit renvoyer l'IP du VPS ; attendre la propagation DNS |
-| Page sans CSS / erreur CSRF | vérifier `INVENTREE_SITE_URL` + les 3 `USE_X_FORWARDED_*=True` dans `~/<nom>/.env` |
+| Page sans CSS / erreur CSRF | vérifier `INVENTREE_SITE_URL` + les 3 `USE_X_FORWARDED_*=True` dans `~/<nom>/.env`. Pour la **Scanette**, vérifier aussi que `INVENTREE_TRUSTED_ORIGINS` contient bien `https://scanette…` (relancer `./create-asso.sh <nom>` le réécrit) |
 | `502` sur une URL | l'instance n'est pas démarrée → `cd ~/<nom> && docker compose up -d` |
 | **Toutes** les URLs tombent | `front-caddy` arrêté → `cd ~/front && docker compose up -d` |
-| `/scan` renvoie 502 | conteneur Scanette arrêté → `cd ~/<nom>/scanette && docker compose up -d` |
+| `scanette[-<nom>].<domaine>` renvoie 502 | conteneur Scanette arrêté → `cd ~/<nom>/scanette && docker compose up -d` |
 | Bouton EirbConnect en erreur / `redirect_uri` | vérifier que Dex tourne : `cd ~/auth-dex && docker compose logs --tail=15 dex` ; discovery : `curl -s https://auth.<domaine>/oauth2/.well-known/openid-configuration | head -c 120` |
+| Login SSO **depuis la Scanette** renvoie sur InvenTree / ne garde pas la session | le `redirect_uri` envoyé à Dex doit contenir `scanette…` (`docker logs dex`), et `~/.config/multi-inventory/dex-clients/<nom>.yaml` doit lister les callbacks `scanette…` (relancer `./create-asso.sh <nom>` les ajoute) |
 | Login SSO refuse de créer un compte (`signup_closed`) | SMTP manquant/incorrect → `docker exec <nom>-server printenv INVENTREE_EMAIL_HOST` doit afficher ton serveur ; sinon `./create-asso.sh --reconfigure` |
 | `~10 %` des logins SSO échouent au reboot | clamp MSS non permanent → `sudo netfilter-persistent save` |
 
