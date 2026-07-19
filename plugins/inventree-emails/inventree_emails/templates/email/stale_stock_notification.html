@@ -1,0 +1,67 @@
+{% extends "email/email.html" %}
+{% load inventree_extras %}
+
+{% comment %}
+E-mail « peremption proche » restyle. Memes colonnes et memes donnees qu'a
+l'origine (liste stale_items), presentees dans un tableau compact sur la carte.
+Accent ambre ; peremption depassee en rouge, jour meme en ambre (comme l'origine).
+On reutilise l'en-tete et le pied de la base (pastille, marque EirSpace).
+
+Textes en francais litteral (voir README, section Langue) : les phrases de cet
+e-mail n'ont AUCUNE traduction FR dans le catalogue InvenTree (verifie sur
+1.4.1) — un {% trans %} retomberait en anglais au milieu d'un e-mail francais.
+La colonne « Péremption » reprend le mot de la pastille plutot que le
+« Date d'expiration » d'InvenTree.
+{% endcomment %}
+
+{% block section %}Stock{% endblock section %}
+{% block card_accent %}#f08c00{% endblock card_accent %}
+{% block pill_fg %}#f08c00{% endblock pill_fg %}
+{% block pill_bg %}#fff9db{% endblock pill_bg %}
+{% block pill %}Péremption proche{% endblock pill %}
+
+{% block title %}{{ message }}{% endblock title %}
+{% block subtitle %}
+<p style="margin:0 0 4px;font-size:13.5px;line-height:1.6;color:#495057;">Les objets suivants approchent de leur date de péremption :</p>
+{% endblock subtitle %}
+
+{% block body %}
+<tr>
+  <td colspan="100%" style="padding:6px 24px 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;font-size:12px;">
+      <tr>
+        <td style="padding:10px 10px 8px;font-size:11px;color:#868e96;font-weight:600;">Pièce</td>
+        <td style="padding:10px 10px 8px;font-size:11px;color:#868e96;font-weight:600;">Emplacement</td>
+        <td align="right" style="padding:10px 10px 8px;font-size:11px;color:#868e96;font-weight:600;">Quantité</td>
+        <td align="right" style="padding:10px 10px 8px;font-size:11px;color:#868e96;font-weight:600;">Péremption</td>
+        <td align="right" style="padding:10px 10px 8px;font-size:11px;color:#868e96;font-weight:600;">Jours</td>
+      </tr>
+      {% for item_data in stale_items %}
+      <tr>
+        <td style="padding:6px 10px;color:#212529;font-weight:600;border-top:1px solid #edf0f2;">
+          <a href="{{ item_data.absolute_url }}" style="color:#212529;text-decoration:none;">{{ item_data.stock_item.part.full_name }}</a>
+        </td>
+        <td style="padding:6px 10px;color:#495057;border-top:1px solid #edf0f2;">{{ item_data.stock_item.location|default:"-" }}</td>
+        <td align="right" style="padding:6px 10px;color:#495057;border-top:1px solid #edf0f2;">{% decimal item_data.stock_item.quantity %}</td>
+        <td align="right" style="padding:6px 10px;color:#495057;border-top:1px solid #edf0f2;">{{ item_data.stock_item.expiry_date|date:"d-m-Y"|default:"-" }}</td>
+        <td align="right" style="padding:6px 10px;border-top:1px solid #edf0f2;">
+          {% if item_data.days_until_expiry is not None %}
+            {% if item_data.days_until_expiry < 0 %}
+              <span style="color:#e03131;font-weight:700;">{{ item_data.expiry_status }}</span>
+            {% elif item_data.days_until_expiry == 0 %}
+              <span style="color:#f08c00;font-weight:700;">{{ item_data.expiry_status }}</span>
+            {% else %}
+              <span style="color:#495057;">{{ item_data.expiry_status }}</span>
+            {% endif %}
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </td>
+</tr>
+{% endblock body %}
+
+{% block footer_prefix %}
+<p style="margin:8px 0 0;font-size:12.5px;line-height:1.6;color:#868e96;">Vous recevez cet e-mail parce que vous êtes abonné aux notifications de ces pièces.</p>
+{% endblock footer_prefix %}

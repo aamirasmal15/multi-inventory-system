@@ -1,0 +1,30 @@
+# ============================================================
+# .gitignore — multi-inventory-system
+# ============================================================
+
+# --- Secrets / identifiants (ne doivent JAMAIS partir sur GitHub) ---
+.env
+*.env
+*.env.*
+
+# --- Logos partenaires : par instance uniquement (~/assos/<nom>/scannette/html/img/),
+#     jamais dans le repo (le tar écraserait le logo perso de chaque asso au re-run).
+scannette-src/img/logo-white.png
+scannette-src/img/logo-black.png
+
+# --- Sauvegardes ---
+*.tgz
+*.sql.gz
+
+# --- Bruit éditeurs / OS ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# --- Bytecode Python (le plugin est installé depuis les sources) ---
+__pycache__/
+*.pyc

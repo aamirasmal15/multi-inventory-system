@@ -1,0 +1,12 @@
+{% extends "email/email.html" %}
+
+{% comment %}
+E-mail de test (bouton « Envoyer un e-mail de test » des réglages). L'original
+d'InvenTree n'héritait PAS de la base et partait en anglais brut ; on le fait
+hériter de la base habillée et on écrit un message clair en français.
+{% endcomment %}
+
+{% block section %}Test{% endblock section %}
+{% block pill %}Test{% endblock pill %}
+
+{% block title %}Cet e-mail confirme que l'envoi de courriels fonctionne bien sur cette instance.{% endblock title %}

@@ -1,0 +1,5 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}Une demande d'accès a été faite pour l'adresse {{ email }}, mais aucun compte n'y est associé. Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail.
+
+Sinon, vous pouvez créer un compte :
+{{ signup_url }}{% endautoescape %}{% endblock content %}

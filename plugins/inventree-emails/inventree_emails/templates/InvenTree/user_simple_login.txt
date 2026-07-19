@@ -1,0 +1,8 @@
+{% comment %}Surcharge du lien de connexion par e-mail (InvenTree.magic_login).
+Envoyé en texte seul par send_email ; on garde le ton des autres e-mails.{% endcomment %}Bonjour,
+
+Vous avez demandé un lien pour vous connecter à {{ site_name }} :
+
+    {{ link }}
+
+Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail.

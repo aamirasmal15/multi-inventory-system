@@ -1,0 +1,89 @@
+{% load inventree_extras %}
+
+{% comment %}
+Base de TOUS les e-mails HTML natifs d'InvenTree, surchargee par le plugin
+« E-mails » (chargeur de templates de plugin, prioritaire sur le template natif
+du meme chemin email/email.html). Restyler cette base restyle d'un coup tous
+ses enfants (stock bas, peremption, evenement piece, commandes...).
+
+DA reprise du plugin Prets (prets/email/notification.html) : page grise,
+carte blanche a lisere d'accent, pastille d'etat, pied « Une solution EirSpace ».
+HTML d'e-mail = tables + styles inline uniquement (aucune feuille de style,
+aucune image distante : bloquees par les clients mail).
+
+Compatibilite : on garde TOUS les noms de blocs de la base native d'InvenTree
+(header, header_row, title, subtitle, body, body_row, footer, footer_prefix,
+footer_suffix) pour que les enfants non surcharges continuent de s'afficher.
+La carte est une <table> a fond blanc : les <tr> injectes par les enfants
+(ex. lignes de stock bas) reposent donc sur le blanc, sans retouche.
+Blocs de couleur surchargeables par enfant : card_accent (lisere gauche),
+pill_fg / pill_bg (pastille), section (surtitre a cote du nom d'instance),
+pill (libelle de la pastille).
+
+Le bandeau affiche le NOM DE L'INSTANCE (reglage InvenTree INVENTREE_INSTANCE,
+pose par create-asso.sh au nom de l'asso). S'il vaut encore le defaut, l'e-mail
+affiche donc « InvenTree ».
+
+Textes en francais litteral : voir la section « Langue » du README.
+{% endcomment %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f5;margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:28px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;">
+
+        <tr>
+          <td style="padding:0 4px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <span style="font-size:16px;font-weight:700;color:#212529;vertical-align:middle;">{% inventree_instance_name %}</span>
+            <span style="font-size:12.5px;color:#868e96;vertical-align:middle;">&nbsp;&middot;&nbsp;{% block section %}Notification{% endblock section %}</span>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #dee2e6;border-left:4px solid {% block card_accent %}#228be6{% endblock card_accent %};border-radius:10px;">
+
+              {% block header %}
+              <tr>
+                <td colspan="100%" style="padding:22px 24px 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                  {% block header_row %}
+                  <div style="display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:{% block pill_fg %}#228be6{% endblock pill_fg %};background:{% block pill_bg %}#e7f5ff{% endblock pill_bg %};border-radius:999px;padding:4px 12px;">{% block pill %}Notification{% endblock pill %}</div>
+                  {% block greeting %}{% endblock greeting %}
+                  <div style="margin:{% block title_mt %}14px{% endblock title_mt %} 0 4px;font-size:15px;line-height:1.6;color:#212529;">
+                    {% block title %}{% endblock title %}
+                  </div>
+                  {% block subtitle %}{% endblock subtitle %}
+                  {% endblock header_row %}
+                </td>
+              </tr>
+              {% endblock header %}
+
+              {% block body %}
+              <tr style="height:0;">
+                {% block body_row %}{% endblock body_row %}
+              </tr>
+              {% endblock body %}
+
+              {% block footer %}
+              <tr>
+                <td colspan="100%" style="padding:8px 24px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                  {% block footer_prefix %}{% endblock footer_prefix %}
+                  {% block footer_suffix %}{% endblock footer_suffix %}
+                </td>
+              </tr>
+              {% endblock footer %}
+
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px 6px 0;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <p style="margin:0;font-size:11.5px;color:#868e96;opacity:.85;">Une solution EirSpace conçue par Aamir ASMAL &#128640;</p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>

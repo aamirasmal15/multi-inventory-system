@@ -1,0 +1,5 @@
+{% comment %}Repli texte : miroir de account_already_exists_message.html.{% endcomment %}{% autoescape off %}Bonjour,
+
+Vous ou quelqu'un d'autre a tenté de créer un compte avec l'adresse {{ email }}. Un compte utilise déjà cette adresse. Si vous l'aviez oublié, vous pouvez en reprendre l'accès en réinitialisant son mot de passe :
+
+{{ password_reset_url }}{% endautoescape %}

@@ -1,0 +1,40 @@
+{% extends "account/email/_account_base.html" %}
+{% load account %}
+
+{% comment %}
+Version HTML de l'e-mail de confirmation d'adresse (allauth). Deux cas gères
+par allauth : un lien d'activation, ou un code a saisir.
+
+Texte francais litteral, fidele au message d'allauth (voir README, Langue).
+La traduction FR livree par allauth parle ici de « code de connexion » alors
+qu'il s'agit de verifier une ADRESSE E-MAIL : contresens, on ecrit la phrase
+nous-memes.
+{% endcomment %}
+
+{% block section %}Compte{% endblock section %}
+{% block pill %}Adresse e-mail{% endblock pill %}
+
+{% block title %}{% user_display user as user_display %}Vous recevez cet e-mail parce que {{ user_display }} a utilisé cette adresse pour créer un compte sur {{ current_site.domain }}.{% endblock title %}
+
+{% block body %}
+<tr>
+  <td colspan="100%" style="padding:6px 24px 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    {% if code %}
+    <p style="margin:0 0 10px;font-size:13.5px;line-height:1.6;color:#495057;text-align:center;">Voici votre code de vérification. Saisissez-le dans la fenêtre ouverte de votre navigateur.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:6px auto 4px;">
+      <tr>
+        <td align="center" style="background:#e7f5ff;border-radius:8px;padding:14px 28px;font-size:22px;font-weight:700;letter-spacing:.12em;color:#1c7ed6;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;">{{ code }}</td>
+      </tr>
+    </table>
+    {% else %}
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:6px auto 4px;">
+      <tr>
+        <td align="center" style="border-radius:8px;background:#228be6;">
+          <a href="{{ activate_url }}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Confirmer mon adresse e-mail&nbsp;&nbsp;&rarr;</a>
+        </td>
+      </tr>
+    </table>
+    {% endif %}
+  </td>
+</tr>
+{% endblock body %}

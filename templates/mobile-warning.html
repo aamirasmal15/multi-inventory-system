@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__ASSO__ · Scannette</title>
+<script>
+  // même logique que la Scannette : thème appliqué avant le rendu pour éviter le flash
+  (function(){
+    var t = (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<style>
+  /* Tokens repris tels quels de scannette-src/css/styles.css */
+  :root{
+    --bg:#f1f3f5;
+    --text:#212529; --muted:#868e96; --muted-2:#adb5bd;
+    --primary:#228be6; --primary-hover:#1c7ed6; --primary-light:#e7f5ff;
+    --radius:8px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color-scheme:light;
+  }
+  [data-theme=dark]{
+    --bg:#1a1b1e;
+    --text:#e9ecef; --muted:#909296; --muted-2:#5c5f66;
+    --primary:#4dabf7; --primary-hover:#74c0fc; --primary-light:#1b3a52;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0 auto;min-height:100dvh;max-width:540px;display:flex;flex-direction:column;
+       padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 14px);
+       background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .login-top{display:flex;align-items:center;gap:11px}
+  .logo-box{flex:none;width:42px;height:42px;border-radius:7px;overflow:hidden;display:grid;place-items:center}
+  .logo-box img{width:100%;height:100%;object-fit:contain;display:block}
+  .logo-fallback{background:var(--primary);color:#fff;font-weight:800;font-size:22px}
+  .brand{font-weight:700;font-size:18px;line-height:1.2}
+  .brand small{display:block;font-weight:500;color:var(--muted);font-size:10px;letter-spacing:.06em;margin-top:1px}
+  main{flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;padding:24px 0}
+  h1{font-size:21px;font-weight:700;margin:0 0 18px}
+  .badge{width:58px;height:58px;margin:0 auto 18px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--primary-light);color:var(--primary)}
+  .txt{font-size:14px;color:var(--muted);margin:0 auto 22px;max-width:340px}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:340px;margin:0 auto;padding:13px;border-radius:var(--radius);
+       background:var(--primary);color:#fff;font-size:15px;font-weight:600;text-decoration:none}
+  .btn:active{background:var(--primary-hover)}
+  .btn svg{width:18px;height:18px}
+  .url{font-size:12px;color:var(--muted);margin:10px 0 0}
+  .skip{margin:22px 0 0}
+  .skip button{background:none;border:none;font-size:13px;color:var(--muted);text-decoration:underline;cursor:pointer;font-family:var(--font);padding:8px}
+  footer{text-align:center;font-size:11px;color:var(--muted-2)}
+</style>
+</head>
+<body>
+<div class="login-top">
+  <span class="logo-box"><img id="logoImg" alt="__ASSO__"></span>
+  <div class="brand"><span>__ASSO__</span><small>INVENTAIRE · SCANNETTE</small></div>
+</div>
+<main>
+  <h1>Page non adaptée au mobile</h1>
+  <div class="badge">
+    <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+  </div>
+  <p class="txt">L'interface InvenTree est prévue pour un écran d'ordinateur. Sur téléphone, utilise plutôt la Scannette&nbsp;: scan de codes-barres, entrées et sorties de stock.</p>
+  <a class="btn" href="https://__SCAN_HOST__/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V5a1 1 0 0 1 1-1h2"/><path d="M17 4h2a1 1 0 0 1 1 1v2"/><path d="M20 17v2a1 1 0 0 1-1 1h-2"/><path d="M7 20H5a1 1 0 0 1-1-1v-2"/><line x1="7" y1="12" x2="7" y2="12.01"/><line x1="10" y1="12" x2="10" y2="12.01"/><line x1="13" y1="12" x2="13" y2="12.01"/><line x1="16" y1="12" x2="16" y2="12.01"/></svg>
+    Ouvrir la Scannette
+  </a>
+  <p class="url">__SCAN_HOST__</p>
+  <div class="skip">
+    <button onclick="document.cookie='inv_skip_once=1; path=/; max-age=300; SameSite=Lax; Secure'; location.reload()">Continuer quand même sur InvenTree</button>
+  </div>
+</main>
+<footer>Une solution EirSpace conçue par Aamir ASMAL 🚀</footer>
+<script>
+  // Logos : /img/* est relayé par le frontal vers le nginx de la Scannette, qui sert
+  // le html/img/ de l'instance. Noms de fichiers détectés et injectés par create-asso.sh.
+  // Même correspondance thème->fichier que applyTheme() de la Scannette, et si un fichier
+  // manque on essaie l'autre, puis l'initiale (repli à la logoFallback()).
+  (function(){
+    var dark = document.documentElement.getAttribute("data-theme") === "dark";
+    var img = document.getElementById("logoImg");
+    var white = "__LOGO_WHITE__", black = "__LOGO_BLACK__";
+    var candidates = (dark ? [black, white] : [white, black])
+      .filter(function(f){ return f; })
+      .map(function(f){ return "/img/" + f; });
+    var i = 0;
+    function fallback(){
+      var p = img.parentElement;
+      img.remove();
+      p.classList.add("logo-fallback");
+      p.textContent = "__ASSO_INITIAL__";
+    }
+    img.onerror = function(){
+      i++;
+      if (i < candidates.length) { img.src = candidates[i]; } else { fallback(); }
+    };
+    if (candidates.length) { img.src = candidates[0]; } else { fallback(); }
+  })();
+</script>
+</body>
+</html>

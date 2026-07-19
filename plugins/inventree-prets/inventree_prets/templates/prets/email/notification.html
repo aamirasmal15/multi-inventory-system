@@ -1,0 +1,79 @@
+{% load i18n %}
+
+{% comment %}
+Template unique des emails du plugin (rappel, retard, debut de reservation),
+rendu et envoye par le plugin email NATIF d'InvenTree (context['template']).
+Aux couleurs de la Scannette : en-tete texte (pas de logo : une image distante
+est bloquee par les clients mail derriere « afficher les images externes »),
+carte blanche a lisere d'accent (ambre = rappel, rouge = retard, violet =
+reservation), pastille d'etat, bloc de details, pied « Une solution EirSpace ».
+HTML d'email : tables et styles inline uniquement.
+Contexte fourni par _notify : name, message, rows [(label, valeur)], accent,
+accent_light, instance, postscript (phrase de cloture facultative, affichee
+sous le bloc de details — ex. « Merci de confirmer l'emprunt. »),
+button_label + button_url (bouton d'action facultatif sous le postscript —
+table centree aux couleurs de l'accent, seul style « bulletproof » que les
+clients mail rendent tous ; la cible est la redirection mobile/ordinateur
+du plugin, voir GoItemView).
+{% endcomment %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f5;margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:28px 14px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:540px;">
+
+        <tr>
+          <td style="padding:0 4px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <span style="font-size:16px;font-weight:700;color:#212529;vertical-align:middle;">{{ instance }}</span>
+            <span style="font-size:12.5px;color:#868e96;vertical-align:middle;">&nbsp;&middot;&nbsp;{% trans "Loans" %}</span>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="background:#ffffff;border:1px solid #dee2e6;border-left:4px solid {{ accent }};border-radius:10px;padding:22px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+            <div style="display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:{{ accent }};background:{{ accent_light }};border-radius:999px;padding:4px 12px;">{{ name }}</div>
+
+            {# Salutation sous la pastille (l'en-tete de la carte), meme ton que les e-mails de compte du plugin E-mails #}
+            <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#212529;">{% trans "Hello," %}</p>
+
+            <p style="margin:6px 0 16px;font-size:15px;line-height:1.6;color:#212529;">{{ message }}</p>
+
+            {% if rows %}
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;">
+              {% for label, value in rows %}
+              <tr>
+                <td style="padding:{% if forloop.first %}12px{% else %}5px{% endif %} 16px {% if forloop.last %}12px{% else %}5px{% endif %};font-size:13px;color:#868e96;white-space:nowrap;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">{{ label }}</td>
+                <td align="right" style="padding:{% if forloop.first %}12px{% else %}5px{% endif %} 16px {% if forloop.last %}12px{% else %}5px{% endif %};font-size:13.5px;color:#212529;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">{{ value }}</td>
+              </tr>
+              {% endfor %}
+            </table>
+            {% endif %}
+
+            {% if postscript %}
+            <p style="margin:16px 0 0;font-size:13.5px;line-height:1.6;color:#495057;">{{ postscript }}</p>
+            {% endif %}
+
+            {% if button_url and button_label %}
+            <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:18px auto 4px;">
+              <tr>
+                <td align="center" style="border-radius:8px;background:{{ accent }};">
+                  <a href="{{ button_url }}" style="display:inline-block;padding:12px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">{{ button_label }}&nbsp;&nbsp;&rarr;</a>
+                </td>
+              </tr>
+            </table>
+            {% endif %}
+
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px 6px 0;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <p style="margin:0;font-size:11.5px;color:#868e96;opacity:.85;">{% trans "An EirSpace solution designed by Aamir ASMAL" %} &#128640;</p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>

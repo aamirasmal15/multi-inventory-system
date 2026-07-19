@@ -1,0 +1,434 @@
+# Traduction francaise du plugin inventree-prets.
+msgid ""
+msgstr ""
+"Project-Id-Version: inventree-prets\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+# --- Modele ---
+msgid "Loan"
+msgstr "Prêt"
+
+msgid "Loans"
+msgstr "Prêts"
+
+msgid "Stock item"
+msgstr "Objet"
+
+msgid "Borrower (member)"
+msgstr "Emprunteur (membre)"
+
+msgid "Borrower (free text)"
+msgstr "Emprunteur (nom libre)"
+
+msgid "Lent at"
+msgstr "Prêté le"
+
+msgid "Due date"
+msgstr "À rendre le"
+
+msgid "Returned by"
+msgstr "Rendu par"
+
+msgid "Returned at"
+msgstr "Rendu le"
+
+msgid "Registered by"
+msgstr "Enregistré par"
+
+msgid "Notes"
+msgstr "Notes"
+
+msgid "Reminder sent"
+msgstr "Rappel envoyé"
+
+msgid "Overdue notified"
+msgstr "Retard signalé"
+
+msgid "Status before loan"
+msgstr "Statut avant le prêt"
+
+msgid "Unknown"
+msgstr "Inconnu"
+
+# --- Admin ---
+msgid "Borrower"
+msgstr "Emprunteur"
+
+msgid "Overdue"
+msgstr "En retard"
+
+# --- Plugin / reglages ---
+msgid "Loan management"
+msgstr "Gestion des prêts"
+
+msgid "Lend and return trackable items, with due date reminders and overdue alerts."
+msgstr "Prêt et retour d'objets trackables, avec rappels d'échéance et alertes de retard."
+
+msgid "Default loan duration"
+msgstr "Durée de prêt par défaut"
+
+msgid "Duration (in days) applied when no due date is given"
+msgstr "Durée appliquée (en jours) quand aucune échéance n'est fournie"
+
+msgid "Reminder before due date"
+msgstr "Rappel avant échéance"
+
+msgid "Send a reminder to the borrower when the due date is near"
+msgstr "Envoyer un rappel à l'emprunteur quand l'échéance approche"
+
+msgid "Days before due date"
+msgstr "Jours avant échéance"
+
+msgid "Number of days before the due date to send the reminder"
+msgstr "Nombre de jours avant l'échéance pour envoyer le rappel"
+
+msgid "Overdue alert"
+msgstr "Alerte de retard"
+
+msgid "Alert the administrators (staff and superusers, except the main account) when an item is not returned"
+msgstr "Alerter les administrateurs (staff et superusers, sauf le compte principal) quand un objet n'est pas rendu"
+
+msgid "Notify the borrower"
+msgstr "Prévenir l'emprunteur"
+
+msgid "Send the borrower (member) a daily reminder as long as the item is overdue"
+msgstr "Relance chaque jour l'emprunteur (membre) tant que l'objet est en retard"
+
+msgid "'On loan' badge in the table"
+msgstr "Badge « Emprunté » dans le tableau"
+
+msgid ""
+"Show an 'On loan' badge on the item in the stock table while it is borrowed"
+msgstr ""
+"Affiche un badge « Emprunté » sur l'objet dans le tableau de stock tant "
+"qu'il est sorti"
+
+msgid ""
+"Members can reserve an item for a date range. During the slot, only the "
+"beneficiary can borrow it."
+msgstr ""
+"Les membres peuvent réserver un objet sur un créneau. Pendant le créneau, "
+"seul le bénéficiaire peut l'emprunter."
+
+# --- UI (panneau, dashboard) ---
+msgid "Active loans"
+msgstr "Prêts en cours"
+
+msgid "Items currently on loan, overdue first"
+msgstr "Objets actuellement prêtés, avec les retards en premier"
+
+msgid "On loan"
+msgstr "Emprunté"
+
+# --- Notifications ---
+msgid "Loan due soon"
+msgstr "Prêt à rendre bientôt"
+
+msgid "Remember to return {item} by {date}."
+msgstr "Pensez à rendre {item} pour le {date}."
+
+msgid "Overdue loan"
+msgstr "Prêt en retard"
+
+msgid "{item} has not been returned, due {date}, borrowed by {who}."
+msgstr "{item} n'a pas été rendu, échéance {date}, emprunté par {who}."
+
+msgid "You have not returned this item"
+msgstr "Vous n'avez pas rendu cet objet"
+
+msgid "You still have not returned {item}, due on {date}. Please bring it back as soon as possible."
+msgstr "Vous n'avez toujours pas rendu {item}, à rendre le {date}. Merci de le ramener au plus vite."
+
+msgid "Your reservation has started"
+msgstr "Votre réservation commence"
+
+msgid "You can pick up {item}, it is reserved for you until {date}."
+msgstr "Vous pouvez venir emprunter {item}, il est réservé pour vous jusqu'au {date}."
+
+msgid "Please confirm the borrowing once you have picked up the item."
+msgstr "Merci de confirmer l'emprunt une fois l'objet récupéré."
+
+msgid "Confirm the borrowing"
+msgstr "Confirmer l'emprunt"
+
+msgid "Slot"
+msgstr "Créneau"
+
+msgid "Your reservation has been cancelled"
+msgstr "Votre réservation a été annulée"
+
+msgid "Your reservation of {item} ({slot}) has been cancelled by {who}."
+msgstr "Votre réservation de {item} ({slot}) a été annulée par {who}."
+
+msgid "Reservation cancelled"
+msgstr "Réservation annulée"
+
+msgid "Your reservation of {item} ({slot}) has been cancelled."
+msgstr "Votre réservation de {item} ({slot}) a bien été annulée."
+
+msgid "Your ongoing reservation of {item} ({slot}) has been cancelled. The item is available to everyone again."
+msgstr "Votre réservation en cours de {item} ({slot}) a bien été annulée. L'objet est de nouveau disponible pour tout le monde."
+
+msgid "Reason: {reason}"
+msgstr "Motif : {reason}"
+
+msgid "Cancelled by"
+msgstr "Annulée par"
+
+msgid "Reason"
+msgstr "Motif"
+
+msgid "from {start} to {end}"
+msgstr "du {start} au {end}"
+
+msgid "on {date}"
+msgstr "le {date}"
+
+msgid "Location"
+msgstr "Emplacement"
+
+# --- Erreurs API ---
+msgid "The 'stock_item' field is required."
+msgstr "Le champ 'stock_item' est requis."
+
+msgid "Stock item not found."
+msgstr "Objet de stock introuvable."
+
+msgid "This item is not trackable, it cannot be lent."
+msgstr "Cet objet n'est pas trackable, il ne peut pas être prêté."
+
+msgid "This item is already on loan."
+msgstr "Cet objet est déjà prêté."
+
+msgid "Borrower user not found."
+msgstr "Utilisateur emprunteur introuvable."
+
+msgid "A borrower is required (borrower_user or borrower_name)."
+msgstr "Un emprunteur est requis (borrower_user ou borrower_name)."
+
+msgid "Invalid 'due_on' format (expected YYYY-MM-DD)."
+msgstr "Format de 'due_on' invalide (attendu AAAA-MM-JJ)."
+
+msgid "The due date cannot be before today."
+msgstr "L'échéance ne peut pas être antérieure à aujourd'hui."
+
+msgid "No active loan found for this item."
+msgstr "Aucun prêt actif trouvé pour cet objet."
+
+# --- Reservations (modele) ---
+msgid "Reservation"
+msgstr "Réservation"
+
+msgid "Reservations"
+msgstr "Réservations"
+
+msgid "Reserved for (member)"
+msgstr "Réservé pour (membre)"
+
+msgid "Reserved for (free text)"
+msgstr "Réservé pour (nom libre)"
+
+msgid "From"
+msgstr "Du"
+
+msgid "To"
+msgstr "Au"
+
+msgid "Created at"
+msgstr "Créée le"
+
+msgid "Cancelled at"
+msgstr "Annulée le"
+
+msgid "Cancellation reason"
+msgstr "Motif d'annulation"
+
+msgid "Start notified"
+msgstr "Début notifié"
+
+msgid "Converted loan"
+msgstr "Prêt associé"
+
+msgid "Reserved for"
+msgstr "Réservé pour"
+
+# --- Reservations (erreurs API) ---
+msgid "The reservation system is disabled."
+msgstr "Le système de réservation est désactivé."
+
+msgid "This item is not trackable, it cannot be reserved."
+msgstr "Cet objet n'est pas trackable, il ne peut pas être réservé."
+
+msgid "Beneficiary user not found."
+msgstr "Utilisateur bénéficiaire introuvable."
+
+msgid "A beneficiary is required (reserved_for_user or reserved_for_name)."
+msgstr "Un bénéficiaire est requis (reserved_for_user ou reserved_for_name)."
+
+msgid "Invalid 'start_date'/'end_date' format (expected YYYY-MM-DD)."
+msgstr "Format de 'start_date'/'end_date' invalide (attendu AAAA-MM-JJ)."
+
+msgid "The start date cannot be before today."
+msgstr "La date de début ne peut pas être antérieure à aujourd'hui."
+
+msgid "The end date cannot be before the start date."
+msgstr "La date de fin ne peut pas être antérieure à la date de début."
+
+msgid "This slot overlaps the reservation of {who} ({slot})."
+msgstr "Ce créneau chevauche la réservation de {who} ({slot})."
+
+msgid "No active reservation found."
+msgstr "Aucune réservation active trouvée."
+
+msgid "Reserved by {who} {slot}: the return must be before {date}."
+msgstr "Réservé par {who} {slot} : le retour doit être avant le {date}."
+
+msgid "Reserved by {who} until {end}."
+msgstr "Réservé par {who} jusqu'au {end}."
+
+msgid "Only an administrator can lend on behalf of someone else."
+msgstr "Seul un administrateur peut emprunter au nom de quelqu'un d'autre."
+
+msgid "A reason is required to cancel someone else's reservation."
+msgstr "Un motif est obligatoire pour annuler la réservation de quelqu'un d'autre."
+
+msgid "Borrowed by {who}, expected back on {date}: the slot must start later."
+msgstr "Emprunté par {who}, retour prévu le {date} : le créneau doit commencer après."
+
+msgid "For (association/club)"
+msgstr "Pour (asso/club)"
+
+msgid "Ask which association it is for"
+msgstr "Demander pour quelle asso"
+
+msgid ""
+"Adds an optional field to say for which association or club the item is "
+"borrowed or reserved."
+msgstr ""
+"Ajoute un champ facultatif pour indiquer pour quelle asso ou quel club "
+"l'objet est emprunté ou réservé."
+
+msgid "Only the borrower, the person who registered the loan, or an admin can record the return."
+msgstr "Seuls l'emprunteur, la personne qui a enregistré le prêt, ou un admin peuvent enregistrer le retour."
+
+msgid "Only the person who created the reservation (or an admin) can cancel it."
+msgstr "Seule la personne qui a créé la réservation (ou un admin) peut l'annuler."
+
+msgid "Delete old loan history"
+msgstr "Supprimer le vieil historique de prêts"
+
+msgid "Delete finished loans and past reservations older than the specified number of days"
+msgstr "Supprime les prêts terminés et les réservations passées de plus du nombre de jours indiqué"
+
+msgid "Loan history deletion interval"
+msgstr "Délai de suppression de l'historique"
+
+msgid "Finished loans and past reservations will be deleted after the specified number of days"
+msgstr "Les prêts terminés et les réservations passées sont supprimés après le nombre de jours indiqué"
+
+msgid "days"
+msgstr "jours"
+
+msgid "Upcoming reservations"
+msgstr "Réservations à venir"
+
+msgid "Next reservation slots on trackable items"
+msgstr "Prochains créneaux de réservation des objets trackables"
+
+# --- v0.35 : recu de retour ---
+msgid "Return receipt"
+msgstr "Reçu de retour"
+
+msgid "Send the borrower (member) a receipt when the return of the item is recorded"
+msgstr "Envoie à l'emprunteur (membre) un reçu quand le retour de l'objet est enregistré"
+
+msgid "Return recorded"
+msgstr "Retour enregistré"
+
+msgid "The return of {item} has been recorded. Thank you!"
+msgstr "Votre retour de {item} est bien enregistré. Merci !"
+
+msgid "The return of {item} has been recorded by {who}. Your loan is now closed."
+msgstr "Le retour de {item} a été enregistré par {who}. Votre prêt est clôturé."
+
+msgid "Returned on"
+msgstr "Rendu le"
+
+msgid "Return recorded by"
+msgstr "Retour enregistré par"
+
+msgid "Confirmation reminder sent"
+msgstr "Relance de confirmation envoyée"
+
+# --- v0.35 : relance de confirmation de reservation ---
+msgid "Unconfirmed reservation reminder"
+msgstr "Relance des réservations non confirmées"
+
+msgid "Remind the beneficiary who has not confirmed the borrowing a few days into the slot, so an unused reservation gets cancelled and frees the item"
+msgstr "Relance le bénéficiaire qui n'a pas confirmé l'emprunt quelques jours après le début du créneau, pour qu'une réservation inutilisée soit annulée et libère l'objet"
+
+msgid "Days before the confirmation reminder"
+msgstr "Jours avant la relance de confirmation"
+
+msgid "Number of days after the start of the slot before reminding the beneficiary to confirm the borrowing"
+msgstr "Nombre de jours après le début du créneau avant de relancer le bénéficiaire pour confirmer l'emprunt"
+
+msgid "Borrowing not confirmed"
+msgstr "Emprunt pas encore confirmé"
+
+msgid "You have not confirmed the borrowing of {item}, reserved for you until {date}."
+msgstr "Vous n'avez toujours pas confirmé l'emprunt de {item}, réservé pour vous jusqu'au {date}."
+
+msgid "If you no longer need it, cancel the reservation so others can borrow the item."
+msgstr "Si vous n'en avez plus besoin, annulez la réservation pour laisser les autres emprunter l'objet."
+
+# --- v0.36 : salutation en tete des e-mails ---
+msgid "Hello,"
+msgstr "Bonjour,"
+
+# --- v0.38 : recus d'emprunt et de reservation ---
+msgid "Borrowing receipt"
+msgstr "Reçu d'emprunt"
+
+msgid "Send the borrower (member) a receipt when a loan is registered"
+msgstr "Envoie à l'emprunteur (membre) un reçu quand un emprunt est enregistré"
+
+msgid "Reservation receipt"
+msgstr "Reçu de réservation"
+
+msgid "Send the beneficiary (member) a receipt when a reservation is registered for an upcoming slot"
+msgstr "Envoie au bénéficiaire (membre) un reçu quand une réservation est enregistrée pour un créneau à venir"
+
+msgid "Borrowing recorded"
+msgstr "Emprunt enregistré"
+
+msgid "Your borrowing of {item} has been recorded."
+msgstr "Votre emprunt de {item} est bien enregistré."
+
+msgid "The borrowing of {item} has been recorded in your name by {who}."
+msgstr "L'emprunt de {item} a été enregistré à votre nom par {who}."
+
+msgid "Borrowing recorded by"
+msgstr "Emprunt enregistré par"
+
+msgid "Reservation recorded"
+msgstr "Réservation enregistrée"
+
+msgid "Your reservation of {item} ({slot}) has been recorded."
+msgstr "Votre réservation de {item} ({slot}) est bien enregistrée."
+
+msgid "A reservation of {item} ({slot}) has been recorded in your name by {who}."
+msgstr "Une réservation de {item} ({slot}) a été enregistrée à votre nom par {who}."
+
+msgid "Reservation recorded by"
+msgstr "Réservation enregistrée par"
+
+msgid "You will receive an email when the slot starts."
+msgstr "Vous recevrez un e-mail au début du créneau."
+
+msgid "An EirSpace solution designed by Aamir ASMAL"
+msgstr "Une solution EirSpace conçue par Aamir ASMAL"

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<title>EIRSPACE · Scannette</title>
+<script>
+  // applique le thème avant le rendu pour éviter le flash
+  (function(){
+    var m = document.cookie.match(/(?:^|; )eir_theme=([^;]+)/);
+    var t = m ? decodeURIComponent(m[1]) : (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar" id="topbar" style="display:none">
+    <span class="logo-box logo-sm"><img src="img/logo-white.png" alt="EIRSPACE" onerror="logoFallback(this)"></span>
+    <div class="brand"><span class="bn">EIRSPACE</span><small data-i18n="brand_sub">Inventaire</small></div>
+    <div class="spacer"></div>
+    <button class="user-chip" id="userChip" title="Mon compte" data-i18n-title="acct_title"></button>
+    <button class="iconbtn" id="themeBtn" title="Thème" data-i18n-title="theme"></button>
+    <button class="iconbtn" id="logoutBtn" title="Déconnexion" data-i18n-title="logout">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- LOGIN -->
+  <section class="screen" id="screen-login">
+    <div class="login-wrap">
+      <div class="login-top">
+        <div class="login-logos">
+          <span class="logo-box logo-lg collab-only"><img src="img/eirspace-white.png" alt="" data-logo="main" onerror="logoFallback(this)"></span>
+          <span class="lockup-x collab-only" aria-hidden="true">×</span>
+          <span class="logo-box logo-lg"><img src="img/logo-white.png" alt="EIRSPACE" onerror="logoFallback(this)"></span>
+        </div>
+        <div class="brand login-brand"><span class="bn">EIRSPACE</span><small data-i18n="brand_sub_login">Inventaire · Scannette</small></div>
+        <div class="spacer"></div>
+        <button class="iconbtn" id="themeBtnLogin" title="Thème" data-i18n-title="theme"></button>
+      </div>
+      <h1 class="title" data-i18n="login_title">Se connecter avec InvenTree</h1>
+      <div class="err" id="loginErr"></div>
+      <div class="card" style="padding:18px">
+        <div class="field">
+          <label class="lbl" for="user" data-i18n="login_user">Identifiant</label>
+          <input type="text" id="user" autocomplete="username" autocapitalize="off" autocorrect="off" placeholder="identifiant" data-i18n-ph="login_user_ph" />
+        </div>
+        <div class="field" style="margin-bottom:16px">
+          <label class="lbl" for="pass" data-i18n="login_pass">Mot de passe</label>
+          <input type="password" id="pass" autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <button class="btn btn-ghost" id="loginBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          <span data-i18n="login_btn">Se connecter</span>
+        </button>
+      </div>
+      <div class="login-or"><span data-i18n="login_or">ou</span></div>
+      <button class="btn btn-primary btn-block" id="eirbConnectBtn" data-i18n="login_eirb">
+        Se connecter avec EirbConnect
+      </button>
+    </div>
+  </section>
+
+  <!-- EN ATTENTE D'APPROBATION -->
+  <section class="screen" id="screen-pending">
+    <div class="login-wrap">
+      <div class="login-top">
+        <div class="login-logos">
+          <span class="logo-box logo-lg"><img src="img/logo-white.png" alt="EIRSPACE" onerror="logoFallback(this)"></span>
+        </div>
+        <div class="brand login-brand"><span class="bn">EIRSPACE</span><small data-i18n="brand_sub_login">Inventaire · Scannette</small></div>
+        <div class="spacer"></div>
+      </div>
+      <h1 class="title" data-i18n="pending_title">Compte en attente d'approbation</h1>
+      <div class="card" style="padding:18px;text-align:center">
+        <div style="margin:6px auto 14px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--primary-light);color:var(--primary)">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <p style="margin:0 0 6px;font-weight:600" data-i18n="pending_p1">Votre compte est en attente d'approbation.</p>
+        <p style="margin:0;color:var(--muted)" data-i18n="pending_p2">Contactez un admin si le problème persiste.</p>
+      </div>
+      <button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="location.reload()" data-i18n="retry">Réessayer</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="ssoLogout()" data-i18n="logout_btn">Se déconnecter</button>
+    </div>
+  </section>
+
+  <!-- SCAN -->
+  <section class="screen" id="screen-scan">
+    <h1 class="title" data-i18n="scan_title">Inventaire</h1>
+    <div class="seg" id="scanModeSeg">
+      <button type="button" class="seg-btn active" data-mode="scan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span data-i18n="mode_scan">Scanner</span>
+      </button>
+      <button type="button" class="seg-btn" data-mode="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span data-i18n="mode_search">Rechercher</span>
+      </button>
+    </div>
+    <div class="err" id="scanErr"></div>
+
+    <div id="modeSearch" style="display:none">
+      <div class="card" style="padding:12px 13px;margin-bottom:13px">
+        <div class="search-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="partSearch" inputmode="search" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Nom, référence… (ex. eth)" data-i18n-ph="search_ph" />
+          <button type="button" id="partSearchClear" title="Effacer" data-i18n-title="clear" style="display:none">×</button>
+        </div>
+        <div id="searchResults" class="search-results"></div>
+      </div>
+    </div>
+
+    <div id="modeScan">
+      <div class="card" style="padding:15px">
+        <div id="reader" class="reader"><video id="camvideo" muted playsinline autoplay webkit-playsinline></video><div class="scanbox"><span class="sline"></span><svg class="hitcheck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><div class="scan-warn" id="scanWarn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span data-i18n-html="scan_warn_html">Plusieurs codes : ne visez qu'<b>un seul</b> code dans le carré</span></div></div>
+        <div class="cam-start" id="camStart" style="display:none">
+          <p id="camMsg"></p>
+          <button class="btn btn-primary btn-cam" id="camBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <span data-i18n="cam_enable">Activer la caméra</span>
+          </button>
+        </div>
+        <div class="or"><span data-i18n="or_type_code">ou saisir le code</span></div>
+        <div class="manual-row">
+          <input type="text" id="manualInput" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Code-barres / QR…" data-i18n-ph="manual_ph" />
+          <button class="btn btn-ghost" id="goBtn">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-ghost btn-block" id="createNoCodeBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span data-i18n="create_nocode">Créer un article sans code</span>
+    </button>
+  </section>
+
+  <!-- QR généré (création sans code) -->
+  <section class="screen" id="screen-qr">
+    <div class="qr-done">
+      <span class="qr-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span data-i18n="qr_created">Article créé</span></span>
+      <p id="qrName" class="qr-name"></p>
+      <div class="qr-img-wrap"><img id="qrImg" alt="QR code"></div>
+      <p class="qr-hint" data-i18n="qr_hint">QR InvenTree de l'article : imprimez-le et collez-le sur l'objet.</p>
+      <div class="qr-datawrap"><span class="qr-datalbl" data-i18n="qr_data">Données du code</span><div class="code-tag" id="qrData"></div></div>
+      <div class="qr-actions">
+        <button class="btn btn-ghost" id="qrPrintBtn" data-i18n="print">Imprimer</button>
+        <button class="btn btn-primary" id="qrDoneBtn" data-i18n="done">Terminé</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ITEM -->
+  <section class="screen" id="screen-item">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="item_crumb">Article scanné</span>
+    </div>
+    <div id="itemBody">
+      <div class="card item-head" id="itemHead"></div>
+      <!-- comptage de quantité : masqué quand l'article est trackable (mode prêt) -->
+      <div id="qtyBlock">
+        <div class="qty-label">Quantité en stock</div>
+        <div class="stepper">
+          <button id="minus">−</button>
+          <input type="text" id="qtyInput" inputmode="decimal" value="0" />
+          <button id="plus">+</button>
+        </div>
+        <div class="field">
+          <label class="lbl" for="comment" data-i18n="comment_opt">Commentaire (facultatif)</label>
+          <textarea id="comment" placeholder="ex. recomptage, casse, prêt…" data-i18n-ph="comment_ph"></textarea>
+        </div>
+        <button class="btn btn-primary" id="submitBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span data-i18n="save_qty">Enregistrer la quantité</span>
+        </button>
+        <div class="item-actions">
+          <button class="btn btn-ghost" id="moveBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+            <span data-i18n="move">Déplacer</span>
+          </button>
+          <button class="btn btn-ghost" id="addElsewhereBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <span data-i18n="add_elsewhere">Ajouter ailleurs</span>
+          </button>
+        </div>
+      </div>
+      <!-- objet trackable : bloc prêt / réservation rendu par loan.js -->
+      <div id="loanBlock" style="display:none"></div>
+    </div>
+    <div id="chooseBody" style="display:none">
+      <p class="subtitle">Plusieurs lots correspondent. Choisissez lequel :</p>
+      <div id="chooseList"></div>
+    </div>
+    <div class="done" id="done">
+      <div class="ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <h2 id="doneTitle">Stock mis à jour</h2>
+      <p id="doneName"></p>
+      <div class="newq" id="doneQty"></div>
+      <div class="err" id="doneWarn" style="display:none;text-align:left;max-width:320px"></div>
+      <button class="btn btn-primary" id="againBtn" style="max-width:280px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+        <span data-i18n="scan_another">Scanner un autre article</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- LEND (emprunter un objet trackable, au nom de l'utilisateur connecté) -->
+  <section class="screen" id="screen-lend">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnLend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="lend_crumb">Emprunter l'objet</span>
+    </div>
+    <div class="err" id="lendErr"></div>
+    <div class="card item-head" id="lendHead"></div>
+    <div class="field-warn book" id="lendInfo" style="margin:0 0 13px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span id="lendInfoTxt"></span></div>
+    <div class="field">
+      <label class="lbl" for="lendWho" data-i18n="lend_who">Emprunteur</label>
+      <input type="text" id="lendWho" class="ro" readonly tabindex="-1" />
+      <p class="field-hint" id="lendWhoHint">l'emprunt est enregistré à votre nom</p>
+    </div>
+    <div class="field" id="lendForField" style="display:none">
+      <label class="lbl" for="lendFor" data-i18n="for_opt">Pour (facultatif)</label>
+      <input type="text" id="lendFor" autocomplete="off" autocapitalize="words" autocorrect="off" placeholder="asso, club…" data-i18n-ph="for_ph" />
+    </div>
+    <div class="field">
+      <label class="lbl" for="lendDue" data-i18n="lend_due">Retour prévu</label>
+      <input type="date" id="lendDue" />
+      <div class="field-warn" id="lendWarn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><span id="lendWarnTxt"></span></div>
+    </div>
+    <div class="field">
+      <label class="lbl" for="lendNotes" data-i18n="comment_opt">Commentaire (facultatif)</label>
+      <textarea id="lendNotes" placeholder="ex. pour la soirée de gala, rendu lundi…" data-i18n-ph="lend_notes_ph"></textarea>
+    </div>
+    <button class="btn btn-primary" id="lendConfirmBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span data-i18n="confirm_loan">Confirmer l'emprunt</span>
+    </button>
+    <button class="btn btn-ghost" id="lendCancelBtn" style="margin-top:11px" data-i18n="cancel">Annuler</button>
+  </section>
+
+  <!-- RESERVE (réserver un créneau, si activé dans InvenTree) -->
+  <section class="screen" id="screen-reserve">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnResa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="resa_crumb">Réserver l'objet</span>
+    </div>
+    <div class="err" id="resaErr"></div>
+    <div class="card item-head" id="resaHead"></div>
+    <div class="field">
+      <label class="lbl" for="resaWho" data-i18n="resa_who">Réservé pour</label>
+      <input type="text" id="resaWho" class="ro" readonly tabindex="-1" />
+      <p class="field-hint" data-i18n="resa_who_hint">la réservation est enregistrée à votre nom</p>
+    </div>
+    <div class="field" id="resaForField" style="display:none">
+      <label class="lbl" for="resaFor" data-i18n="for_opt">Pour (facultatif)</label>
+      <input type="text" id="resaFor" autocomplete="off" autocapitalize="words" autocorrect="off" placeholder="asso, club…" data-i18n-ph="for_ph" />
+    </div>
+    <div class="date-row">
+      <div class="field">
+        <label class="lbl" for="resaStart" data-i18n="date_from">Du</label>
+        <input type="date" id="resaStart" />
+      </div>
+      <div class="field">
+        <label class="lbl" for="resaEnd" data-i18n="date_to">Au</label>
+        <input type="date" id="resaEnd" />
+      </div>
+    </div>
+    <div class="field">
+      <label class="lbl" for="resaNotes" data-i18n="resa_notes_lbl">Motif (facultatif)</label>
+      <textarea id="resaNotes" placeholder="ex. soirée de gala, tournage…" data-i18n-ph="resa_notes_ph"></textarea>
+    </div>
+    <button class="btn btn-primary" id="resaConfirmBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span data-i18n="resa_confirm">Confirmer la réservation</span>
+    </button>
+    <button class="btn btn-ghost" id="resaCancelBtn" style="margin-top:11px" data-i18n="cancel">Annuler</button>
+  </section>
+
+  <!-- CREATE (article inconnu) -->
+  <section class="screen" id="screen-create">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtn2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span id="createCrumb">Nouvel article</span>
+    </div>
+    <h1 class="title" id="createTitle">Code inconnu : créer l'article</h1>
+    <div class="code-tag" id="newCode"></div>
+    <div class="stock-banner" id="addStockBanner" style="display:none"></div>
+    <div class="err" id="createErr"></div>
+    <div class="card" style="padding:16px">
+      <div class="field">
+        <label class="lbl" for="np_name" data-i18n="np_name_lbl">Nom de l'article *</label>
+        <input type="text" id="np_name" placeholder="ex. Résistance 10kΩ 1/4W" data-i18n-ph="np_name_ph" />
+      </div>
+      <div class="field" id="fldImg">
+        <label class="lbl" data-i18n="np_img_lbl">Image (facultatif)</label>
+        <div class="img-prev" id="imgPrev" style="display:none">
+          <img id="imgPrevImg" alt="">
+          <button type="button" class="img-nav left" id="imgPrevBtn" title="Précédente" data-i18n-title="prev">‹</button>
+          <button type="button" class="img-nav right" id="imgNextBtn" title="Suivante" data-i18n-title="next">›</button>
+          <button type="button" class="img-x" id="imgRemove" title="Retirer l'image" data-i18n-title="img_remove">×</button>
+          <span class="img-cap" id="imgCap"></span>
+        </div>
+        <input type="file" id="np_img_file" accept="image/*" style="display:none">
+        <button type="button" class="btn btn-ghost" id="pickImgBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <span data-i18n="img_pick">Importer depuis la galerie</span>
+        </button>
+        <input type="text" id="np_img_url" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="ou coller l'URL d'une image" data-i18n-ph="img_url_ph" style="margin-top:9px" />
+      </div>
+      <div class="field" id="fldCat">
+        <label class="lbl" data-i18n="np_cat_lbl">Catégorie</label>
+        <button type="button" class="picker-btn" id="np_cat_btn" data-value="">— Aucune —</button>
+      </div>
+      <!-- type d'article : stock classique ou objet unique à emprunter (part
+           trackable + exemplaires numérotés) — affiché seulement si le plugin
+           prêts est actif sur l'instance -->
+      <div class="field" id="fldTrack" style="display:none">
+        <label class="lbl" data-i18n="np_type_lbl">Type d'article</label>
+        <div class="seg" id="trackSeg" style="margin-bottom:0">
+          <button type="button" class="seg-btn active" data-track="" data-i18n="type_qty">Stock en quantité</button>
+          <button type="button" class="seg-btn" data-track="1" data-i18n="type_loan">Objet à emprunter</button>
+        </div>
+        <p class="field-hint" id="trackHint" style="display:none" data-i18n="type_loan_hint">
+          Objet unique suivi par emprunts (Disponible / Emprunté) au lieu d'une quantité.
+        </p>
+      </div>
+      <!-- quantité : masquée pour un objet à emprunter (créé à l'unité) -->
+      <div class="field" id="fldQty">
+        <label class="lbl" for="np_qty" id="lblQty">Quantité initiale *</label>
+        <input type="text" id="np_qty" inputmode="decimal" value="1" />
+      </div>
+      <!-- objet à emprunter : n° de série saisi, pour tracker l'exemplaire -->
+      <div class="field" id="fldSerial" style="display:none">
+        <label class="lbl" for="np_serial" data-i18n="np_serial_lbl">N° de série *</label>
+        <input type="text" id="np_serial" autocapitalize="off" autocorrect="off" placeholder="ex. 1" data-i18n-ph="np_serial_ph" />
+        <p class="field-hint" data-i18n="np_serial_hint">
+          Indiquez le numéro de série ou tout autre identifiant permettant de distinguer l'objet.
+        </p>
+      </div>
+      <div class="field">
+        <label class="lbl" id="lblLoc" data-i18n="np_loc_lbl">Emplacement *</label>
+        <button type="button" class="picker-btn" id="np_loc_btn" data-value="">— Choisir —</button>
+      </div>
+      <div class="field" id="fldDesc" style="margin-bottom:16px">
+        <label class="lbl" for="np_desc" data-i18n="np_desc_lbl">Description (facultatif)</label>
+        <textarea id="np_desc" placeholder="facultatif, peut rester vide" data-i18n-ph="np_desc_ph"></textarea>
+      </div>
+      <button class="btn btn-primary" id="createBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span id="createBtnLbl">Créer et lier au code</span>
+      </button>
+      <button class="btn btn-ghost" id="linkExistingBtn" style="display:none;margin-top:9px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+        <span class="lx-label"></span>
+      </button>
+    </div>
+  </section>
+
+  <!-- MON COMPTE (ouvert depuis le chip utilisateur de la topbar) -->
+  <section class="screen" id="screen-account">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnAcct"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="acct_title">Mon compte</span>
+    </div>
+    <div class="err" id="acctErr"></div>
+    <div class="skeleton" id="acctLoading" style="display:none" data-i18n="loading">Chargement…</div>
+    <div id="acctBody" style="display:none">
+      <div class="card acct-id">
+        <div class="id-head" id="acctHead"></div>
+        <!-- entrée admin fondue au bas de la carte d'identité : visible des
+             seuls admins (renderAccount), pastille = demandes en attente -->
+        <button type="button" class="id-admin" id="acctUsersBtn" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span data-i18n="users_manage">Gérer les membres</span>
+          <span class="spacer"></span>
+          <span class="cnt cnt-amber" id="acctUsersCnt" style="display:none">0</span>
+          <span class="id-admin-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+      </div>
+      <div class="acct-sec">
+        <div class="resa-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span data-i18n="acct_notif_title">Vos notifications arrivent sur</span>
+        </div>
+        <p class="acct-sub" id="acctMailSub">Touchez une adresse pour y recevoir rappels d'emprunt, réservations et alertes.</p>
+        <div class="card" id="acctMailCard"></div>
+        <p class="field-hint" id="acctMailHint">Toute nouvelle adresse reçoit un e-mail de confirmation ; elle devient sélectionnable une fois vérifiée.</p>
+      </div>
+      <div class="acct-sec">
+        <div class="resa-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span data-i18n="acct_lang_title">Langue</span>
+        </div>
+        <div class="card" style="padding:14px">
+          <label class="lbl" data-i18n="acct_lang_lbl">Langue du compte</label>
+          <!-- même segmented control (curseur glissant) que Scanner/Rechercher et
+               le type d'article : un appui enregistre et bascule la Scannette.
+               Les noms de langue restent chacun dans leur langue : pas de data-i18n. -->
+          <div class="seg" id="acctLangSeg" style="margin-bottom:0">
+            <button type="button" class="seg-btn" data-lang="fr">Français</button>
+            <button type="button" class="seg-btn" data-lang="en">English</button>
+          </div>
+          <p class="field-hint" data-i18n="acct_lang_hint">Utilisée pour la Scannette, le site InvenTree, les e-mails et les notifications. Enregistrée automatiquement.</p>
+        </div>
+      </div>
+      <!-- libellé posé par renderAccount : « Retour » vers l'écran d'origine,
+           « Retour au scan » quand Mon compte a été ouvert depuis le scan -->
+      <button class="btn btn-ghost" id="acctBackBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg>
+        <span id="acctBackLbl">Retour au scan</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- UTILISATEURS (admins) : approbation des demandes + gestion des membres,
+       ouvert depuis « Gérer les membres » de Mon compte -->
+  <section class="screen" id="screen-users">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnUsers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="users_title">Utilisateurs</span>
+    </div>
+    <h1 class="title" data-i18n="users_title">Utilisateurs</h1>
+    <p class="subtitle" data-i18n="users_sub">Approuvez les nouvelles demandes et gérez les comptes des membres.</p>
+    <div class="err" id="usersErr"></div>
+    <div class="skeleton" id="usersLoading" style="display:none" data-i18n="loading">Chargement…</div>
+    <div id="usersBody" style="display:none">
+      <div class="acct-sec">
+        <div class="resa-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          <span data-i18n="users_pending_t">En attente d'approbation</span>
+          <span class="cnt cnt-amber" id="pendingCnt">0</span>
+        </div>
+        <div class="card" id="pendingCard"></div>
+        <p class="field-hint" data-i18n="users_pending_hint">Approuver ajoute la personne au groupe des membres : elle peut aussitôt se connecter. Refuser supprime la demande (réinscription possible).</p>
+      </div>
+      <div class="acct-sec" style="margin-bottom:0">
+        <div class="resa-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span data-i18n="users_members_t">Membres</span>
+          <span class="cnt cnt-mut" id="memberCnt">0</span>
+        </div>
+        <div class="card" style="padding:11px 13px;margin-bottom:10px">
+          <div class="search-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="userSearch" inputmode="search" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Nom, identifiant, e-mail…" data-i18n-ph="users_search_ph" />
+            <button type="button" id="userSearchClear" title="Effacer" data-i18n-title="clear" style="display:none">×</button>
+          </div>
+        </div>
+        <div class="card" id="memberCard"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOCATION (scan d'un emplacement) -->
+  <section class="screen" id="screen-location">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtn3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="loc_crumb">Emplacement</span>
+    </div>
+    <h1 class="title" id="locTitle">Emplacement</h1>
+    <p class="subtitle" id="locSub" style="margin-top:-8px"></p>
+    <input type="text" id="locSearch" class="loc-search" placeholder="Rechercher une pièce…" data-i18n-ph="loc_search_ph" autocomplete="off" style="display:none">
+    <div class="card" id="locList"></div>
+  </section>
+
+  <footer class="app-footer" data-i18n="footer_sig">Une solution EirSpace conçue par Aamir ASMAL 🚀</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- Flèche « remonter en haut » : apparaît quand la page est bien défilée
+     (historiques longs des fiches, notamment) — voir events.js -->
+<button type="button" class="scrolltop" id="scrollTopBtn" data-i18n-title="back_to_top" data-i18n-aria="back_to_top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+</button>
+
+<!-- Sélecteur cherchable (catégories / emplacements) -->
+<div class="picker" id="picker" style="display:none">
+  <div class="picker-sheet">
+    <div class="picker-head">
+      <span id="pickerTitle">Choisir</span>
+      <button type="button" id="pickerClose" title="Fermer" data-i18n-title="close">×</button>
+    </div>
+    <div class="picker-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="pickerSearch" inputmode="search" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Filtrer…" data-i18n-ph="filter_ph">
+    </div>
+    <div class="picker-list" id="pickerList"></div>
+  </div>
+</div>
+
+<!-- Librairies tierces (globals : ZXing, ZXingWASM, qrcode) -->
+<script src="js/vendor/zxing.js"></script>
+<script src="js/vendor/zxing-wasm.js"></script>
+<script src="js/vendor/qrcode.js"></script>
+
+<!-- Application — scripts classiques ordonnés (scope global partagé).
+     L'ORDRE COMPTE : core -> auth -> features -> events -> sso -> boot.
+     i18n.js après helpers.js (cookies) et avant tout texte affiché. -->
+<script src="js/core/config.js"></script>
+<script src="js/core/icons.js"></script>
+<script src="js/core/helpers.js"></script>
+<script src="js/core/i18n.js"></script>
+<script src="js/core/api.js"></script>
+<script src="js/auth/login.js"></script>
+<script src="js/features/scanner.js"></script>
+<script src="js/features/parts.js"></script>
+<script src="js/features/location.js"></script>
+<script src="js/features/item.js"></script>
+<script src="js/features/loan.js"></script>
+<script src="js/features/account.js"></script>
+<script src="js/features/users.js"></script>
+<script src="js/features/create.js"></script>
+<script src="js/features/qr.js"></script>
+<script src="js/features/move.js"></script>
+<script src="js/events.js"></script>
+<script src="js/auth/sso.js"></script>
+<script src="js/boot.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{% comment %}
+Repli texte des avis de securite (mot de passe change/defini/reinitialise,
+adresse changee/confirmee/supprimee, activation MFA...). Miroir de
+base_notification.html. N'etend PAS le base_message.txt d'allauth, dont
+l'habillage FR (« Bonjour, c'est X ! » / « Merci d'utiliser X ! ») est une
+traduction litterale de « Hello from X! ». Le bloc « origine du changement »
+ne s'affiche que si l'IP est fournie (certains avis n'en ont pas).
+{% endcomment %}Bonjour,
+
+Vous recevez cet e-mail parce que l'action suivante a été effectuée sur votre compte :
+
+{% block notification_message %}{% endblock notification_message %}
+{% if ip %}
+Origine de l'action :
+- Adresse IP : {{ ip }}
+- Navigateur : {{ user_agent }}
+- Date : {{ timestamp }}
+{% endif %}
+Si vous n'êtes pas à l'origine de cette action, prenez immédiatement les mesures de sécurité qui s'imposent.

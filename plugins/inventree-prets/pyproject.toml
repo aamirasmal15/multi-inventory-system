@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inventree-prets"
+version = "1.0.0"
+description = "Plugin InvenTree de gestion des prêts d'objets trackables"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Aamir ASMAL" }]
+keywords = ["inventree", "plugin", "prets", "loans"]
+requires-python = ">=3.9"
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+
+# Entrypoint qui rend le plugin decouvrable par InvenTree
+[project.entry-points."inventree_plugins"]
+PretsPlugin = "inventree_prets.core:PretsPlugin"
+
+[tool.setuptools.packages.find]
+include = ["inventree_prets*"]
+
+# Fichiers statiques (panel front), traductions compilees, templates email
+[tool.setuptools.package-data]
+inventree_prets = ["static/**/*", "locale/**/*", "templates/**/*"]

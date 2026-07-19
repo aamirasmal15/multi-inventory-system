@@ -1,0 +1,59 @@
+{% extends "email/email.html" %}
+{% load inventree_extras %}
+
+{% comment %}
+E-mail « evenement piece » restyle (abonnement a une piece ou une categorie).
+Memes grandeurs qu'a l'origine, dans un sous-tableau de details. Accent bleu.
+
+Textes en francais litteral (voir README, section Langue) : « Part Category »
+est traduit « Catégorie de composant » par InvenTree, a cote d'un « Pièce » —
+deux mots pour la meme chose dans le meme tableau. On ecrit donc les libelles
+nous-memes, avec un vocabulaire coherent.
+{% endcomment %}
+
+{% block section %}Pièce{% endblock section %}
+{% block pill %}Pièce{% endblock pill %}
+
+{% block title %}{{ message }}{% endblock title %}
+
+{% block body %}
+<tr>
+  <td colspan="100%" style="padding:6px 24px 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;">
+      <tr>
+        <td style="padding:12px 16px 5px;font-size:13px;color:#868e96;white-space:nowrap;">Pièce</td>
+        <td align="right" style="padding:12px 16px 5px;font-size:13.5px;color:#212529;font-weight:600;">{{ part.full_name }}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 16px;font-size:13px;color:#868e96;white-space:nowrap;">Catégorie</td>
+        <td align="right" style="padding:5px 16px;font-size:13.5px;color:#212529;font-weight:600;">{{ part.category_path }}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 16px;font-size:13px;color:#868e96;white-space:nowrap;">Stock total</td>
+        <td align="right" style="padding:5px 16px;font-size:13.5px;color:#212529;font-weight:600;">{% decimal part.total_stock %}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 16px;font-size:13px;color:#868e96;white-space:nowrap;">Disponible</td>
+        <td align="right" style="padding:5px 16px;font-size:13.5px;color:#212529;font-weight:600;">{% decimal part.available_stock %}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 16px 12px;font-size:13px;color:#868e96;white-space:nowrap;">Stock minimum</td>
+        <td align="right" style="padding:5px 16px 12px;font-size:13.5px;color:#212529;font-weight:600;">{% decimal part.minimum_stock %}</td>
+      </tr>
+    </table>
+    {% if link %}
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:18px auto 4px;">
+      <tr>
+        <td align="center" style="border-radius:8px;background:#228be6;">
+          <a href="{{ link }}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Voir la pièce&nbsp;&nbsp;&rarr;</a>
+        </td>
+      </tr>
+    </table>
+    {% endif %}
+  </td>
+</tr>
+{% endblock body %}
+
+{% block footer_prefix %}
+<p style="margin:8px 0 0;font-size:12.5px;line-height:1.6;color:#868e96;">Vous recevez cet e-mail parce que vous êtes abonné aux notifications de cette pièce ou d'une catégorie qui la contient.</p>
+{% endblock footer_prefix %}

@@ -1,0 +1,23 @@
+services:
+  caddy:
+    image: caddy:alpine
+    container_name: front-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./pages:/srv/pages:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - inventree-front
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+networks:
+  inventree-front:
+    external: true

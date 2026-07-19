@@ -1,0 +1,5 @@
+{% comment %}Base texte propre des e-mails de compte allauth : « Bonjour, » +
+contenu, sans le « Bonjour, c'est X ! » / « Merci d'utiliser X ! » d'origine
+(traduction littérale de « Hello from X! »).{% endcomment %}{% autoescape off %}Bonjour,
+
+{% block content %}{% endblock content %}{% endautoescape %}

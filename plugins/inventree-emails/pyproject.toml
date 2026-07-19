@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inventree-emails"
+version = "1.0.0"
+description = "Plugin InvenTree d'habillage des e-mails (DA EirSpace/Scannette)"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Aamir ASMAL" }]
+keywords = ["inventree", "plugin", "emails", "templates"]
+requires-python = ">=3.9"
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+
+# Entrypoint qui rend le plugin decouvrable par InvenTree
+[project.entry-points."inventree_plugins"]
+EmailsPlugin = "inventree_emails.core:EmailsPlugin"
+
+[tool.setuptools.packages.find]
+include = ["inventree_emails*"]
+
+# Templates d'e-mails surcharges (base native + emails de compte allauth)
+[tool.setuptools.package-data]
+inventree_emails = ["templates/**/*"]

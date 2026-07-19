@@ -1,0 +1,39 @@
+{% extends "email/_order_base.html" %}
+{% load inventree_extras %}
+
+{% comment %}
+Manque de stock pour un ordre de fabrication : liste des pièces sous le seuil.
+Accent ambre (avertissement de stock). Contexte : build, part, lines[].
+{% endcomment %}
+
+{% block pill %}Stock requis{% endblock pill %}
+{% block card_accent %}#f08c00{% endblock card_accent %}
+{% block pill_fg %}#f08c00{% endblock pill_fg %}
+{% block pill_bg %}#fff9db{% endblock pill_bg %}
+{% block button_bg %}#f08c00{% endblock button_bg %}
+{% block button_label %}Voir l'ordre{% endblock button_label %}
+
+{% block order_title %}Il manque du stock pour l'ordre de fabrication {{ build }} ({% decimal build.quantity %} × {{ part.full_name }}).{% endblock order_title %}
+
+{% block order_details %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;font-size:12px;">
+      <tr>
+        <td style="padding:10px 12px 8px;font-size:11px;color:#868e96;font-weight:600;">Pièce</td>
+        <td align="right" style="padding:10px 12px 8px;font-size:11px;color:#868e96;font-weight:600;">Requis</td>
+        <td align="right" style="padding:10px 12px 8px;font-size:11px;color:#868e96;font-weight:600;">Disponible</td>
+      </tr>
+      {% for line in lines %}
+      <tr>
+        <td style="padding:6px 12px;color:#212529;font-weight:600;border-top:1px solid #edf0f2;">
+          <a href="{{ line.link }}" style="color:#212529;text-decoration:none;">{{ line.part.full_name }}</a>
+        </td>
+        <td align="right" style="padding:6px 12px;color:#495057;border-top:1px solid #edf0f2;">{% decimal line.required %}{% if part.units %} {{ part.units }}{% endif %}</td>
+        <td align="right" style="padding:6px 12px;color:#e03131;font-weight:700;border-top:1px solid #edf0f2;">{% decimal line.available %}{% if part.units %} {{ part.units }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+{% endblock order_details %}
+
+{% block footer_prefix %}
+<p style="margin:8px 0 0;font-size:12.5px;line-height:1.6;color:#868e96;">Vous recevez cet e-mail parce que vous êtes abonné aux notifications de cette pièce.</p>
+{% endblock footer_prefix %}

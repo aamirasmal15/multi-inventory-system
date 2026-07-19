@@ -1,0 +1,59 @@
+{% extends "email/email.html" %}
+{% load inventree_extras %}
+
+{% comment %}
+E-mail « stock bas » restyle. On garde le message et les grandeurs d'origine
+(total, disponible, minimum), presentes dans un sous-tableau de details facon
+Scannette. Accent ambre (avertissement).
+
+Textes en francais litteral (voir README, section Langue) : les traductions FR
+livrees par InvenTree pour ces phrases parlent de « cette partie » alors que
+le meme e-mail affiche « Pièce » juste au-dessus. On ecrit donc la phrase
+nous-memes, fidele au message d'origine, avec un vocabulaire coherent.
+{% endcomment %}
+
+{% block section %}Stock{% endblock section %}
+{% block card_accent %}#f08c00{% endblock card_accent %}
+{% block pill_fg %}#f08c00{% endblock pill_fg %}
+{% block pill_bg %}#fff9db{% endblock pill_bg %}
+{% block pill %}Stock bas{% endblock pill %}
+
+{% block title %}{{ message }}{% endblock title %}
+
+{% block body %}
+<tr>
+  <td colspan="100%" style="padding:6px 24px 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;">
+      <tr>
+        <td style="padding:12px 16px 5px;font-size:13px;color:#868e96;white-space:nowrap;">Pièce</td>
+        <td align="right" style="padding:12px 16px 5px;font-size:13.5px;color:#212529;font-weight:600;">{{ part.full_name }}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 16px;font-size:13px;color:#868e96;white-space:nowrap;">Stock total</td>
+        <td align="right" style="padding:5px 16px;font-size:13.5px;color:#212529;font-weight:600;">{% decimal part.total_stock %}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 16px;font-size:13px;color:#868e96;white-space:nowrap;">Disponible</td>
+        <td align="right" style="padding:5px 16px;font-size:13.5px;color:#212529;font-weight:600;">{% decimal part.available_stock %}</td>
+      </tr>
+      <tr>
+        <td style="padding:5px 16px 12px;font-size:13px;color:#868e96;white-space:nowrap;">Stock minimum</td>
+        <td align="right" style="padding:5px 16px 12px;font-size:13.5px;color:#e03131;font-weight:700;">{% decimal part.minimum_stock %}</td>
+      </tr>
+    </table>
+    {% if link %}
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:18px auto 4px;">
+      <tr>
+        <td align="center" style="border-radius:8px;background:#f08c00;">
+          <a href="{{ link }}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Voir la pièce&nbsp;&nbsp;&rarr;</a>
+        </td>
+      </tr>
+    </table>
+    {% endif %}
+  </td>
+</tr>
+{% endblock body %}
+
+{% block footer_prefix %}
+<p style="margin:8px 0 0;font-size:12.5px;line-height:1.6;color:#868e96;">Vous recevez cet e-mail parce que vous êtes abonné aux notifications de cette pièce.</p>
+{% endblock footer_prefix %}

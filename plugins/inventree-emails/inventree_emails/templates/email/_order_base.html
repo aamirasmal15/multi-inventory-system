@@ -1,0 +1,39 @@
+{% extends "email/email.html" %}
+{% load i18n %}
+
+{% comment %}
+Base commune des e-mails de COMMANDE d'InvenTree (achat, vente, fabrication,
+retour + retards + assignations). Ils partagent la meme forme : un titre, un
+tableau de details facultatif, un bouton vers la fiche.
+
+Le titre par defaut est {{ message }}, la phrase que GENERE InvenTree au moment
+de l'envoi (souvent en anglais, hors de portee d'un plugin de templates). Les
+enfants qui disposent de l'objet (order/build) la remplacent par une phrase
+francaise via le bloc `order_title`. Le reste de l'habillage (pastille, bouton,
+libelles, pied) est francais dans tous les cas.
+
+Blocs pour les enfants : pill / card_accent / pill_fg / pill_bg (couleur),
+order_title (phrase d'accroche), order_details (lignes du sous-tableau),
+button_label (libelle du bouton).
+{% endcomment %}
+
+{% block pill %}Commande{% endblock pill %}
+
+{% block title %}{% block order_title %}{{ message }}{% endblock order_title %}{% endblock title %}
+
+{% block body %}
+<tr>
+  <td colspan="100%" style="padding:6px 24px 4px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    {% block order_details %}{% endblock order_details %}
+    {% if link %}
+    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:18px auto 4px;">
+      <tr>
+        <td align="center" style="border-radius:8px;background:{% block button_bg %}#228be6{% endblock button_bg %};">
+          <a href="{{ link }}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">{% block button_label %}Ouvrir dans InvenTree{% endblock button_label %}&nbsp;&nbsp;&rarr;</a>
+        </td>
+      </tr>
+    </table>
+    {% endif %}
+  </td>
+</tr>
+{% endblock body %}

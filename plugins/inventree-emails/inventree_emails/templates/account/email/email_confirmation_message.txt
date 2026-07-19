@@ -1,0 +1,11 @@
+{% load account %}{% comment %}Repli texte : miroir de email_confirmation_message.html.{% endcomment %}{% autoescape off %}{% user_display user as user_display %}Bonjour,
+
+Vous recevez cet e-mail parce que {{ user_display }} a utilisé cette adresse pour créer un compte sur {{ current_site.domain }}.
+{% if code %}
+Voici votre code de vérification. Saisissez-le dans la fenêtre ouverte de votre navigateur.
+
+{{ code }}
+{% else %}
+Pour confirmer votre adresse e-mail :
+{{ activate_url }}
+{% endif %}{% endautoescape %}

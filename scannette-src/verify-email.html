@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>Vérification de l'adresse · Scannette</title>
+<script>
+  // même mécanique de thème qu'index.html : cookie eir_theme si choix explicite,
+  // sinon le thème du système — posé avant le rendu pour éviter le flash
+  (function(){
+    var m = document.cookie.match(/(?:^|; )eir_theme=([^;]+)/);
+    var t = m ? decodeURIComponent(m[1]) : (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+  // langue : cookie eir_lang (posé par l'app selon le profil InvenTree), sinon
+  // navigateur — fr sinon anglais, même règle que core/i18n.js
+  window.PAGE_LANG = (function(){
+    var m = document.cookie.match(/(?:^|; )eir_lang=([^;]+)/);
+    var l = (m ? decodeURIComponent(m[1]) : (navigator.language || "fr")).toLowerCase().split("-")[0];
+    return l === "fr" ? "fr" : "en";
+  })();
+</script>
+<style>
+  /* Page autonome (cible des liens de confirmation d'e-mail) : palette recopiée
+     de css/styles.css pour ne dépendre d'aucun asset de l'app, comme 404.html. */
+  :root{
+    --bg:#f1f3f5; --surface:#fff; --surface-2:#f8f9fa;
+    --border:#dee2e6; --text:#212529; --muted:#868e96;
+    --primary:#228be6; --primary-hover:#1c7ed6;
+    --green:#2f9e44; --green-light:#ebfbee;
+    --red:#e03131; --red-light:#fff5f5;
+    --shadow-md:0 1px 3px rgba(0,0,0,.05),0 10px 30px -12px rgba(0,0,0,.18);
+    --radius:8px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  [data-theme=dark]{
+    --bg:#1a1b1e; --surface:#25262b; --surface-2:#2c2e33;
+    --border:#373a40; --text:#e9ecef; --muted:#909296;
+    --primary:#4dabf7; --primary-hover:#74c0fc;
+    --green:#51cf66; --green-light:#143626;
+    --red:#ff6b6b; --red-light:#3a1d1d;
+    --shadow-md:0 10px 30px -12px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;display:grid;place-items:center;padding:24px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-width:400px;width:100%;padding:34px 28px calc(30px + env(safe-area-inset-bottom));text-align:center}
+  .ring{width:82px;height:82px;border-radius:50%;display:grid;place-items:center;margin:0 auto 18px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted)}
+  .ring svg{width:38px;height:38px}
+  .st-ok .ring{background:var(--green-light);border-color:var(--green);color:var(--green)}
+  .st-bad .ring{background:var(--red-light);border-color:var(--red);color:var(--red)}
+  .st-ok .ring svg{animation:pop .4s cubic-bezier(.2,1.3,.4,1)}
+  @keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){.st-ok .ring svg{animation:none}}
+  .spin{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:rot .7s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  h1{font-size:19px;margin:0 0 8px}
+  p{margin:0 0 22px;font-size:14px;color:var(--muted)}
+  .btn{display:none;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 18px;border:none;border-radius:var(--radius);background:var(--primary);color:#fff;font-family:var(--font);font-size:15px;font-weight:600;text-decoration:none;cursor:pointer;transition:.12s}
+  .btn.show{display:inline-flex}
+  .btn:hover{background:var(--primary-hover)} .btn:active{transform:scale(.98)}
+  .btn svg{width:17px;height:17px;flex:none}
+  .foot{margin-top:18px;font-size:11px;color:var(--muted);opacity:.85}
+</style>
+</head>
+<body>
+  <main class="card" id="card">
+    <div class="ring" id="ring"><span class="spin" id="spin"></span></div>
+    <h1 id="title">Vérification de l'adresse…</h1>
+    <p id="msg">Un instant, la Scannette confirme votre adresse e-mail.</p>
+    <a class="btn" id="openBtn" href="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+      <span id="openLbl">Ouvrir la Scannette</span>
+    </a>
+    <div class="foot">Une solution EirSpace conçue par Aamir ASMAL 🚀</div>
+  </main>
+<script>
+  // La clé arrive dans le chemin (/web/verify-email/<clé>, format des liens
+  // allauth). On la valide nous-mêmes via le headless proxifié en same-origin :
+  // pas de détour par l'interface InvenTree, et un verdict clair à l'écran.
+  (function () {
+    var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    var CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+    // textes fr/en de la page — le HTML est en français, l'anglais est
+    // appliqué au chargement selon window.PAGE_LANG (cookie/navigateur)
+    var T = window.PAGE_LANG === "en" ? {
+      title: "Verifying your address · Scannette",
+      wait_t: "Verifying your address…",
+      wait_p: "One moment — the Scannette is confirming your email address.",
+      open: "Open the Scannette",
+      open_inv: "Open the inventory",
+      ok_t: "Address verified!",
+      ok_inv: "All set: the address is now usable on your account.",
+      ok_scn: "All set: you can now pick it as your notification address in “My account”.",
+      bad_t: "Invalid or expired link",
+      bad_inv: "This confirmation link no longer works. Send a new one from your InvenTree account settings.",
+      bad_scn: "This confirmation link no longer works. Send a new one from “My account” (on the address line, “Resend the confirmation email”).",
+      no_key: "No confirmation key in this link's address.",
+      net: "Can't reach the server: check your connection, then open the link again.",
+      foot: "An EirSpace solution designed by Aamir ASMAL 🚀",
+    } : {
+      title: "Vérification de l'adresse · Scannette",
+      wait_t: "Vérification de l'adresse…",
+      wait_p: "Un instant, la Scannette confirme votre adresse e-mail.",
+      open: "Ouvrir la Scannette",
+      open_inv: "Ouvrir l'inventaire",
+      ok_t: "Adresse vérifiée !",
+      ok_inv: "C'est tout bon : l'adresse est utilisable sur votre compte.",
+      ok_scn: "C'est tout bon : vous pouvez maintenant la choisir comme adresse de notifications dans « Mon compte ».",
+      bad_t: "Lien invalide ou expiré",
+      bad_inv: "Ce lien de confirmation ne fonctionne plus. Renvoyez-en un depuis les réglages de votre compte InvenTree.",
+      bad_scn: "Ce lien de confirmation ne fonctionne plus. Renvoyez-en un depuis « Mon compte » (ligne de l'adresse, « Renvoyer l'e-mail de confirmation »).",
+      no_key: "Aucune clé de confirmation dans l'adresse de ce lien.",
+      net: "Connexion impossible : vérifiez le réseau puis rouvrez le lien.",
+      foot: "Une solution EirSpace conçue par Aamir ASMAL 🚀",
+    };
+    document.documentElement.lang = window.PAGE_LANG;
+    document.title = T.title;
+    document.getElementById("title").textContent = T.wait_t;
+    document.getElementById("msg").textContent = T.wait_p;
+    document.getElementById("openLbl").textContent = T.open;
+    document.querySelector(".foot").textContent = T.foot;
+    // Sortie selon l'APPAREIL, décidée au clic (le lien d'e-mail peut être
+    // ouvert n'importe où) : PC -> l'inventaire InvenTree, mobile -> la
+    // Scannette. Même règle de détection que GoItemView du plugin Prêts et
+    // l'interstitiel mobile ; hôte InvenTree redéduit par la convention
+    // inverse scannette[-nom] -> inventaire[-nom]. Le ?src=inventree encore
+    // posé par le plugin E-mails n'est plus lu.
+    var TO_INV = !/android|iphone|ipod|mobile/i.test(navigator.userAgent);
+    var INV_URL = "";
+    if (TO_INV) {
+      var labels = location.hostname.split(".");
+      if (labels[0] === "scannette" || labels[0].indexOf("scannette-") === 0) {
+        labels[0] = "inventaire" + labels[0].slice("scannette".length);
+        INV_URL = "https://" + labels.join(".") + (location.port ? ":" + location.port : "") + "/web/";
+      } else {
+        TO_INV = false; // hôte hors convention : sortie Scannette
+      }
+    }
+    function state(cls, icon, title, msg) {
+      document.getElementById("card").className = "card " + cls;
+      document.getElementById("ring").innerHTML = icon;
+      document.getElementById("title").textContent = title;
+      document.getElementById("msg").textContent = msg;
+      var btn = document.getElementById("openBtn");
+      if (TO_INV) {
+        btn.href = INV_URL;
+        document.getElementById("openLbl").textContent = T.open_inv;
+      }
+      btn.className = "btn show";
+    }
+    function fail(msg) {
+      state("st-bad", CROSS, T.bad_t, msg || (TO_INV ? T.bad_inv : T.bad_scn));
+    }
+    var m = location.pathname.match(/\/web\/verify-email\/(.+)$/);
+    var key = m ? decodeURIComponent(m[1]).replace(/\/+$/, "") : "";
+    if (!key) { fail(T.no_key); return; }
+    // 1) amorce le cookie CSRF (le GET headless pose 'csrftoken', lisible en JS)
+    fetch("/api/auth/v1/auth/session", { credentials: "same-origin" })
+      .catch(function () {})
+      .then(function () {
+        var c = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+        // 2) valide la clé. Piège headless : succès = 200 (connecté) OU 401
+        //    « non connecté » SANS erreur de clé ; clé morte = 400.
+        return fetch("/api/auth/v1/auth/email/verify", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: c
+            ? { "Content-Type": "application/json", "X-CSRFToken": decodeURIComponent(c[1]) }
+            : { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: key }),
+        });
+      })
+      .then(function (res) {
+        if (res.ok || res.status === 401) {
+          state("st-ok", CHECK, T.ok_t, TO_INV ? T.ok_inv : T.ok_scn);
+        } else {
+          fail();
+        }
+      })
+      .catch(function () {
+        fail(T.net);
+      });
+  })();
+</script>
+</body>
+</html>

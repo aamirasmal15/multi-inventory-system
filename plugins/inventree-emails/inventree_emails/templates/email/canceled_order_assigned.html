@@ -1,0 +1,9 @@
+{% extends "email/_order_base.html" %}
+{% load inventree_extras %}
+
+{% block pill %}Commande annulée{% endblock pill %}
+{% block card_accent %}#e03131{% endblock card_accent %}
+{% block pill_fg %}#e03131{% endblock pill_fg %}
+{% block pill_bg %}#fff5f5{% endblock pill_bg %}
+
+{% block order_title %}{{ message }}{% endblock order_title %}
