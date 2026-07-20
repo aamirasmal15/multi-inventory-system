@@ -13,8 +13,11 @@ Se connecte avec le compte admin (créé par create-asso.sh), puis :
      plus : le rôle admin déjà présent s'active alors. Voir StaffRolePermission /
      IsStaffOrReadOnlyScope / IsAdminOrAdminScope dans InvenTree/permissions.py.)
   3. désactive le Spotlight pour le compte admin (préférence par utilisateur)
-  4. pose le format de date jour-mois-année (DD-MM-YYYY) pour le compte admin
-     (préférence par utilisateur aussi ; le plugin Prêts suit ce réglage)
+  4. fixe le format de date jour-mois-année (DD-MM-YYYY), format de TOUTE
+     l'instance : c'est le plugin Prêts qui en fait le défaut de chaque compte
+     (apps.py). Ce PATCH ne fait que l'appliquer AUSSI au compte admin, en
+     filet de sécurité (préférence par utilisateur, sans défaut global côté
+     InvenTree ; couvre le cas où le plugin serait désactivé)
 
 Zéro dépendance (stdlib uniquement). Zéro exception non gérée : chaque étape
 affiche OK ou un warning et on continue. Code retour toujours 0.
@@ -234,21 +237,24 @@ def disable_spotlight(api):
 
 
 def set_date_format(api):
-    """Format de date jour-mois-année pour le compte admin.
+    """Format de date jour-mois-année (DD-MM-YYYY) : le format de TOUTE l'instance.
 
     DATE_DISPLAY_FORMAT est une préférence PAR utilisateur sans défaut
     global dans InvenTree. Depuis le plugin Prêts v0.31.0, apps.py patche
-    ce défaut en DD-MM-YYYY pour tous les comptes sans choix explicite ;
-    ce PATCH explicite pour l'admin reste en ceinture-bretelles (il couvre
-    aussi une instance où le plugin serait désactivé).
+    ce défaut en DD-MM-YYYY pour tous les comptes sans choix explicite : le
+    format se propage donc à tout le monde, pas seulement à l'admin. Ce PATCH
+    explicite sur le compte admin reste en ceinture-bretelles (il couvre aussi
+    une instance où le plugin serait désactivé).
     """
     status, _ = api.call(
         "PATCH", "/api/settings/user/DATE_DISPLAY_FORMAT/", {"value": "DD-MM-YYYY"}
     )
     if status == 200:
-        print(f"{OK}Format de date DD-MM-YYYY posé pour le compte admin.")
+        print(f"{OK}Format de date DD-MM-YYYY confirmé sur le compte admin "
+              f"(défaut de toute l'instance, posé par le plugin Prêts).")
     else:
-        print(f"{KO}Format de date non posé (HTTP {status}), à choisir dans les réglages d'affichage.")
+        print(f"{KO}Format de date non posé sur le compte admin (HTTP {status}) ; "
+              f"le défaut d'instance DD-MM-YYYY du plugin Prêts s'applique quand même.")
 
 
 def main():
