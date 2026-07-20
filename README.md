@@ -28,6 +28,10 @@ habituel. Une commande déploie une asso complète, une autre la supprime propre
 ## Démarrage
 
 ```bash
+# VPS Debian vierge : installer git (absent par défaut au tout premier run)
+sudo apt update
+sudo apt install git -y
+
 git clone <url-de-ton-repo> ~/multi-inventory-system
 cd ~/multi-inventory-system
 
@@ -44,9 +48,6 @@ Détails pas-à-pas → **[Installation](https://github.com/aamirasmal15/multi-i
 ## 📖 Documentation complète → le wiki
 
 Toute la doc opérationnelle est dans le **[wiki](https://github.com/aamirasmal15/multi-inventory-system/wiki)** :
-
-**Pour les assos (utilisateurs)**
-- [Premiers pas](https://github.com/aamirasmal15/multi-inventory-system/wiki/Premiers-pas) : le guide à donner aux membres, comptes, rôles, bonnes pratiques
 
 **Comprendre & installer**
 - [Architecture](https://github.com/aamirasmal15/multi-inventory-system/wiki/Architecture) : le broker Dex, les sous-domaines séparés, où vivent les fichiers
