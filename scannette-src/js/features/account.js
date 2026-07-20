@@ -27,11 +27,18 @@ async function openAccount() {
   // d'où vient-on ? la flèche retour ramènera à cet écran plutôt qu'au scan.
   // Embarqué dans scan_view pour survivre au refresh ; si on est DÉJÀ sur
   // Mon compte (refresh, re-clic sur le chip), on garde le retour mémorisé.
+  // « Gérer les membres » (users) est un ENFANT de Mon compte (seul chemin
+  // d'accès, sa flèche revient toujours ici) : au retour de cet écran on ne
+  // recalcule PAS l'origine — sinon la flèche de Mon compte pointerait sur
+  // users et closeAccount rouvrirait users, en boucle sans fin (jamais de
+  // retour au scan). On garde alors ACCT_BACK / ACCT_BACK_LIVE tels quels.
   const prev = readView();
-  ACCT_BACK = prev && prev.t === "account" ? prev.back || null : prev;
-  const live = document.querySelector(".screen.active");
-  if (!live || live.id !== "screen-account")
-    ACCT_BACK_LIVE = live && ACCT_LIVE_SCREENS.indexOf(live.id) >= 0 ? live.id : "";
+  if (!prev || prev.t !== "users") {
+    ACCT_BACK = prev && prev.t === "account" ? prev.back || null : prev;
+    const live = document.querySelector(".screen.active");
+    if (!live || live.id !== "screen-account")
+      ACCT_BACK_LIVE = live && ACCT_LIVE_SCREENS.indexOf(live.id) >= 0 ? live.id : "";
+  }
   rememberView("account", null, ACCT_BACK ? { back: ACCT_BACK } : null);
   // "drop" : l'écran descend depuis le chip utilisateur de la topbar
   show("#screen-account", "drop");
