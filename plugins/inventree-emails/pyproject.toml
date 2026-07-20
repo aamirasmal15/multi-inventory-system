@@ -24,6 +24,8 @@ EmailsPlugin = "inventree_emails.core:EmailsPlugin"
 [tool.setuptools.packages.find]
 include = ["inventree_emails*"]
 
-# Templates d'e-mails surcharges (base native + emails de compte allauth)
+# Templates d'e-mails surcharges (base native + emails de compte allauth) et
+# catalogue de traduction FR (locale/) : titre, description et reglages du
+# plugin s'affichent alors dans la langue de l'instance (FR par defaut).
 [tool.setuptools.package-data]
-inventree_emails = ["templates/**/*"]
+inventree_emails = ["templates/**/*", "locale/**/*"]

@@ -1,0 +1,45 @@
+# Traduction française du plugin InvenTree « E-mails » (habillage des e-mails).
+# Les chaînes source (TITLE, DESCRIPTION, réglages) sont écrites en anglais et
+# marquées par gettext_lazy dans core.py : InvenTree les évalue à la langue
+# active de la requête. Ce catalogue fournit le français ; sur une instance FR
+# (LANGUAGE_CODE=fr, le défaut ici) la description et les réglages du plugin
+# s'affichent donc en français, et retombent sur l'anglais source ailleurs.
+# Django découvre ce dossier locale/ tout seul car le plugin est une app Django.
+msgid ""
+msgstr ""
+"Project-Id-Version: inventree-emails 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 00:00+0000\n"
+"PO-Revision-Date: 2026-07-20 00:00+0000\n"
+"Last-Translator: Aamir ASMAL\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: inventree_emails/core.py
+msgid "Email theming"
+msgstr "Habillage des e-mails"
+
+#: inventree_emails/core.py
+msgid ""
+"Restyle InvenTree e-mails (low stock, account, password...) to the "
+"EirSpace/Scannette look, by overriding their templates."
+msgstr ""
+"Restyle les e-mails d'InvenTree (stock bas, compte, mot de passe...) à la "
+"charte EirSpace/Scannette, en surchargeant leurs templates."
+
+#: inventree_emails/core.py
+msgid "Scannette verification page"
+msgstr "Page de vérification Scannette"
+
+#: inventree_emails/core.py
+msgid ""
+"Email confirmation links open the Scannette verification page (host derived "
+"from the 'inventaire' -> 'scannette' naming convention)"
+msgstr ""
+"Les liens de confirmation d'adresse ouvrent la page de vérification de la "
+"Scannette (hôte déduit de la convention de nommage « inventaire » -> "
+"« scannette »)"
