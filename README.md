@@ -32,7 +32,7 @@ habituel. Une commande déploie une asso complète, une autre la supprime propre
 sudo apt update
 sudo apt install git -y
 
-git clone <url-de-ton-repo> ~/multi-inventory-system
+git clone https://github.com/aamirasmal15/multi-inventory-system/
 cd ~/multi-inventory-system
 
 ./create-asso.sh eirspace
