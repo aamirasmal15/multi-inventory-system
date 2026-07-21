@@ -475,19 +475,24 @@ fi
 # ====== Branding : range le logo fourni via LOGO= dans le magasin ======
 # LOGO = un dossier (white.png/black.png ou <nom>-white.png/<nom>-black.png,
 # extensions png/jpg/jpeg/webp) ou un fichier unique (= les deux thèmes).
-# Rangé une fois pour toutes sous <nom>-white.png / <nom>-black.png dans le
-# magasin. Sans LOGO=, on ne touche pas au magasin.
+# LOGO= fait autorité : chaque thème fourni ÉCRASE le magasin, donc relancer
+# avec un dossier enrichi (ex. on ajoute un black.png après coup) met bien le
+# magasin à jour. On ne fabrique PAS ici le thème manquant : brand_src duplique
+# à la pose si un seul thème existe — fabriquer un slot ici bloquerait l'ajout
+# ultérieur du vrai thème. Sans LOGO=, on ne touche pas au magasin.
 SW="$LOGO_STORE/$NAME-white.png"; SB="$LOGO_STORE/$NAME-black.png"
 if [ -n "${LOGO:-}" ]; then
   if [ -d "$LOGO" ]; then
     mkdir -p "$LOGO_STORE"
+    # premier nommage trouvé gagne PAR thème (_gotW/_gotB), et écrase le magasin.
+    _gotW=""; _gotB=""
     for e in png jpg jpeg webp PNG JPG JPEG; do
-      if [ ! -f "$SW" ] && [ -f "$LOGO/white.$e" ];        then cp -f "$LOGO/white.$e" "$SW"; fi
-      if [ ! -f "$SW" ] && [ -f "$LOGO/$NAME-white.$e" ];  then cp -f "$LOGO/$NAME-white.$e" "$SW"; fi
-      if [ ! -f "$SB" ] && [ -f "$LOGO/black.$e" ];        then cp -f "$LOGO/black.$e" "$SB"; fi
-      if [ ! -f "$SB" ] && [ -f "$LOGO/$NAME-black.$e" ];  then cp -f "$LOGO/$NAME-black.$e" "$SB"; fi
+      if [ -z "$_gotW" ] && [ -f "$LOGO/white.$e" ];        then cp -f "$LOGO/white.$e" "$SW"; _gotW=1; fi
+      if [ -z "$_gotW" ] && [ -f "$LOGO/$NAME-white.$e" ];  then cp -f "$LOGO/$NAME-white.$e" "$SW"; _gotW=1; fi
+      if [ -z "$_gotB" ] && [ -f "$LOGO/black.$e" ];        then cp -f "$LOGO/black.$e" "$SB"; _gotB=1; fi
+      if [ -z "$_gotB" ] && [ -f "$LOGO/$NAME-black.$e" ];  then cp -f "$LOGO/$NAME-black.$e" "$SB"; _gotB=1; fi
     done
-    if [ ! -f "$SW" ] && [ ! -f "$SB" ]; then
+    if [ -z "$_gotW" ] && [ -z "$_gotB" ]; then
       _one="$(find "$LOGO" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) | sort | head -1)"
       if [ -n "$_one" ]; then cp -f "$_one" "$SW"; cp -f "$_one" "$SB"; fi
     fi
@@ -496,11 +501,7 @@ if [ -n "${LOGO:-}" ]; then
   else
     echo "!! LOGO=$LOGO introuvable (ni dossier ni fichier) : branding ignoré." >&2
   fi
-  # une seule variante fournie -> l'autre thème reprend la même
-  # (if/fi et pas `&& cp` : sous set -e un test faux tuerait le script)
-  if [ -f "$SW" ] && [ ! -f "$SB" ]; then cp -f "$SW" "$SB"; fi
-  if [ -f "$SB" ] && [ ! -f "$SW" ]; then cp -f "$SB" "$SW"; fi
-  if [ -f "$SW" ]; then echo ">> Branding : logo de '$NAME' rangé dans le magasin ($LOGO_STORE)."; fi
+  if [ -f "$SW" ] || [ -f "$SB" ]; then echo ">> Branding : logo de '$NAME' rangé dans le magasin ($LOGO_STORE)."; fi
 fi
 
 # ====== Initialisation / migration de la base (le -T évite un crash de TTY) ======
@@ -531,10 +532,15 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
 
   # Logos résolus (magasin -> défaut repo) posés dans html/img/ :
   # celui de CETTE asso, puis celui de l'asso principale (lockup collab).
+  # cp -f à CHAQUE run : ajouter/changer un logo dans assets/logos/ (ou via
+  # LOGO=) puis relancer ./create-asso.sh <nom> suffit à repropager les deux
+  # thèmes (Scannette) et le clair (InvenTree, plus bas). Un thème sombre ajouté
+  # après coup est pris ici sans rien d'autre à faire.
   mkdir -p "$SCANDIR/html/img"
   brand_src "$NAME"
-  if [ -n "$BR_WHITE" ]; then cp -f "$BR_WHITE" "$SCANDIR/html/img/$NAME-white.png"; fi
-  if [ -n "$BR_BLACK" ]; then cp -f "$BR_BLACK" "$SCANDIR/html/img/$NAME-black.png"; fi
+  if [ -n "$BR_WHITE" ]; then cp -f "$BR_WHITE" "$SCANDIR/html/img/$NAME-white.png"; echo ">> Logo '$NAME' thème clair  <- $BR_WHITE"; fi
+  if [ -n "$BR_BLACK" ]; then cp -f "$BR_BLACK" "$SCANDIR/html/img/$NAME-black.png"; echo ">> Logo '$NAME' thème sombre <- $BR_BLACK"; fi
+  if [ -z "$BR_WHITE" ] && [ -z "$BR_BLACK" ]; then echo ">> Logo '$NAME' : aucun trouvé (magasin + assets/logos vides) -> repli sur l'initiale."; fi
   brand_src "$MAIN_ASSO"
   if [ -n "$BR_WHITE" ]; then cp -f "$BR_WHITE" "$SCANDIR/html/img/$MAIN_ASSO-white.png"; fi
   if [ -n "$BR_BLACK" ]; then cp -f "$BR_BLACK" "$SCANDIR/html/img/$MAIN_ASSO-black.png"; fi

@@ -27,6 +27,21 @@ cp mon-logo-sombre.png assets/logos/bde-black.png
 ./create-asso.sh bde
 ```
 
+## Mettre à jour / ajouter un thème après coup
+
+La résolution est refaite **à chaque run**, **par thème** (clair et sombre indépendamment),
+puis reposée d'un `cp -f`. Il suffit donc de **relancer `./create-asso.sh <nom>`** :
+
+- clair seul au départ, tu ajoutes `<nom>-black.png` → le **thème sombre** de la Scannette
+  se met à jour, le clair reste ;
+- aucun logo, tu ajoutes `<nom>-white.png` → Scannette (clair + sombre) et InvenTree (clair)
+  prennent le nouveau logo ;
+- tu remplaces un fichier → le nouveau logo remplace l'ancien partout (image Docker de la
+  Scannette rebâtie, `custom_logo.png` d'InvenTree ré-copié).
+
+Le run affiche la source retenue par thème (`>> Logo '<nom>' thème clair <- …` / `thème sombre <- …`) ;
+mêmes deux fichiers = un seul thème existe, il sert pour les deux.
+
 ## Où le logo apparaît
 
 Un même logo alimente **deux** cibles à chaque déploiement :
@@ -41,9 +56,12 @@ instance.
 ## Ordre de résolution (deux couches)
 
 1. **Magasin runtime** `~/.config/multi-inventory/logos/<nom>-{white,black}.png` : **prime** s'il
-   existe. Alimenté par l'option `LOGO=/chemin ./create-asso.sh <nom>` (un dossier
-   `white.png`/`black.png`, ou un seul fichier) : utile pour un logo qu'on ne veut **pas
-   committer** (ex. logo d'un partenaire), ou pour surcharger le défaut sans toucher au repo.
+   existe (résolu **par thème**). Alimenté par l'option `LOGO=/chemin ./create-asso.sh <nom>`
+   (un dossier `white.png`/`black.png`, ou un seul fichier) : utile pour un logo qu'on ne veut
+   **pas committer** (ex. logo d'un partenaire), ou pour surcharger le défaut sans toucher au repo.
+   `LOGO=` fait autorité : chaque thème fourni **écrase** le magasin (on peut donc y ajouter un
+   thème après coup), un thème absent n'est pas touché, et le thème manquant n'est pas fabriqué
+   ici (la pose duplique si un seul thème existe).
 2. **Défaut versionné** `assets/logos/<nom>-*.png` (ici) : le cas simple ci-dessus, en git.
 3. legacy : un logo déjà présent dans `html/img/` de l'instance (rétrocompat).
 4. sinon : repli texte (initiale de la graphie de l'asso).
