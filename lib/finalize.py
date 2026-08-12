@@ -22,8 +22,14 @@ Se connecte avec le compte admin (créé par create-asso.sh), puis :
 Zéro dépendance (stdlib uniquement). Zéro exception non gérée : chaque étape
 affiche OK ou un warning et on continue. Code retour toujours 0.
 
+--url doit viser l'instance EN DIRECT (IP du conteneur sur le réseau Docker),
+jamais le domaine public : celui-ci passe par Cloudflare, qui depuis le serveur
+lui-même refuse la requête (« error code: 1010 » sur le User-Agent de
+python-urllib) ou ne sait pas joindre l'origine (522). create-asso.sh fournit
+l'URL via sa fonction api_url().
+
 Usage :
-  finalize.py --url https://inventaire-bde.eirspace.fr \
+  finalize.py --url http://172.19.0.4:8000 \
               --user admin_bde --password '...' \
               --name bde --settings-file /chemin/inventree-settings.conf
 """
@@ -102,6 +108,22 @@ class Api:
             self.token = data["token"]
             return True
         print(f"{KO}Connexion API impossible (HTTP {status}) : {data}")
+        # Un refus dont le corps ne ressemble pas à une réponse InvenTree signale
+        # une requête interceptée AVANT l'application (CDN, reverse proxy, WAF) :
+        # les identifiants ne sont alors pas en cause, c'est l'URL qui ne mène
+        # pas à l'instance. Cas vécu : --url sur le domaine public, proxifié par
+        # Cloudflare, qui refuse le User-Agent de python-urllib (« error code:
+        # 1010 ») ou ne sait pas joindre l'origine (522). Sans cette distinction
+        # le message envoyait chercher un problème de mot de passe inexistant.
+        body = data if isinstance(data, str) else ""
+        edge = ("cloudflare" in body.lower() or "error code" in body.lower()
+                or (status or 0) >= 500)
+        if edge:
+            print(f"{KO}  -> la requête n'a PAS atteint InvenTree : un CDN/proxy l'a interceptée.")
+            print(f"{KO}     --url doit viser l'instance en direct (conteneur/réseau Docker),")
+            print(f"{KO}     jamais le domaine public. Les identifiants ne sont pas en cause.")
+        else:
+            print(f"{KO}  -> vérifie INVENTREE_ADMIN_USER / INVENTREE_ADMIN_PASSWORD dans le .env de l'asso.")
         return False
 
 
@@ -272,8 +294,7 @@ def main():
         print(f"{KO}L'API {args.url} ne répond pas, finalisation sautée (FORCE_SETTINGS=1 pour retenter).")
         return 0
     if not api.login():
-        print(f"{KO}  -> vérifie INVENTREE_ADMIN_USER / INVENTREE_ADMIN_PASSWORD dans le .env de l'asso.")
-        return 0
+        return 0   # login() a déjà expliqué la cause (identifiants vs CDN/proxy)
 
     pairs = parse_settings_file(args.settings_file, args.name)
     if pairs:

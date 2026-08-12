@@ -278,10 +278,16 @@ EOF
 
 _dex_ensure_front_route() {
   mkdir -p "$FRONT"; [ -f "$FRONT/Caddyfile" ] || touch "$FRONT/Caddyfile"
-  if ! grep -qE "^${AUTH_DOMAIN}[[:space:]]*\{" "$FRONT/Caddyfile" 2>/dev/null; then
+  # L'hôte est nu (mode direct : Caddy fait l'ACME) ou préfixé http:// (mode
+  # cloudflare-tunnel : TLS à l'edge, cf. EDGE dans create-asso.sh). Le test
+  # d'existence accepte les deux formes, sinon chaque run SSO ré-appendrait un
+  # doublon dans l'autre forme.
+  if ! grep -qE "^(http://)?${AUTH_DOMAIN}[[:space:]]*\{" "$FRONT/Caddyfile" 2>/dev/null; then
+    _auth_host="$AUTH_DOMAIN"
+    [ "${EDGE:-direct}" = "cloudflare-tunnel" ] && _auth_host="http://$AUTH_DOMAIN"
     cat >> "$FRONT/Caddyfile" <<EOF
 
-$AUTH_DOMAIN {
+$_auth_host {
     reverse_proxy dex:5556
 }
 EOF

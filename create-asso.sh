@@ -203,6 +203,56 @@ FRONT="$HOME/front"
 # configuré, cette section est un no-op de quelques millisecondes.
 _sudo() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi; }
 
+# ====== API de l'asso, vue depuis le serveur lui-même ======
+# Le provisionnement ne doit JAMAIS passer par https://$HOST : ce domaine est
+# proxifié par Cloudflare, donc une requête émise depuis cette machine sort sur
+# Internet et revient par l'edge. Deux échecs à la clé, tous deux observés :
+#   - HTTP 403 « error code: 1010 » : l'edge refuse le User-Agent d'un client
+#     non navigateur (le python-urllib de lib/finalize.py, curl selon les règles) ;
+#   - HTTP 522 : l'edge n'a aucune route vers l'origine (ici le serveur est en
+#     IP privée derrière le NAT du campus, rien n'écoute côté public).
+# On parle donc au conteneur directement sur le réseau Docker, comme le fait
+# déjà la sonde curl de lib/sso.sh. Résolu à chaque appel : un « compose up »
+# qui recrée le conteneur change son IP, un simple restart la conserve.
+web_port() {
+  sed -n 's/^INVENTREE_WEB_PORT=//p' "$DIR/.env" 2>/dev/null \
+    | head -1 | grep -E '^[0-9]+$' || echo 8000
+}
+
+api_url() {
+  local ip
+  ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' \
+        "$NAME-server" 2>/dev/null | awk '{print $1; exit}')"
+  [ -n "$ip" ] || return 1
+  printf 'http://%s:%s' "$ip" "$(web_port)"
+}
+
+# wait_venv_ready <bin-du-venv> : attend que l'entrypoint du conteneur ait FINI
+# son « first time setup » avant qu'on installe quoi que ce soit dans le venv.
+# La présence de pip ne suffit pas : le venv apparaît tôt, alors que l'entrypoint
+# est encore en train de mettre à jour pip et d'installer les requirements. Un
+# pip lancé pendant ce chantier échoue de façon déroutante : « Ignoring invalid
+# distribution ~ip » (l'entrypoint renomme son propre pip en ~ip le temps de sa
+# mise à jour) et SSLError(FileNotFoundError) (le bundle de CA n'est pas encore
+# en place). gunicorn ne répond qu'une fois le setup terminé : c'est la sonde
+# fiable. Généreux en durée : au premier boot les migrations passent avant.
+wait_venv_ready() {
+  local venv_bin="$1" i
+  for i in $(seq 1 120); do
+    if docker exec "$NAME-server" test -x "$venv_bin/pip" 2>/dev/null \
+       && [ "$(docker exec "$NAME-server" curl -s -o /dev/null -w '%{http_code}' \
+               "http://localhost:$(web_port)/api/" 2>/dev/null)" = "200" ]; then
+      # Résidus d'une mise à jour de pip interrompue : sans ça pip les signale
+      # à chaque install ultérieure.
+      docker exec "$NAME-server" sh -c \
+        "rm -rf '${venv_bin%/bin}'/lib/python*/site-packages/~*" >/dev/null 2>&1 || true
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
+}
+
 # --- Docker (+ plugin compose), depuis le dépôt officiel ---
 if ! command -v docker >/dev/null 2>&1; then
   echo ">> Docker absent : installation (une seule fois, dépôt officiel) ..."
@@ -290,6 +340,59 @@ docker network create inventree-front 2>/dev/null || true
 # ====== Templates requis à chaque run ======
 require_template "inventree-docker-compose.yml"
 require_template "caddy-blocks.conf"
+
+# ====== Exposition publique : VPS direct ou tunnel Cloudflare ======
+# Deux façons d'amener Internet jusqu'au Caddy frontal :
+#   - direct            : ports 80/443 ouverts (VPS OVH...). Caddy obtient ses
+#                         certificats (ACME) et sert en HTTPS. Comportement
+#                         historique, défaut.
+#   - cloudflare-tunnel : aucun port entrant (serveur derrière un NAT type
+#                         campus). Un conteneur cloudflared amène le trafic ;
+#                         le TLS public est terminé à l'edge Cloudflare et le
+#                         frontal sert en HTTP simple (blocs http:// +
+#                         trusted_proxies). Mise en place du tunnel : wiki
+#                         « Exposition publique » + docs/tunnel-web-cloudflare.md.
+# Demandé une fois au premier run puis persisté ; EDGE=... surcharge au run.
+EDGE_CONF="$HOME/.config/multi-inventory/edge.env"
+if [ -z "${EDGE:-}" ] && [ -f "$EDGE_CONF" ]; then
+  EDGE="$(sed -n 's/^EDGE=//p' "$EDGE_CONF" | head -1)"
+fi
+if [ -z "${EDGE:-}" ]; then
+  if [ -t 0 ]; then
+    echo ">> Exposition publique du serveur (demandé une seule fois) :"
+    echo "   1) direct            : ports 80/443 ouverts (VPS OVH...) -> Caddy gère les certificats"
+    echo "   2) cloudflare-tunnel : pas de port entrant (NAT campus...) -> TLS à l'edge Cloudflare"
+    read -rp "   Choix [1] : " _EDGE_CHOICE
+    case "$_EDGE_CHOICE" in 2) EDGE=cloudflare-tunnel ;; *) EDGE=direct ;; esac
+  else
+    EDGE=direct
+  fi
+  mkdir -p "$(dirname "$EDGE_CONF")"
+  printf 'EDGE=%s\n' "$EDGE" > "$EDGE_CONF"
+  chmod 600 "$EDGE_CONF"
+  echo ">> Exposition '$EDGE' retenue (persistée dans $EDGE_CONF)."
+fi
+case "$EDGE" in
+  direct|cloudflare-tunnel) ;;
+  *) echo "ERREUR : EDGE='$EDGE' inconnu (valeurs : direct, cloudflare-tunnel)" >&2; exit 1 ;;
+esac
+
+# apply_edge : adapte un bloc Caddy frontal au mode d'exposition. En mode
+# tunnel, les hôtes de la ligne d'adresse passent en http:// : Caddy ne doit ni
+# demander de certificat (aucun port entrant, l'ACME échouerait en boucle) ni
+# rediriger vers https (l'edge parle à l'origine en HTTP -> boucle infinie).
+# La ligne d'adresse est la première ligne NON indentée finissant par « { » :
+# les sections du template commencent par une ligne vide, et les matchers
+# internes (@mobile {...) sont indentés. Les URL https:// À L'INTÉRIEUR des
+# blocs (redirection scanette->scannette) restent intactes : publiques,
+# servies par l'edge.
+apply_edge() {
+  if [ "$EDGE" = "cloudflare-tunnel" ]; then
+    awk '!done && /^[^ \t].*\{[ \t]*$/ { gsub(/[^ ,{]+/, "http://&"); done=1 } { print }'
+  else
+    cat
+  fi
+}
 
 # ====== Caddy frontal : créé s'il manque (une seule fois) ======
 if [ ! -f "$FRONT/docker-compose.yml" ]; then
@@ -667,6 +770,29 @@ if [ -f "$FRONT/Caddyfile" ]; then
     'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2' \
     "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp" && mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
 fi
+
+# En mode tunnel, le Caddyfile frontal doit S'OUVRIR sur le bloc d'options
+# global trusted_proxies : sans lui, Caddy réécrit X-Forwarded-Proto en http
+# et Django génère des liens http:// dans les e-mails (même piège que le Caddy
+# interne, traité plus haut). Posé une seule fois, en tête (exigence Caddy).
+if [ "$EDGE" = "cloudflare-tunnel" ] && ! grep -q "trusted_proxies" "$FRONT/Caddyfile" 2>/dev/null; then
+  cat "$FRONT/Caddyfile" > "$FRONT/Caddyfile.old" 2>/dev/null || : > "$FRONT/Caddyfile.old"
+  {
+    cat <<'CADDYGLOBAL'
+# TLS public terminé à l'edge Cloudflare (mode cloudflare-tunnel) : ce Caddy
+# sert en HTTP simple. trusted_proxies laisse passer le X-Forwarded-Proto=https
+# posé par cloudflared (sinon : liens http:// dans les e-mails Django).
+{
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+CADDYGLOBAL
+    cat "$FRONT/Caddyfile.old"
+  } > "$FRONT/Caddyfile"
+  rm -f "$FRONT/Caddyfile.old"
+fi
 # Bloc InvenTree. Avec la Scannette vient l'interstitiel mobile : une page
 # d'avertissement par asso (générée depuis templates/mobile-warning.html vers
 # ~/front/pages/), servie aux navigations mobiles sur la racine (/ et /web)
@@ -707,10 +833,10 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
         "$WARN_TPL" > "$WARN_PAGE"
   fi
   extract_section "$CADDY_TPL" mobile \
-    | sed "s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" >> "$FRONT/Caddyfile"
+    | sed "s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
 else
   extract_section "$CADDY_TPL" simple \
-    | sed "s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" >> "$FRONT/Caddyfile"
+    | sed "s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
 fi
 # Bloc Scannette (sous-domaine dédié) si demandée. Le mot ayant deux graphies,
 # la variante à un seul n (scanette-...) est aussi servie, en redirection 301
@@ -722,14 +848,19 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
   if [ "$SCAN_HOST_ALT" != "$SCAN_HOST" ]; then
     extract_section "$CADDY_TPL" scannette-alias \
       | sed "s/__SCAN_HOST_ALT__/$SCAN_HOST_ALT/g; s/__SCAN_HOST__/$SCAN_HOST/g; s/__NAME__/$NAME/g" \
-      >> "$FRONT/Caddyfile"
+      | apply_edge >> "$FRONT/Caddyfile"
   else
     # SCAN_HOST personnalisé sans "scannette" dedans : pas d'alias à créer.
     extract_section "$CADDY_TPL" scannette \
-      | sed "s/__SCAN_HOST__/$SCAN_HOST/g; s/__NAME__/$NAME/g" >> "$FRONT/Caddyfile"
+      | sed "s/__SCAN_HOST__/$SCAN_HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
   fi
 fi
 ( cd "$FRONT" && docker compose up -d --force-recreate )
+if [ "$EDGE" = "cloudflare-tunnel" ] && command -v docker >/dev/null 2>&1 \
+   && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q cloudflared; then
+  echo "!! Mode cloudflare-tunnel : aucun conteneur cloudflared détecté sur l'hôte."
+  echo "!!   Le site ne sera joignable qu'une fois le tunnel en route (wiki « Exposition publique »)."
+fi
 
 # ====== SSO EirbConnect (broker Dex) : tout automatisé ======
 # Déploie/maj Dex, enregistre le client de cette asso, injecte le bloc OIDC dans
@@ -746,10 +877,13 @@ fi
 # Via l'API REST avec le compte admin (lib/finalize.py, stdlib uniquement).
 # À la création seulement (FORCE_SETTINGS=1 pour forcer sur une asso existante).
 if [ "$KEEP_ENV" = "0" ] || [ "${FORCE_SETTINGS:-0}" = "1" ]; then
-  if [ -f "$SCRIPT_DIR/lib/finalize.py" ] && command -v python3 >/dev/null 2>&1; then
+  FIN_API="$(api_url || true)"
+  if [ -z "$FIN_API" ]; then
+    echo "!! Conteneur $NAME-server introuvable : finalisation sautée (relance le script)."
+  elif [ -f "$SCRIPT_DIR/lib/finalize.py" ] && command -v python3 >/dev/null 2>&1; then
     echo ">> Finalisation InvenTree via l'API (réglages + groupe membre + spotlight) ..."
     python3 "$SCRIPT_DIR/lib/finalize.py" \
-      --url "https://$HOST" \
+      --url "$FIN_API" \
       --user "$(sed -n 's/^INVENTREE_ADMIN_USER=//p' .env | head -1)" \
       --password "$(sed -n 's/^INVENTREE_ADMIN_PASSWORD=//p' .env | head -1)" \
       --name "$NAME" \
@@ -812,15 +946,13 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
     echo ">> Plugin Prêts v$PLG_SRC_VER : code déjà présent dans le venv."
   else
     echo ">> Plugin Prêts : installation v${PLG_SRC_VER:-?} dans le venv persistant ..."
-    # attend le venv (créé par l'entrypoint ; au tout premier boot les
-    # migrations passent avant, ça peut prendre quelques minutes)
+    # attend que l'entrypoint ait fini de peupler le venv (cf. wait_venv_ready :
+    # pip présent ne veut pas dire venv prêt, et installer trop tôt produit les
+    # avertissements ~ip / SSLError)
     PLG_OK=0
-    for _i in $(seq 1 60); do
-      if docker exec "$NAME-server" test -x "$PLG_VENV_BIN/pip" 2>/dev/null; then PLG_OK=1; break; fi
-      sleep 3
-    done
+    wait_venv_ready "$PLG_VENV_BIN" && PLG_OK=1
     if [ "$PLG_OK" != "1" ]; then
-      echo "!! Plugin Prêts : venv absent après 3 min, installation sautée (relance le script)."
+      echo "!! Plugin Prêts : venv pas prêt après 10 min, installation sautée (relance le script)."
     else
       # gunicorn DANS le venv (une fois), puis le plugin depuis le repo
       docker exec "$NAME-server" test -x "$PLG_VENV_BIN/gunicorn" 2>/dev/null \
@@ -840,8 +972,12 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
   PLG_ADMIN_U="$(sed -n 's/^INVENTREE_ADMIN_USER=//p' .env | head -1)"
   PLG_ADMIN_P="$(sed -n 's/^INVENTREE_ADMIN_PASSWORD=//p' .env | head -1)"
   PLG_TOK=""
+  # API est re-résolu à chaque tour : le conteneur redémarre juste avant, et un
+  # recreate lui donnerait une nouvelle IP.
+  API=""
   for _i in $(seq 1 60); do
-    PLG_TOK="$(curl -su "$PLG_ADMIN_U:$PLG_ADMIN_P" "https://$HOST/api/user/token/" 2>/dev/null \
+    API="$(api_url || true)"
+    [ -n "$API" ] && PLG_TOK="$(curl -su "$PLG_ADMIN_U:$PLG_ADMIN_P" "$API/api/user/token/" 2>/dev/null \
       | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' || true)"
     [ -n "$PLG_TOK" ] && break
     sleep 5
@@ -853,11 +989,11 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
     # (l'API renvoie les booléens sans guillemets : "value":true)
     PLG_NEED=$PLG_INSTALLED_NOW
     for _k in ENABLE_PLUGINS_APP ENABLE_PLUGINS_URL ENABLE_PLUGINS_SCHEDULE ENABLE_PLUGINS_INTERFACE; do
-      _v="$(curl -s -H "Authorization: Token $PLG_TOK" "https://$HOST/api/settings/global/$_k/" \
+      _v="$(curl -s -H "Authorization: Token $PLG_TOK" "$API/api/settings/global/$_k/" \
         | sed -n 's/.*"value":\(true\|false\).*/\1/p' || true)"
       [ "$_v" = "true" ] || PLG_NEED=1
     done
-    curl -s -H "Authorization: Token $PLG_TOK" "https://$HOST/api/plugins/prets/" \
+    curl -s -H "Authorization: Token $PLG_TOK" "$API/api/plugins/prets/" \
       | grep -q '"active":true' || PLG_NEED=1
 
     if [ "$PLG_NEED" != "1" ]; then
@@ -866,18 +1002,18 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
       echo ">> Plugin Prêts : (ré)activation des intégrations globales + du plugin ..."
       for _k in ENABLE_PLUGINS_APP ENABLE_PLUGINS_URL ENABLE_PLUGINS_SCHEDULE ENABLE_PLUGINS_INTERFACE; do
         curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-          -d '{"value":"True"}' "https://$HOST/api/settings/global/$_k/"
+          -d '{"value":"True"}' "$API/api/settings/global/$_k/"
       done
       curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-        -d '{"active":true}' "https://$HOST/api/plugins/prets/activate/"
+        -d '{"active":true}' "$API/api/plugins/prets/activate/"
       # Titre d'instance = préfixe des sujets d'e-mails de notification et titre
       # d'onglet. Posé seulement s'il vaut encore le défaut « InvenTree ».
       INST_TITLE="${BRAND_NAME:-$(printf '%s' "$NAME" | tr '[:lower:]' '[:upper:]')}"
-      INST_CUR="$(curl -s -H "Authorization: Token $PLG_TOK" "https://$HOST/api/settings/global/INVENTREE_INSTANCE/" \
+      INST_CUR="$(curl -s -H "Authorization: Token $PLG_TOK" "$API/api/settings/global/INVENTREE_INSTANCE/" \
         | sed -n 's/.*"value":"\([^"]*\)".*/\1/p' || true)"
       if [ "$INST_CUR" = "InvenTree" ]; then
         curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-          -d "{\"value\":\"$INST_TITLE\"}" "https://$HOST/api/settings/global/INVENTREE_INSTANCE/"
+          -d "{\"value\":\"$INST_TITLE\"}" "$API/api/settings/global/INVENTREE_INSTANCE/"
       fi
       # Défauts posés à la première install seulement : noms complets affichés
       # (DISPLAY_FULL_NAMES) et purge du suivi de stock à 1 an. L'historique des
@@ -886,7 +1022,7 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
       if [ "$PLG_FRESH" = "1" ]; then
         for _kv in "DISPLAY_FULL_NAMES:True" "STOCK_TRACKING_DELETE_OLD_ENTRIES:True"; do
           curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-            -d "{\"value\":\"${_kv#*:}\"}" "https://$HOST/api/settings/global/${_kv%%:*}/"
+            -d "{\"value\":\"${_kv#*:}\"}" "$API/api/settings/global/${_kv%%:*}/"
         done
         echo ">>   Défauts posés : noms complets affichés + purge du suivi de stock à 1 an."
       fi
@@ -954,12 +1090,9 @@ if [ "${SKIP_EMAILS_PLUGIN:-0}" != "1" ] && [ -d "$EMAILS_SRC" ]; then
   else
     echo ">> Plugin E-mails : installation v${EMAILS_SRC_VER:-?} dans le venv persistant ..."
     EMAILS_OK=0
-    for _i in $(seq 1 60); do
-      if docker exec "$NAME-server" test -x "$EMAILS_VENV_BIN/pip" 2>/dev/null; then EMAILS_OK=1; break; fi
-      sleep 3
-    done
+    wait_venv_ready "$EMAILS_VENV_BIN" && EMAILS_OK=1
     if [ "$EMAILS_OK" != "1" ]; then
-      echo "!! Plugin E-mails : venv absent après 3 min, installation sautée (relance le script)."
+      echo "!! Plugin E-mails : venv pas prêt après 10 min, installation sautée (relance le script)."
     else
       tar -C "$EMAILS_SRC" --exclude='__pycache__' -cf - . \
         | docker exec -i "$NAME-server" sh -c 'rm -rf /tmp/emails-src && mkdir -p /tmp/emails-src && tar -C /tmp/emails-src -xf -'
@@ -970,8 +1103,10 @@ if [ "${SKIP_EMAILS_PLUGIN:-0}" != "1" ] && [ -d "$EMAILS_SRC" ]; then
       EMAILS_ADMIN_U="$(sed -n 's/^INVENTREE_ADMIN_USER=//p' .env | head -1)"
       EMAILS_ADMIN_P="$(sed -n 's/^INVENTREE_ADMIN_PASSWORD=//p' .env | head -1)"
       EMAILS_TOK=""
+      API=""
       for _i in $(seq 1 60); do
-        EMAILS_TOK="$(curl -su "$EMAILS_ADMIN_U:$EMAILS_ADMIN_P" "https://$HOST/api/user/token/" 2>/dev/null \
+        API="$(api_url || true)"
+        [ -n "$API" ] && EMAILS_TOK="$(curl -su "$EMAILS_ADMIN_U:$EMAILS_ADMIN_P" "$API/api/user/token/" 2>/dev/null \
           | sed -n 's/.*"token":"\([^"]*\)".*/\1/p' || true)"
         [ -n "$EMAILS_TOK" ] && break
         sleep 5
@@ -980,9 +1115,9 @@ if [ "${SKIP_EMAILS_PLUGIN:-0}" != "1" ] && [ -d "$EMAILS_SRC" ]; then
         echo "!! Plugin E-mails : API injoignable, activation à finir à la main (Réglages > Plugins)."
       else
         curl -s -o /dev/null -X PATCH -H "Authorization: Token $EMAILS_TOK" -H "Content-Type: application/json" \
-          -d '{"value":"True"}' "https://$HOST/api/settings/global/ENABLE_PLUGINS_APP/"
+          -d '{"value":"True"}' "$API/api/settings/global/ENABLE_PLUGINS_APP/"
         curl -s -o /dev/null -X PATCH -H "Authorization: Token $EMAILS_TOK" -H "Content-Type: application/json" \
-          -d '{"active":true}' "https://$HOST/api/plugins/emails/activate/"
+          -d '{"active":true}' "$API/api/plugins/emails/activate/"
         docker restart "$NAME-server" "$NAME-worker" >/dev/null
         echo ">> Plugin E-mails v${EMAILS_SRC_VER:-?} installé et actif (e-mails aux couleurs de la Scannette)."
       fi
@@ -1032,6 +1167,7 @@ echo ""
 echo ">> ============================================================"
 echo ">>  Asso '$NAME' prête !"
 echo ">>    InvenTree : https://$HOST   (version épinglée: $INVENTREE_VERSION)"
+echo ">>    Exposition : $EDGE"
 [ "$WITH_SCANNETTE" = "1" ] && echo ">>    Scannette  : https://$SCAN_HOST   (recharge avec ?v=N pour casser le cache)"
 if [ "$WITH_SCANNETTE" = "1" ]; then
   if [ -f "$FRONT/pages/mobile-warning-$NAME.html" ] && grep -q "@mobile" "$FRONT/Caddyfile"; then
