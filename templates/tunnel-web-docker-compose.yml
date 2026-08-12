@@ -1,0 +1,20 @@
+# ~/tunnel-web/ : le tunnel Cloudflare « web » (généré par create-asso.sh, mode
+# EDGE=cloudflare-tunnel). Tunnel DÉDIÉ au web, séparé d'un éventuel tunnel SSH
+# (ligne de vie) : on peut le casser/recréer sans risquer l'accès à la machine.
+services:
+  cloudflared-web:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-web
+    restart: unless-stopped
+    # L'image tourne par défaut en uid 65532 (nonroot), incapable de lire les
+    # credentials en 600 : on aligne le conteneur sur l'uid propriétaire.
+    user: "__UID__:__GID__"
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    networks:
+      - inventree-front
+
+networks:
+  inventree-front:
+    external: true

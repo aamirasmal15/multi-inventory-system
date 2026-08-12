@@ -72,6 +72,7 @@ fi
 . "$SCRIPT_DIR/lib/sso.sh"
 # shellcheck source=/dev/null
 [ -f "$SCRIPT_DIR/lib/swap.sh" ] && . "$SCRIPT_DIR/lib/swap.sh"
+[ -f "$SCRIPT_DIR/lib/tunnel.sh" ] && . "$SCRIPT_DIR/lib/tunnel.sh"
 
 case "${1:-}" in
   --reconfigure|reconfigure)
@@ -458,6 +459,17 @@ else
 fi
 
 echo ">> Asso '$NAME'  ->  https://$HOST"
+
+# Mode tunnel : le tunnel « web » est posé automatiquement au premier run
+# (autorisation navigateur -> création -> conteneur -> route DNS, lib/tunnel.sh).
+# Un échec n'arrête pas le déploiement : le bilan de santé final le signalera.
+# Pas de sens en mode tmp : un host sslip.io n'est pas une zone Cloudflare.
+if [ "$EDGE" = "cloudflare-tunnel" ] && command -v setup_cloudflare_tunnel >/dev/null 2>&1; then
+  case "$HOST" in
+    *.sslip.io) echo "!! Mode tmp (sslip.io) : pas de tunnel Cloudflare pour ce host." ;;
+    *) setup_cloudflare_tunnel "$HOST" || true ;;
+  esac
+fi
 [ "$WITH_SCANNETTE" = "1" ] && echo ">>   Scannette    ->  https://$SCAN_HOST"
 mkdir -p "$DIR" && cd "$DIR"
 
@@ -1161,6 +1173,58 @@ done
 if [ "$PATCHED_BUNDLE" = "1" ]; then
   docker restart "$NAME-server" >/dev/null 2>&1 || true
 fi
+
+# ====== Bilan de santé de l'exposition publique ======
+# Traverse l'edge comme un vrai visiteur et, sur les symptômes classiques
+# (522, 1010, boucle de redirection...), affiche le diagnostic et renvoie vers
+# la page wiki plutôt que de laisser chercher. Purement informatif : ne bloque
+# jamais un déploiement réussi (le serveur peut mettre du temps à redémarrer).
+EDGE_WIKI="https://github.com/aamirasmal15/multi-inventory-system/wiki/Exposition-publique"
+edge_doctor() {
+  local url="https://$HOST/api/" code body ok=0 i
+  # les derniers redémarrages (plugins, patch bundle) peuvent encore courir
+  for i in $(seq 1 6); do
+    # en cas d'échec réseau, curl imprime déjà 000 : pas de fallback qui doublonne
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url" 2>/dev/null || true)"
+    code="${code:-000}"
+    case "$code" in 200|302) ok=1; break ;; esac
+    sleep 10
+  done
+  if [ "$ok" = "1" ]; then
+    echo ">> Exposition publique OK : $url répond (HTTP $code) à travers l'edge."
+    return 0
+  fi
+  echo "!! Exposition publique : $url répond 'HTTP $code' depuis ce serveur."
+  case "$code" in
+    000)
+      echo "!!   Pas de réponse du tout : DNS absent ou réseau. 'dig $HOST +short' doit répondre ;"
+      echo "!!   en mode direct, un certificat pas encore émis (ACME/propagation DNS) donne aussi ça." ;;
+    403)
+      body="$(curl -s --max-time 15 "$url" 2>/dev/null | head -c 200)"
+      if printf '%s' "$body" | grep -q "1010"; then
+        echo "!!   'error 1010' = Bot Fight Mode Cloudflare : les clients non-navigateur (curl,"
+        echo "!!   scripts) sont refusés à l'edge. Le site marche sans doute dans un NAVIGATEUR."
+      fi ;;
+    308|301)
+      echo "!!   Redirection inattendue : un bloc du frontal est probablement resté en https"
+      echo "!!   derrière l'edge (boucle). Relance ce script (les blocs se régénèrent au mode"
+      echo "!!   EDGE courant : $EDGE) puis 'docker restart front-caddy'." ;;
+    502|503|504)
+      echo "!!   L'edge joint le frontal mais l'instance ne répond pas : conteneurs démarrés ?"
+      echo "!!   -> cd ~/assos/$NAME && docker compose ps" ;;
+    52*|530)
+      if [ "$EDGE" = "cloudflare-tunnel" ]; then
+        echo "!!   L'edge Cloudflare ne joint pas l'origine : tunnel éteint ou DNS pas routé."
+        echo "!!   -> 'docker logs cloudflared-web' ; le record DNS '*' doit être un CNAME vers"
+        echo "!!      <ID-du-tunnel>.cfargotunnel.com, en Proxied (nuage orange)."
+      else
+        echo "!!   L'edge/CDN ne joint pas le serveur : le DNS pointe-t-il la bonne IP publique ?"
+      fi ;;
+  esac
+  echo "!!   Diagnostic pas-à-pas : $EDGE_WIKI"
+  return 0
+}
+edge_doctor || true
 
 # ====== Récap ======
 echo ""
