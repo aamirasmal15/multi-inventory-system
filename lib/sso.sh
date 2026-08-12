@@ -279,12 +279,20 @@ EOF
 _dex_ensure_front_route() {
   mkdir -p "$FRONT"; [ -f "$FRONT/Caddyfile" ] || touch "$FRONT/Caddyfile"
   # L'hôte est nu (mode direct : Caddy fait l'ACME) ou préfixé http:// (mode
-  # cloudflare-tunnel : TLS à l'edge, cf. EDGE dans create-asso.sh). Le test
-  # d'existence accepte les deux formes, sinon chaque run SSO ré-appendrait un
-  # doublon dans l'autre forme.
-  if ! grep -qE "^(http://)?${AUTH_DOMAIN}[[:space:]]*\{" "$FRONT/Caddyfile" 2>/dev/null; then
-    _auth_host="$AUTH_DOMAIN"
-    [ "${EDGE:-direct}" = "cloudflare-tunnel" ] && _auth_host="http://$AUTH_DOMAIN"
+  # cloudflare-tunnel : TLS à l'edge, cf. EDGE dans create-asso.sh). Même
+  # contrat que les blocs d'asso : la forme suit le mode COURANT — après une
+  # bascule d'EDGE, le bloc resté dans l'ancienne forme est réécrit (sinon :
+  # ACME en boucle + 308 derrière l'edge = SSO cassé pour toutes les assos).
+  _auth_host="$AUTH_DOMAIN"
+  [ "${EDGE:-direct}" = "cloudflare-tunnel" ] && _auth_host="http://$AUTH_DOMAIN"
+  if ! grep -qE "^${_auth_host}[[:space:]]*\{" "$FRONT/Caddyfile" 2>/dev/null; then
+    if grep -qE "^(http://)?${AUTH_DOMAIN}[[:space:]]*\{" "$FRONT/Caddyfile" 2>/dev/null; then
+      # présent mais dans la forme de l'autre mode : on retire le bloc dex
+      # (seul paragraphe du Caddyfile à proxifier dex:5556) avant de le reposer
+      awk 'BEGIN{RS="";ORS="\n\n"} $0 !~ /reverse_proxy dex:5556/' \
+        "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp" && mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
+      echo ">> route frontale $AUTH_DOMAIN : forme obsolète retirée (bascule de mode EDGE)"
+    fi
     cat >> "$FRONT/Caddyfile" <<EOF
 
 $_auth_host {
@@ -292,7 +300,7 @@ $_auth_host {
 }
 EOF
     ( cd "$FRONT" && docker compose up -d --force-recreate >/dev/null 2>&1 ) || true
-    echo ">> route frontale $AUTH_DOMAIN -> dex ajoutée"
+    echo ">> route frontale $_auth_host -> dex posée"
   fi
 }
 

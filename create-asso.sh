@@ -377,6 +377,12 @@ case "$EDGE" in
   direct|cloudflare-tunnel) ;;
   *) echo "ERREUR : EDGE='$EDGE' inconnu (valeurs : direct, cloudflare-tunnel)" >&2; exit 1 ;;
 esac
+# apply_edge suit EDGE_EFFECTIVE : identique à EDGE sauf cas particulier (host
+# sslip.io en mode tunnel -> blocs classiques, cf. calcul des URL plus bas).
+EDGE_EFFECTIVE="$EDGE"
+# Échec franc AVANT toute action si le template du tunnel manque : un checkout
+# partiel mourrait sinon en plein bootstrap, APRÈS création du tunnel côté compte.
+[ "$EDGE" != "cloudflare-tunnel" ] || require_template "tunnel-web-docker-compose.yml"
 
 # apply_edge : adapte un bloc Caddy frontal au mode d'exposition. En mode
 # tunnel, les hôtes de la ligne d'adresse passent en http:// : Caddy ne doit ni
@@ -388,7 +394,7 @@ esac
 # blocs (redirection scanette->scannette) restent intactes : publiques,
 # servies par l'edge.
 apply_edge() {
-  if [ "$EDGE" = "cloudflare-tunnel" ]; then
+  if [ "${EDGE_EFFECTIVE:-$EDGE}" = "cloudflare-tunnel" ]; then
     awk '!done && /^[^ \t].*\{[ \t]*$/ { gsub(/[^ ,{]+/, "http://&"); done=1 } { print }'
   else
     cat
@@ -442,8 +448,19 @@ fi
 # ====== Calcul des URL (InvenTree + Scannette sur sous-domaine dédié) ======
 _SCAN_SET="${SCAN_HOST+1}"
 if [ "$SUBDOMAIN" = "tmp" ] || [ -z "$BASE_DOMAIN" ]; then
-  IP="$(curl -4 -s ifconfig.me)"; HOST="$NAME.${IP//./-}.sslip.io"   # éphémère / sans domaine
+  # éphémère / sans domaine ; sous set -e, un ifconfig.me injoignable tuerait le
+  # script sans un mot : on échoue proprement, avec borne de temps
+  IP="$(curl -4 -s --max-time 20 ifconfig.me || true)"
+  [ -n "$IP" ] || { echo "ERREUR : IP publique indéterminable (ifconfig.me injoignable), mode tmp impossible." >&2; exit 1; }
+  HOST="$NAME.${IP//./-}.sslip.io"
   [ -n "$_SCAN_SET" ] || SCAN_HOST="scannette-$NAME.${IP//./-}.sslip.io"
+  if [ "$EDGE" = "cloudflare-tunnel" ]; then
+    # un host sslip.io n'est pas dans la zone Cloudflare : il reste hors tunnel,
+    # blocs Caddy classiques (sinon un bloc http:// ne serait servi nulle part)
+    EDGE_EFFECTIVE=direct
+    echo "!! Mode tmp en exposition cloudflare-tunnel : ce host reste HORS tunnel ;"
+    echo "!!   sans ports 80/443 ouverts vers ce serveur, il ne sera pas joignable."
+  fi
 elif [ -n "$SUBDOMAIN" ]; then
   HOST="$SUBDOMAIN.$BASE_DOMAIN"            # sous-domaine InvenTree explicite (gagne toujours)
   if [ -z "$_SCAN_SET" ]; then             # ... mais la Scannette suit la convention par nom
@@ -466,7 +483,7 @@ echo ">> Asso '$NAME'  ->  https://$HOST"
 # Pas de sens en mode tmp : un host sslip.io n'est pas une zone Cloudflare.
 if [ "$EDGE" = "cloudflare-tunnel" ] && command -v setup_cloudflare_tunnel >/dev/null 2>&1; then
   case "$HOST" in
-    *.sslip.io) echo "!! Mode tmp (sslip.io) : pas de tunnel Cloudflare pour ce host." ;;
+    *.sslip.io) : ;;   # hors tunnel, déjà signalé au calcul des URL
     *) setup_cloudflare_tunnel "$HOST" || true ;;
   esac
 fi
@@ -511,6 +528,15 @@ if [ -f .env ]; then
     sed -i "s/^INVENTREE_TAG=.*/INVENTREE_TAG=$INVENTREE_VERSION/" .env
     UPGRADING=1
   fi
+  # Le domaine peut changer entre deux runs (--reconfigure, IP sslip) : tout le
+  # reste suit déjà (TRUSTED_ORIGINS réécrit, blocs Caddy régénérés, Dex ré-
+  # enregistré), le .env doit suivre aussi — sinon les liens générés hors
+  # requête (e-mails du worker : activation, reset de mot de passe) gardent
+  # l'ancien domaine mort.
+  grep -q "^INVENTREE_SITE_URL=\"https://$HOST\"\$" .env || {
+    sed -i "s|^INVENTREE_SITE_URL=.*|INVENTREE_SITE_URL=\"https://$HOST\"|" .env
+    echo ">> INVENTREE_SITE_URL aligné sur https://$HOST"
+  }
 else
   KEEP_ENV=0
   # Bloc email : SMTP réel si SSO, sinon gabarit commenté.
@@ -1187,11 +1213,22 @@ edge_doctor() {
     # en cas d'échec réseau, curl imprime déjà 000 : pas de fallback qui doublonne
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$url" 2>/dev/null || true)"
     code="${code:-000}"
-    case "$code" in 200|302) ok=1; break ;; esac
+    # 200/302 = gagné ; 403 = décision du WAF, déterministe : retenter est inutile
+    case "$code" in 200|302) ok=1; break ;; 403) break ;; esac
     sleep 10
   done
   if [ "$ok" = "1" ]; then
     echo ">> Exposition publique OK : $url répond (HTTP $code) à travers l'edge."
+    # Le SSO vit sur son propre host : son bloc frontal peut être cassé alors
+    # que ceux des assos vont bien (il n'est pas régénéré par les mêmes chemins).
+    case "${AUTH_DOMAIN:-}" in auth.?*)
+      code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
+        "https://$AUTH_DOMAIN/oauth2/.well-known/openid-configuration" 2>/dev/null || true)"
+      if [ "${code:-000}" != "200" ]; then
+        echo "!! SSO : https://$AUTH_DOMAIN répond 'HTTP ${code:-000}' à travers l'edge."
+        echo "!!   Diagnostic pas-à-pas : $EDGE_WIKI"
+      fi ;;
+    esac
     return 0
   fi
   echo "!! Exposition publique : $url répond 'HTTP $code' depuis ce serveur."

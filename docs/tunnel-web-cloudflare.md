@@ -61,7 +61,19 @@ uniquement).
 3. Toute modification DNS se fait record par record, **sans toucher au record
    du SSH**.
 
-## 4. Mise en place
+## 4. Mise en place — automatique via le script
+
+En mode `EDGE=cloudflare-tunnel`, **tout ce chapitre est exécuté par
+`create-asso.sh` (lib/tunnel.sh)** au premier run : création du tunnel,
+fichiers, conteneur, route DNS (best effort). La seule étape humaine est
+l'autorisation du compte dans le navigateur — et seulement si aucun
+`cert.pem` n'existe déjà sur la machine. Les étapes ci-dessous servent de
+référence (comprendre, déboguer, ou faire à la main sur un hôte sans Docker).
+
+Séparation de sécurité posée par le script : `~/tunnel-web/account/` porte le
+`cert.pem` (credential de **compte**, capable de gérer tous les tunnels et le
+DNS) et n'est **jamais monté** dans le conteneur exposé ; `~/tunnel-web/cloudflared/`
+ne contient que la config et le `<ID>.json` du seul tunnel web.
 
 ### 4.1 Créer le tunnel (une fois)
 
@@ -180,13 +192,19 @@ premier run et persiste la réponse dans `~/.config/multi-inventory/edge.env`
 | `direct` (défaut) | VPS avec ports 80/443 ouverts (OVH…) | blocs Caddy classiques : Caddy obtient les certificats (ACME) et sert en HTTPS |
 | `cloudflare-tunnel` | serveur sans port entrant (NAT campus…) | blocs en `http://` (fonction `apply_edge`) + bloc global `trusted_proxies` en tête du Caddyfile ; avertit si aucun conteneur cloudflared ne tourne |
 
-Le tunnel lui-même (§4.1) reste à mettre en place une fois à la main : le
-script n'a pas à connaître le compte Cloudflare.
+Le tunnel lui-même est posé automatiquement au premier run en mode tunnel
+(§4, lib/tunnel.sh) ; en fin de chaque déploiement, le bilan de santé
+`edge_doctor` traverse l'edge comme un vrai visiteur (site + host SSO) et, sur
+un symptôme connu (522, 1010, boucle, 502), affiche le diagnostic et le lien
+wiki.
 
-**Changer de mode après coup** : éditer `edge.env`, relancer
-`./create-asso.sh <nom>` pour CHAQUE asso (les blocs se régénèrent), et en
-retour vers `direct` retirer à la main le bloc global `trusted_proxies` du
-`~/front/Caddyfile` puis `docker restart front-caddy`.
+**Changer de mode après coup** : éditer `edge.env`, puis relancer
+`./create-asso.sh <nom>` pour CHAQUE asso — les blocs des assos ET le bloc
+`auth` (SSO) se régénèrent dans la forme du mode courant. En retour vers
+`direct`, il reste trois gestes manuels : repointer le DNS (`*` en A vers l'IP
+du serveur au lieu du CNAME cfargotunnel), arrêter le tunnel
+(`cd ~/tunnel-web && docker compose down`), et retirer le bloc global
+`trusted_proxies` du `~/front/Caddyfile` puis `docker restart front-caddy`.
 
 ## 7. Rollback (mode tunnel)
 
