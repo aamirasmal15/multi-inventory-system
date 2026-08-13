@@ -1139,6 +1139,9 @@ if command -v manage_swap >/dev/null 2>&1; then manage_swap || true; fi
 # ailleurs. Balayage exhaustif du source 1.4.2 : seuls deux champs visibles.
 #   - fiche article, creation_date ("string", cassé jusqu'à leur master) ;
 #   - fiche stock, updated ("text", corrigé sur master, en attendant ici).
+# Fix upstream livrés en 1.5.0 : les deux motifs ont disparu des bundles
+# (vérifié post-upgrade 2026-08-13), les patchs s'auto-désactivent donc.
+# Bloc conservé tel quel : filet si un motif réapparaît sur une version pinnée.
 # Retouche des bundles collectés, à refaire à chaque run : collectstatic
 # --clear les écrase aux upgrades. Chaque patch s'auto-désactive quand le
 # motif disparaît (fix upstream livré). Redémarrage requis après patch :

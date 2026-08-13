@@ -7,7 +7,7 @@ d'échéance proche ou de retard. Un système de **réservation** par créneaux
 Il forme un tout avec la [Scannette](../../scannette-src/) : les deux
 interfaces parlent aux mêmes endpoints et partagent les mêmes règles.
 
-Testé contre InvenTree 1.4.2. Auteur : Aamir ASMAL.
+Testé contre InvenTree 1.5.0. Auteur : Aamir ASMAL.
 
 **Bilingue** : toute l'interface (réglages, messages d'erreur, notifications,
 panneau, widget) suit la langue de l'utilisateur : français ou anglais.

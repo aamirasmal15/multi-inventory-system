@@ -30,7 +30,7 @@ DEX_ISSUER="https://$AUTH_DOMAIN/oauth2"
 MSS_CLAMP="${MSS_CLAMP:-1240}"           # clamp MSS pour fiabiliser la route VPS->EirbConnect
 
 # Version InvenTree épinglée par défaut (celle sur laquelle le système est validé).
-: "${INVENTREE_PINNED_DEFAULT:=1.4.2}"
+: "${INVENTREE_PINNED_DEFAULT:=1.5.0}"
 
 # ============================================================ RÉGLAGES PLATEFORME
 # settings.env = source unique du domaine et de la version InvenTree épinglée.
