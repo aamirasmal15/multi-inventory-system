@@ -178,7 +178,7 @@ if [ -f "$FRONT/Caddyfile" ]; then
     'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2' \
     "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp"
   mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
-  # pages d'avertissement mobile de l'asso (générée + personnalisation éventuelle)
+  # héritage interstitiel : pages d'avertissement d'anciennes versions (plus générées)
   rm -f "$FRONT/pages/mobile-warning-$NAME.html" "$FRONT/pages/mobile-warning-$NAME.custom.html"
   ( cd "$FRONT" && docker compose up -d --force-recreate ) || true
 fi

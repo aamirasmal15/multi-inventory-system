@@ -16,7 +16,7 @@
   const backFromSso = /[?&]sso=1(?:&|$)/.test(window.location.search);
   if (!(TOKEN && USERNAME) && backFromSso) {
     await trySsoBootstrap();
-    history.replaceState(null, "", "/"); // nettoie l'URL (retire ?sso=1)
+    history.replaceState(null, "", BASE); // nettoie l'URL (retire ?sso=1) sans sortir de la base
   }
   if (TOKEN) {
     const st = await checkAuthorized();

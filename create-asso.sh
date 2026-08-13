@@ -410,8 +410,9 @@ if [ ! -f "$FRONT/docker-compose.yml" ]; then
   touch "$FRONT/Caddyfile"
 fi
 
-# ====== Pages statiques du front (interstitiel mobile) ======
-# Un front déployé avant cette fonctionnalité n'a pas le mount pages/ : on
+# ====== Pages statiques du front (répertoire optionnel, conservé vide) ======
+# Historiquement l'interstitiel mobile ; le mount reste posé pour d'éventuelles
+# pages statiques futures. Un front déployé avant n'a pas le mount pages/ : on
 # l'injecte dans son docker-compose.yml (le force-recreate final le prendra).
 mkdir -p "$FRONT/pages"
 if ! grep -q "pages:/srv/pages" "$FRONT/docker-compose.yml"; then
@@ -434,12 +435,6 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
   [ -f "$SCAN_SRC/js/boot.js" ] || {
     echo "ERREUR : $SCAN_SRC/js/boot.js manquant : l'arborescence de la Scannette est incomplète." >&2
     echo "         Attendu : index.html + css/ + js/ (voir scannette-src/README.md)." >&2
-    exit 1
-  }
-  [ -f "$SCRIPT_DIR/templates/mobile-warning.html" ] || {
-    echo "ERREUR : $SCRIPT_DIR/templates/mobile-warning.html manquant (page d'avertissement mobile)." >&2
-    echo "         Récupère le dossier templates/ du repo (au même niveau que create-asso.sh)," >&2
-    echo "         ou déploie InvenTree seul : WITH_SCANNETTE=0 ./create-asso.sh $NAME ..." >&2
     exit 1
   }
   require_template "scannette.tpl"
@@ -719,8 +714,8 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
   fi
 
   # Logos effectivement présents dans html/img/ (résolus ci-dessus ou déposés à
-  # la main). Deux nommages acceptés, le premier trouvé gagne ; LOGO_WHITE /
-  # LOGO_BLACK resservent plus bas pour l'interstitiel mobile.
+  # la main). Deux nommages acceptés, le premier trouvé gagne ; LOGO_WHITE
+  # ressert plus bas pour le logo InvenTree (custom_logo.png).
   LOGO_WHITE=""; LOGO_BLACK=""
   for _cand in "$NAME-white.png" "logo-white.png"; do
     if [ -f "$SCANDIR/html/img/$_cand" ]; then LOGO_WHITE="$_cand"; break; fi
@@ -831,45 +826,16 @@ CADDYGLOBAL
   } > "$FRONT/Caddyfile"
   rm -f "$FRONT/Caddyfile.old"
 fi
-# Bloc InvenTree. Avec la Scannette vient l'interstitiel mobile : une page
-# d'avertissement par asso (générée depuis templates/mobile-warning.html vers
-# ~/front/pages/), servie aux navigations mobiles sur la racine (/ et /web)
-# seulement : les liens profonds (e-mails, fiches, callbacks OIDC) passent
-# toujours. Un cookie de 5 min (bouton « continuer quand même ») laisse passer.
+# Bloc InvenTree. Avec la Scannette : montage sous /scannette/ (même origine
+# qu'InvenTree, préfixe strippé vers le nginx Scannette) + redirection AUTO des
+# mobiles depuis la racine (302, voir caddy-blocks.conf section mobile). Les
+# liens profonds (e-mails, fiches, callbacks OIDC) passent toujours ; un mobile
+# force InvenTree via /web (l'accueil InvenTree, jamais intercepté).
 # NB : pas de ligne vide DANS un bloc Caddy, sinon le nettoyage awk (RS="") le couperait en deux.
-WARN_TPL="$SCRIPT_DIR/templates/mobile-warning.html"
-WARN_PAGE="$FRONT/pages/mobile-warning-$NAME.html"
-WARN_CUSTOM="$FRONT/pages/mobile-warning-$NAME.custom.html"
 CADDY_TPL="$TEMPLATES_DIR/caddy-blocks.conf"
+# Nettoyage d'un éventuel héritage interstitiel (page d'avertissement d'anciens runs).
+rm -f "$FRONT/pages/mobile-warning-$NAME.html"
 if [ "$WITH_SCANNETTE" = "1" ]; then
-  ASSO_UPPER="$(printf '%s' "$NAME" | tr '[:lower:]' '[:upper:]')"
-  # Logos de la page : aucune copie, le frontal relaie /img/* vers le nginx de
-  # la Scannette qui sert déjà html/img/ (source unique, à jour sans re-run).
-  if [ -n "$LOGO_WHITE" ]; then
-    echo ">> Logo white : $LOGO_WHITE (servi via la Scannette, sans copie)"
-  else
-    echo "!! Logo white INTROUVABLE dans $SCANDIR/html/img/ (cherché : $NAME-white.png puis logo-white.png)" >&2
-    echo "!!   -> la page mobile affichera l'initiale '${ASSO_UPPER:0:1}' à la place." >&2
-  fi
-  if [ -n "$LOGO_BLACK" ]; then
-    echo ">> Logo black : $LOGO_BLACK (servi via la Scannette, sans copie)"
-  else
-    echo "!! Logo black INTROUVABLE dans $SCANDIR/html/img/ (cherché : $NAME-black.png puis logo-black.png)" >&2
-    echo "!!   -> la page mobile affichera l'initiale '${ASSO_UPPER:0:1}' à la place." >&2
-  fi
-  if [ -f "$WARN_CUSTOM" ]; then
-    # Page personnalisée de l'asso (runtime uniquement, jamais dans le repo) :
-    # jamais touchée par les runs, elle gagne sur le template.
-    echo ">> Page mobile personnalisée trouvée ($WARN_CUSTOM) : utilisée telle quelle"
-    cp "$WARN_CUSTOM" "$WARN_PAGE"
-  else
-    sed -e "s|__SCAN_HOST__|$SCAN_HOST|g" \
-        -e "s|__LOGO_WHITE__|$LOGO_WHITE|g" \
-        -e "s|__LOGO_BLACK__|$LOGO_BLACK|g" \
-        -e "s|__ASSO__|$ASSO_UPPER|g" \
-        -e "s|__ASSO_INITIAL__|${ASSO_UPPER:0:1}|g" \
-        "$WARN_TPL" > "$WARN_PAGE"
-  fi
   extract_section "$CADDY_TPL" mobile \
     | sed "s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
 else
@@ -1271,10 +1237,10 @@ echo ">>    InvenTree : https://$HOST   (version épinglée: $INVENTREE_VERSION)
 echo ">>    Exposition : $EDGE"
 [ "$WITH_SCANNETTE" = "1" ] && echo ">>    Scannette  : https://$SCAN_HOST   (recharge avec ?v=N pour casser le cache)"
 if [ "$WITH_SCANNETTE" = "1" ]; then
-  if [ -f "$FRONT/pages/mobile-warning-$NAME.html" ] && grep -q "@mobile" "$FRONT/Caddyfile"; then
-    echo ">>    Interstitiel mobile : ACTIF ($FRONT/pages/mobile-warning-$NAME.html)"
+  if grep -q "handle_path /scannette/" "$FRONT/Caddyfile"; then
+    echo ">>    Montage /scannette/ + redirection mobile : ACTIFS (https://$HOST/scannette/ · InvenTree sur mobile : /web)"
   else
-    echo ">>    Interstitiel mobile : INACTIF (template manquant, voir avertissement ci-dessus)"
+    echo ">>    Montage /scannette/ : INACTIF (bloc Caddy absent — re-run à prévoir ?)"
   fi
 fi
 if [ "$KEEP_ENV" = "1" ]; then

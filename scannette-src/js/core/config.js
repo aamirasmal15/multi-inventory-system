@@ -3,6 +3,16 @@
    ========================================================================== */
 
 const API = ""; // app servie à la RACINE du sous-domaine Scannette ; nginx proxifie /api /accounts /static /media vers InvenTree en same-origin
+
+/* Base de déploiement, détectée à l'exécution : "/" sur l'hôte Scannette dédié,
+   "/scannette/" quand l'app est montée sous l'origine InvenTree
+   (inventaire[-x].eirspace.fr/scannette/ — le frontal strippe le préfixe).
+   Porte les chemins PROPRES à l'app : wasm, retour SSO, replaceState, logout.
+   Les appels /api /plugin /media restent sur API ("") : natifs sur les 2 origines. */
+const BASE = location.pathname.startsWith("/scannette/") ? "/scannette/" : "/";
+/* Origine partagée avec InvenTree : la session Django appartient alors à l'UI
+   web InvenTree, la Scannette ne doit pas la couper (voir auth/sso.js). */
+const SHARED_ORIGIN = BASE !== "/";
 /* ====== Personnalisation par asso : change UNIQUEMENT cette ligne ====== */
 const BRAND = "EIRSPACE"; // nom affiché (onglet + en-tête + login). Logos : voir LOGO_WHITE / LOGO_BLACK ci-dessous.
 

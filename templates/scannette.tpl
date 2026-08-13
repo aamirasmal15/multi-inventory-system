@@ -18,6 +18,10 @@ server {
     server_name _;
     resolver 127.0.0.11 valid=30s ipv6=off;
 
+    # Redirections internes en RELATIF : derrière le frontal (montage /scannette/
+    # avec strip du préfixe), une 301 absolue perdrait le préfixe ET le https.
+    absolute_redirect off;
+
     set $inv_upstream "__UPSTREAM__";
     set $inv_host     "__SCAN_HOST__";
 
@@ -37,9 +41,11 @@ server {
 
     # --- App Scannette servie UNIQUEMENT à la racine (index.html + css/ + js/) ---
     # try_files sert les vrais fichiers (css/styles.css, js/core/api.js, ...) et
-    # index.html pour "/". L'appli tourne toujours à la racine (boot.js remet
-    # l'URL à "/", retour SSO = /?sso=1) : aucune route profonde à servir, donc
-    # tout chemin inconnu (/web/login, ...) renvoie 404 au lieu du shell.
+    # index.html pour "/". L'appli tourne toujours à la base de son déploiement
+    # (boot.js remet l'URL à BASE, retour SSO = BASE?sso=1 ; ce vhost la sert à
+    # la racine, le montage /scannette/ du frontal STRIPPE le préfixe) : aucune
+    # route profonde à servir, donc tout chemin inconnu (/web/login, ...)
+    # renvoie 404 au lieu du shell.
     location / {
         root /usr/share/nginx/html;
         try_files $uri $uri/ =404;

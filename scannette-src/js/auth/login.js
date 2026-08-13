@@ -27,7 +27,7 @@ async function loginEirbConnect() {
     f.appendChild(i);
   };
   add("provider", "eirbconnect"); // = provider_id cote InvenTree (ne jamais renommer)
-  add("callback_url", "/?sso=1"); // retour same-origin marque (garde-fou cote boot)
+  add("callback_url", BASE + "?sso=1"); // retour same-origin marque (garde-fou cote boot), dans la base du deploiement
   add("process", "login");
   if (csrf) add("csrfmiddlewaretoken", csrf);
   document.body.appendChild(f);

@@ -65,21 +65,26 @@
       <i></i><i></i><i></i><i></i><i></i>
     </div>
     <h1 id="t404">Page introuvable</h1>
-    <p id="p404">Cette adresse ne correspond à rien&nbsp;: la Scannette vit à la racine.</p>
-    <a class="btn" href="/">
+    <p id="p404">Cette adresse ne correspond à rien dans la Scannette.</p>
+    <a class="btn" href="/" id="h404">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
       <span id="b404">Ouvrir la Scannette</span>
     </a>
     <div class="foot" id="f404">Une solution EirSpace conçue par Aamir ASMAL 🚀</div>
   </main>
 <script>
+  // montage /scannette/ (même origine qu'InvenTree) : le bouton reste dans le préfixe
+  (function(){
+    if (location.pathname.indexOf("/scannette/") === 0)
+      document.getElementById("h404").href = "/scannette/";
+  })();
   // page en français par défaut : on ne réécrit qu'en anglais
   (function(){
     if (window.PAGE_LANG !== "en") return;
     document.documentElement.lang = "en";
     document.title = "Page not found · Scannette";
     document.getElementById("t404").textContent = "Page not found";
-    document.getElementById("p404").textContent = "There's nothing at this address: the Scannette lives at the root.";
+    document.getElementById("p404").textContent = "There's nothing at this address in the Scannette.";
     document.getElementById("b404").textContent = "Open the Scannette";
     document.getElementById("f404").textContent = "An EirSpace solution designed by Aamir ASMAL 🚀";
   })();

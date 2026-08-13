@@ -76,7 +76,7 @@ async function initDetector() {
   if (!nativeDet && typeof ZXingWASM !== "undefined") {
     try {
       ZXingWASM.prepareZXingModule({
-        overrides: { locateFile: (p) => API + "/" + p },
+        overrides: { locateFile: (p) => BASE + p }, // wasm à la racine de l'app (BASE suit le montage /scannette/)
         fireImmediately: true,
       })
         .then(() => {

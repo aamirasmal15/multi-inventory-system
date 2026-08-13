@@ -27,14 +27,18 @@ async function trySsoBootstrap() {
     // DECOUPLAGE : on a le token -> on coupe la session Django partagee, sinon son
     // cookie (meme origine que la Scannette) lierait Scannette et InvenTree. Desormais la
     // Scannette ne marche QU'au token (Authorization: Token) -> les 2 sont independants.
-    try {
-      const csrf = getCookie("csrftoken");
-      await fetch(API + "/api/auth/v1/auth/session", {
-        method: "DELETE",
-        credentials: "same-origin",
-        headers: csrf ? { "X-CSRFToken": csrf } : {},
-      });
-    } catch (_) {}
+    // Sous l'origine partagee (montage /scannette/), cette session EST celle de l'UI
+    // web InvenTree : on la laisse vivre — l'app reste au token de toute facon.
+    if (!SHARED_ORIGIN) {
+      try {
+        const csrf = getCookie("csrftoken");
+        await fetch(API + "/api/auth/v1/auth/session", {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: csrf ? { "X-CSRFToken": csrf } : {},
+        });
+      } catch (_) {}
+    }
     return true;
   } catch (_) {
     return false;
@@ -78,20 +82,25 @@ function showPending() {
 
 /* ---- logout : coupe la session InvenTree (headless) + cookies Scannette ---- */
 async function ssoLogout() {
-  try {
-    await fetch(API + "/api/auth/v1/auth/session", { credentials: "same-origin" });
-  } catch (_) {}
-  const csrf = getCookie("csrftoken");
-  try {
-    await fetch(API + "/api/auth/v1/auth/session", {
-      method: "DELETE",
-      credentials: "same-origin",
-      headers: csrf ? { "X-CSRFToken": csrf } : {},
-    });
-  } catch (_) {} // 401 attendu (deconnecte) -> on ignore
+  // Hote dedie : la session Django n'appartient qu'a la Scannette -> on la coupe.
+  // Origine partagee (/scannette/) : elle peut porter une session InvenTree web
+  // ouverte a cote -> on n'y touche pas (systemes independants, cf. boot.js).
+  if (!SHARED_ORIGIN) {
+    try {
+      await fetch(API + "/api/auth/v1/auth/session", { credentials: "same-origin" });
+    } catch (_) {}
+    const csrf = getCookie("csrftoken");
+    try {
+      await fetch(API + "/api/auth/v1/auth/session", {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: csrf ? { "X-CSRFToken": csrf } : {},
+      });
+    } catch (_) {} // 401 attendu (deconnecte) -> on ignore
+  }
   delCookie("eir_token");
   delCookie("eir_user");
   TOKEN = "";
   USERNAME = "";
-  window.location.href = "/";
+  window.location.href = BASE;
 }

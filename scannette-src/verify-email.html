@@ -129,7 +129,14 @@
     // posé par le plugin E-mails n'est plus lu.
     var TO_INV = !/android|iphone|ipod|mobile/i.test(navigator.userAgent);
     var INV_URL = "";
-    if (TO_INV) {
+    // Montage /scannette/ (même origine qu'InvenTree) : la Scannette est sous
+    // le préfixe et l'inventaire à la racine de la même origine — pas de
+    // convention d'hôte à inverser, on répare juste les deux sorties.
+    var PREFIXED = location.pathname.indexOf("/scannette/") === 0;
+    if (PREFIXED) {
+      document.getElementById("openBtn").href = "/scannette/";
+      if (TO_INV) INV_URL = "/web/";
+    } else if (TO_INV) {
       var labels = location.hostname.split(".");
       if (labels[0] === "scannette" || labels[0].indexOf("scannette-") === 0) {
         labels[0] = "inventaire" + labels[0].slice("scannette".length);
