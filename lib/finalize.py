@@ -170,15 +170,23 @@ PERMS = ("view", "add", "change", "delete")
 def seed_group(api, name):
     group = f"membres_{name}"
 
-    # 1) le groupe existe-t-il déjà ?
+    # 1) le groupe existe-t-il déjà ? Le paramètre ?name= est IGNORÉ par l'API
+    # (constaté sur 1.4.2 et 1.5.0 : tous les groupes sont renvoyés) : sur une
+    # base qui a déjà des groupes (post-restore), prendre data[0] patchait les
+    # rulesets du mauvais groupe et membres_<nom> n'était jamais créé.
+    # -> re-filtrage local sur le nom exact, obligatoire.
     status, data = api.call("GET", f"/api/user/group/?name={group}")
     pk = None
-    if status == 200 and isinstance(data, list) and data:
-        pk = data[0].get("pk")
+    if status == 200 and isinstance(data, list):
+        results = data
     elif status == 200 and isinstance(data, dict):  # réponse paginée
         results = data.get("results") or []
-        if results:
-            pk = results[0].get("pk")
+    else:
+        results = []
+    for g in results:
+        if isinstance(g, dict) and g.get("name") == group:
+            pk = g.get("pk")
+            break
 
     # 2) sinon on le crée
     if pk is None:
