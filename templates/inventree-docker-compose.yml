@@ -11,17 +11,32 @@ services:
             - POSTGRES_DB=${INVENTREE_DB_NAME:?Missing INVENTREE_DB_NAME}
         volumes:
             - ${INVENTREE_EXT_VOLUME:?Missing INVENTREE_EXT_VOLUME}:/var/lib/postgresql/data/:z
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
         restart: unless-stopped
 
+    # PAS de env_file ici, exprès : Redis n'utilise AUCUNE variable du .env, et le
+    # déclarer ferait recréer ce conteneur à chaque modification du .env (le script
+    # en fait plusieurs en plein déploiement : SMTP, plugins...). Pendant la
+    # recréation, le nom "inventree-cache" disparaît du DNS Docker -> erreurs
+    # machine_registry "Name or service not known" au boot du serveur (2026-08-12).
     inventree-cache:
         image: redis:7-alpine
         container_name: __NAME__-cache
-        env_file:
-            - .env
         expose:
             - ${INVENTREE_CACHE_PORT:-6379}
         volumes:
             - ${INVENTREE_EXT_VOLUME}/redis:/data
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
         restart: always
 
     inventree-server:
@@ -29,9 +44,14 @@ services:
         container_name: __NAME__-server
         expose:
             - ${INVENTREE_WEB_PORT:-8000}
+        # service_healthy (pas juste started) : le serveur ne démarre qu'avec un
+        # Redis qui répond à PING et un Postgres prêt. Vaut aussi pour le
+        # 'docker compose run ... invoke update' de create-asso.sh.
         depends_on:
-            - inventree-db
-            - inventree-cache
+            inventree-db:
+                condition: service_healthy
+            inventree-cache:
+                condition: service_healthy
         env_file:
             - .env
         environment:

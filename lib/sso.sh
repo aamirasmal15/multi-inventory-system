@@ -488,7 +488,11 @@ setup_asso_sso() {
   dex_render_and_reload
   # 3) bloc OIDC InvenTree -> Dex
   inventree_inject_sso "$name" "$host" "$cfg" "$secret"
-  # 4) recrée serveur + worker : ils relisent le .env (SMTP) ET config.yaml (SSO), sans toucher db/cache
+  # 4) recrée serveur + worker : ils relisent le .env (SMTP) ET config.yaml (SSO).
+  #    db/cache ne bougent pas : leur config ne dépend pas du .env (le cache n'a
+  #    volontairement PAS de env_file, cf. templates/inventree-docker-compose.yml ;
+  #    sinon ce .env modifié le ferait recréer ici -> trou DNS "inventree-cache"
+  #    pendant que le serveur boote -> erreurs machine_registry).
   ( cd "$dir" && docker compose up -d --force-recreate inventree-server inventree-worker >/dev/null 2>&1 ) || true
   # 5) toggles SSO + email admin (base)
   inventree_post_db "$dir" "superadmin_$name" "${ADMIN_EMAIL:-$SMTP_SENDER}"
