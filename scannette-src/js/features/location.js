@@ -71,11 +71,13 @@ function renderLocationItems(locName, items) {
     row.dataset.name = ((pd.full_name || pd.name || "") + " " + (pd.IPN || "")).toLowerCase();
     row.innerHTML =
       (thumb
-        ? '<img class="lthumb" src="' +
+        ? '<img class="lthumb zoomable" src="' +
           esc(mediaUrl(thumb)) +
           '" data-full="' +
           esc(mediaUrl(pd.image || "")) +
-          '" alt="" onerror="thumbErr(this,\'loc\')">'
+          '" alt="' +
+          esc(pd.full_name || pd.name || "") +
+          '" onerror="thumbErr(this,\'loc\')" onclick="openLightbox(this)">'
         : locBox().outerHTML) +
       '<div class="lmain"><div class="t">' +
       esc(pd.full_name || pd.name || t("item_n", it.pk)) +

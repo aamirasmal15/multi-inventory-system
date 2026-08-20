@@ -286,6 +286,76 @@ function thumbErr(img, kind) {
   }
   img.replaceWith(kind === "sr" ? srBox() : kind === "loc" ? locBox() : boxIcon());
 }
+/* tap sur une vignette .zoomable : la photo de l'article en grand, dans un voile
+   plein écran (cf. .lightbox-ov). La vignette (déjà en cache) s'affiche tout de
+   suite, remplacée par l'image pleine taille (data-full) dès qu'elle est chargée.
+   Fermeture : ×, Échap ou un tap n'importe où — même sortie animée qu'appConfirm. */
+function openLightbox(img) {
+  // pas de source, ou lightbox déjà ouvert (2e tap d'un double-tap) : rien à faire
+  if (!img.src || document.querySelector(".lightbox-ov")) return;
+  const ov = document.createElement("div");
+  ov.className = "lightbox-ov";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
+  if (img.alt) ov.setAttribute("aria-label", img.alt);
+  const big = document.createElement("img");
+  big.src = img.src;
+  big.alt = img.alt || "";
+  // vignette ET pleine taille en échec (fichier supprimé...) : on referme
+  big.onerror = () => done();
+  // pleine taille chargée en coulisses ; en cas d'échec la vignette reste.
+  // data-full est relatif alors que img.src est résolu par le navigateur :
+  // on absolutise avant de comparer, sinon on rechargerait l'image déjà affichée
+  const full = img.dataset.full ? new URL(img.dataset.full, location.href).href : "";
+  if (full && full !== img.src) {
+    const hi = new Image();
+    hi.onload = () => (big.src = full);
+    hi.src = full;
+  }
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "lightbox-x";
+  x.setAttribute("aria-label", t("close"));
+  x.textContent = "×";
+  ov.append(x, big);
+  if (img.alt) {
+    const cap = document.createElement("div");
+    cap.className = "lightbox-cap";
+    cap.textContent = img.alt;
+    ov.appendChild(cap);
+  }
+  const onKey = (e) => {
+    // une modale de confirmation ouverte par-dessus (z-index 220) garde la main
+    // sur Échap — sinon un seul appui fermait les deux et laissait le scroll
+    // de la page bloqué (restaurations d'overflow croisées)
+    if (e.key === "Escape" && !document.querySelector(".modal-ov:not(.closing)")) done();
+  };
+  // scroll de la page bloqué tant que le lightbox est ouvert
+  const prevOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  const done = () => {
+    document.removeEventListener("keydown", onKey);
+    document.body.style.overflow = prevOverflow;
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 180);
+  };
+  // tap n'importe où = fermer — mais pas dans les 300 ms suivant l'ouverture :
+  // le 2e tap d'un double-tap réflexe refermait ce qu'il venait d'ouvrir
+  const openedAt = performance.now();
+  ov.addEventListener("click", () => {
+    if (performance.now() - openedAt > 300) done();
+  });
+  x.addEventListener("click", (e) => {
+    e.stopPropagation();
+    done();
+  });
+  // iOS : overflow:hidden ne bloque pas le défilement au doigt — même garde
+  // que le picker (cf. events.js « empêche le fond de défiler »)
+  ov.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(ov);
+  x.focus();
+}
 function fmt(n) {
   n = Number(n);
   return Number.isInteger(n) ? n.toString() : n.toFixed(2).replace(/\.?0+$/, "");

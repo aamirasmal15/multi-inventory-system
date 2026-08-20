@@ -312,6 +312,19 @@ textarea{resize:none;min-height:56px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
 .btn-danger{background:var(--red);color:#fff}
 
+/* lightbox photo d'article : ouvert par openLightbox (helpers.js) au tap sur une
+   vignette .zoomable. Voile plus sombre que les modales (surface de visionnage),
+   image encadrée comme les vignettes (.thumb), un tap n'importe où referme.
+   z-index 200 : au-dessus des pickers (50), sous la modale de confirmation (220). */
+.zoomable{cursor:zoom-in}
+.lightbox-ov{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;z-index:200;animation:ovIn .18s ease;cursor:zoom-out}
+.lightbox-ov img{width:min(100%,500px);max-height:72vh;max-height:72dvh;object-fit:contain;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);box-shadow:var(--shadow-md);animation:pkSheetIn .24s var(--ease-spring)}
+.lightbox-cap{max-width:min(100%,500px);color:#fff;font-size:13.5px;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.lightbox-x{position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:max(12px,calc(50% - 270px + 12px));width:38px;height:38px;padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:24px;line-height:1;cursor:pointer}
+.lightbox-x:active{transform:scale(.92)}
+.lightbox-ov.closing{animation:pkFadeOut .16s ease forwards;pointer-events:none}
+.lightbox-ov.closing img{animation:pkSheetOut .16s ease forwards}
+
 /* formulaires prêt / réservation */
 .field-hint{font-size:11.5px;color:var(--muted);margin:6px 2px 0}
 .field-warn{display:none;align-items:flex-start;gap:6px;font-size:12.5px;color:var(--amber);background:var(--amber-light);border:1px solid var(--amber);border-radius:var(--radius);padding:8px 11px;margin:8px 0 0}

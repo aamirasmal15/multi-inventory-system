@@ -128,11 +128,13 @@ async function offerAddStock(part, opts) {
   const hint = depleted ? t("sb_hint_out", esc(PENDING_CODE)) : t("sb_hint_add");
   ban.innerHTML =
     (thumb
-      ? '<img class="thumb" src="' +
+      ? '<img class="thumb zoomable" src="' +
         esc(mediaUrl(thumb)) +
         '" data-full="' +
         esc(mediaUrl(part.image || "")) +
-        '" alt="" onerror="thumbErr(this)">'
+        '" alt="' +
+        esc(part.name || "") +
+        '" onerror="thumbErr(this)" onclick="openLightbox(this)">'
       : boxIcon().outerHTML) +
     '<div style="min-width:0;flex:1">' +
     badge +

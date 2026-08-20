@@ -740,8 +740,9 @@ function renderMiniHead(el, it) {
   const thumb = pd.thumbnail || pd.image;
   el.innerHTML =
     (thumb
-      ? '<img class="thumb" src="' + esc(mediaUrl(thumb)) + '" data-full="' +
-        esc(mediaUrl(pd.image || "")) + '" alt="" onerror="thumbErr(this)">'
+      ? '<img class="thumb zoomable" src="' + esc(mediaUrl(thumb)) + '" data-full="' +
+        esc(mediaUrl(pd.image || "")) + '" alt="' + esc(pd.full_name || pd.name || "") +
+        '" onerror="thumbErr(this)" onclick="openLightbox(this)">'
       : boxIcon().outerHTML) +
     '<div style="min-width:0"><p class="name">' + esc(pd.full_name || pd.name || t("item_n", it.pk)) +
     '</p><div class="sub">' +
