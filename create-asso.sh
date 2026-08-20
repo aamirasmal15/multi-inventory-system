@@ -81,36 +81,6 @@ case "${1:-}" in
     ;;
 esac
 
-# ====== Pré-vol sudo ======
-# Des étapes à mi-run passent par sudo (logos dans les static root, iptables et
-# unité systemd du clamp MSS, bloc SSO du config.yaml). Valider les droits AVANT
-# de rien créer : un échec sudo en cours de route laisse une asso à moitié
-# provisionnée, que la relance croit existante (.env orphelin).
-if [ "$(id -u)" = 0 ]; then
-  # Hôte administré en root sans sudo installé : les appels « sudo » en dur
-  # (hors helper _sudo) échoueraient à mi-run. En root, exécuter directement.
-  command -v sudo >/dev/null 2>&1 || sudo() { "$@"; }
-elif ! sudo -n true 2>/dev/null; then
-  if [ -t 0 ]; then
-    echo ">> Validation sudo (des étapes root arrivent en cours de run) :"
-    sudo -v || { echo "ERREUR : validation sudo échouée." >&2; exit 1; }
-  else
-    echo "ERREUR : ce script a besoin de sudo et aucun terminal n'est disponible" >&2
-    echo "         pour saisir le mot de passe. Relance-le dans un terminal interactif." >&2
-    exit 1
-  fi
-fi
-# Le ticket sudo expire (15 min par défaut) alors qu'un run dure plus longtemps
-# (invoke update, build de la Scannette, attente du venv) : sans entretien, le
-# premier sudo d'après l'expiration redemande le mot de passe — mort du script
-# en headless, soit précisément la panne à mi-course que le pré-vol évite.
-if [ "$(id -u)" != 0 ]; then
-  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || exit 0; sleep 60; done ) &
-  SUDO_KEEPALIVE_PID=$!
-  # Les enfants d'abord : tuer la boucle seule laisserait son « sleep » orphelin.
-  trap 'pkill -P "$SUDO_KEEPALIVE_PID" 2>/dev/null || true; kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true' EXIT
-fi
-
 # ====== Configuration ======
 # Domaine + version InvenTree épinglée : chargés depuis settings.env (demandés
 # au premier run). Un override d'environnement ponctuel reste respecté.
@@ -206,6 +176,36 @@ DB_PW="$(openssl rand -hex 16)"   # jamais montré à un humain : l'hex suffit
 DEPLOY_ROOT="${DEPLOY_ROOT:-$HOME/assos}"
 mkdir -p "$DEPLOY_ROOT"
 DIR="$DEPLOY_ROOT/$NAME"
+
+# ====== Pré-vol sudo ======
+# Des étapes à mi-run passent par sudo (logos dans les static root, iptables et
+# unité systemd du clamp MSS, bloc SSO du config.yaml). Valider les droits AVANT
+# de rien créer : un échec sudo en cours de route laisse une asso à moitié
+# provisionnée, que la relance croit existante (.env orphelin).
+if [ "$(id -u)" = 0 ]; then
+  # Hôte administré en root sans sudo installé : les appels « sudo » en dur
+  # (hors helper _sudo) échoueraient à mi-run. En root, exécuter directement.
+  command -v sudo >/dev/null 2>&1 || sudo() { "$@"; }
+elif ! sudo -n true 2>/dev/null; then
+  if [ -t 0 ]; then
+    echo ">> Validation sudo (des étapes root arrivent en cours de run) :"
+    sudo -v || { echo "ERREUR : validation sudo échouée." >&2; exit 1; }
+  else
+    echo "ERREUR : ce script a besoin de sudo et aucun terminal n'est disponible" >&2
+    echo "         pour saisir le mot de passe. Relance-le dans un terminal interactif." >&2
+    exit 1
+  fi
+fi
+# Le ticket sudo expire (15 min par défaut) alors qu'un run dure plus longtemps
+# (invoke update, build de la Scannette, attente du venv) : sans entretien, le
+# premier sudo d'après l'expiration redemande le mot de passe — mort du script
+# en headless, soit précisément la panne à mi-course que le pré-vol évite.
+if [ "$(id -u)" != 0 ]; then
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || exit 0; sleep 60; done ) &
+  SUDO_KEEPALIVE_PID=$!
+  # Les enfants d'abord : tuer la boucle seule laisserait son « sleep » orphelin.
+  trap 'pkill -P "$SUDO_KEEPALIVE_PID" 2>/dev/null || true; kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true' EXIT
+fi
 
 # Migration automatique d'une asso encore à l'ancien emplacement ~/<nom>/ :
 # on arrête ses conteneurs (ils retiennent les anciens chemins des volumes),
@@ -938,6 +938,29 @@ fi
 # un premier run interrompu laisse un .env orphelin qui, sans ce rattrapage,
 # ferait sauter groupe et réglages à toutes les relances — vu sur sandbox et
 # laruche). FORCE_SETTINGS=1 pour forcer sur une asso déjà finalisée.
+# Sonde d'état : le groupe seul ne prouve rien (il peut venir d'un dump restauré
+# ou avoir été créé à la main, comme finalize.py le conseille quand il échoue).
+# On exige AUSSI un témoin de réglage, sinon une asso jamais réglée passerait
+# pour finalisée et resterait figée en devise USD, sans rattrapage possible.
+asso_finalized() {
+  docker exec "$NAME-db" psql -U "$NAME" -d "$NAME" -tAc \
+    "SELECT 1 FROM auth_group g, common_inventreesetting s
+      WHERE g.name = 'membres_$NAME'
+        AND s.key = 'INVENTREE_DEFAULT_CURRENCY' AND s.value = 'EUR' LIMIT 1;" 2>/dev/null \
+    | grep -q 1
+}
+
+# Asso déjà finalisée par une version antérieure du script (ou restaurée d'un
+# backup qui ne contenait pas encore le marqueur) : on la reconnaît et on pose
+# le marqueur SANS rejouer la finalisation — sinon ce run réimposerait les 17
+# réglages par-dessus les choix faits dans l'UI et remettrait à plat les rôles
+# du groupe. FORCE_SETTINGS=1 reste le moyen explicite de forcer.
+if [ "$KEEP_ENV" = "1" ] && [ ! -f "$DIR/.provisioned" ] && [ "${FORCE_SETTINGS:-0}" != "1" ] \
+   && asso_finalized; then
+  touch "$DIR/.provisioned"
+  echo ">> Asso déjà finalisée (groupe et réglages en place) : marqueur posé, rien retouché."
+fi
+
 if [ "$KEEP_ENV" = "0" ] || [ ! -f "$DIR/.provisioned" ] || [ "${FORCE_SETTINGS:-0}" = "1" ]; then
   # Le bloc SSO vient de recréer le serveur (sso.sh : up -d --force-recreate) :
   # docker inspect ne publie pas forcément son IP dans la seconde qui suit.
@@ -962,7 +985,8 @@ if [ "$KEEP_ENV" = "0" ] || [ ! -f "$DIR/.provisioned" ] || [ "${FORCE_SETTINGS:
       --password="$(sed -n 's/^INVENTREE_ADMIN_PASSWORD=//p' .env | head -1)" \
       --name="$NAME" \
       --settings-file="${SETTINGS_CONF:-$SCRIPT_DIR/inventree-settings.conf}" \
-      || echo "!! Finalisation en échec : réglages à vérifier dans l'UI."
+      && FIN_OK=1 \
+      || { FIN_OK=0; echo "!! Finalisation en échec : réglages à vérifier dans l'UI."; }
   else
     echo "!! lib/finalize.py ou python3 introuvable : finalisation sautée (à faire dans l'UI)."
   fi
@@ -970,17 +994,16 @@ else
   echo ">> Finalisation InvenTree : asso existante -> réglages non retouchés (FORCE_SETTINGS=1 pour forcer)."
 fi
 
-# Le marqueur .provisioned atteste une finalisation VÉRIFIÉE (groupe présent en
-# base), pas un simple run complet : finalize.py est volontairement non bloquant
-# et renvoie toujours 0 (API pas prête après un recreate, login refusé... rien
-# ne remonte). Tant que le groupe manque, la garde ci-dessus fait retenter la
-# finalisation à chaque relance.
+# Le marqueur atteste que la finalisation DE CE RUN a abouti : code retour de
+# finalize.py (0 seulement si groupe ET réglages sont passés) confirmé par une
+# relecture en base. Sans les deux, pas de marqueur : la garde ci-dessus fera
+# retenter la finalisation à la prochaine relance plutôt que de figer une asso
+# incomplète.
 if [ ! -f "$DIR/.provisioned" ]; then
-  if docker exec "$NAME-db" psql -U "$NAME" -d "$NAME" -tAc \
-       "SELECT 1 FROM auth_group WHERE name='membres_$NAME' LIMIT 1;" 2>/dev/null | grep -q 1; then
+  if [ "${FIN_OK:-0}" = "1" ] && asso_finalized; then
     touch "$DIR/.provisioned"
   else
-    echo "!! Finalisation incomplète : groupe membres_$NAME absent en base."
+    echo "!! Finalisation incomplète (groupe ou réglages manquants sur $NAME)."
     echo "!!   Elle sera retentée automatiquement à la prochaine relance du script."
   fi
 fi
@@ -1088,20 +1111,13 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
     if [ "$PLG_NEED" != "1" ]; then
       echo ">> Plugin Prêts v${PLG_CUR_VER:-?} : déjà actif et intégrations en place, rien à faire."
     else
-      echo ">> Plugin Prêts : (ré)activation des intégrations globales + du plugin ..."
-      for _k in ENABLE_PLUGINS_APP ENABLE_PLUGINS_URL ENABLE_PLUGINS_SCHEDULE ENABLE_PLUGINS_INTERFACE; do
-        curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-          -d '{"value":"True"}' "$API/api/settings/global/$_k/"
-      done
-      curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-        -d '{"active":true}' "$API/api/plugins/prets/activate/"
       # Activer un plugin « app » recharge le serveur : pendant cette fenêtre
       # l'API répond 503, que « curl -s » avale sans bruit — les réglages posés
       # juste après étaient perdus DÉFINITIVEMENT (au run suivant le plugin est
       # déjà actif : on ne repasse plus jamais ici). Vu sur sandbox. Sonder le
       # retour de l'API ne suffit pas : la première sonde peut répondre 200
-      # depuis l'ancien worker, avant que le reload n'ait coupé. Tout ce qui
-      # suit passe donc par un retry sur la requête elle-même.
+      # depuis l'ancien worker, avant que le reload n'ait coupé — c'est donc la
+      # requête elle-même qui est retentée, activation du plugin comprise.
       api_retry() {   # <méthode> <chemin> [corps-json] -> corps sur stdout ; 1 si abandon
         local _m="$1" _p="$2" _b="${3:-}" _out _rc _i
         for _i in $(seq 1 60); do
@@ -1114,10 +1130,28 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
           fi
           _rc="$(printf '%s\n' "$_out" | tail -n1)"
           if [ "$_rc" = "200" ]; then printf '%s\n' "$_out" | sed '$d'; return 0; fi
+          # Seul le transitoire mérite d'être retenté : pas de réponse (000, le
+          # serveur recharge), 5xx, 408, 429. Un 4xx est un refus stable (clé
+          # renommée, token rejeté) — insister brûlerait 5 min en silence.
+          case "$_rc" in
+            000|""|5??|408|429) : ;;
+            *) echo "!!   $_m $_p : HTTP $_rc (refus définitif, pas de retry)."; return 1 ;;
+          esac
+          [ $(( _i % 12 )) -eq 0 ] && echo ">>   API indisponible depuis $(( _i * 5 )) s, on patiente ($_m $_p)..."
           sleep 5
         done
+        echo "!!   $_m $_p : API toujours indisponible après 5 min."
         return 1
       }
+      echo ">> Plugin Prêts : (ré)activation des intégrations globales + du plugin ..."
+      # Ces 5 requêtes sont celles qui DÉCLENCHENT le rechargement : elles aussi
+      # doivent survivre à un 503, sinon le plugin ressort inactif en silence.
+      for _k in ENABLE_PLUGINS_APP ENABLE_PLUGINS_URL ENABLE_PLUGINS_SCHEDULE ENABLE_PLUGINS_INTERFACE; do
+        api_retry PATCH "/api/settings/global/$_k/" '{"value":"True"}' >/dev/null \
+          || echo "!!   Intégration $_k non activée : à cocher dans Réglages > Plugins."
+      done
+      api_retry PATCH "/api/plugins/prets/activate/" '{"active":true}' >/dev/null \
+        || echo "!!   Activation du plugin Prêts non confirmée : à vérifier dans Réglages > Plugins."
       # Titre d'instance = préfixe des sujets d'e-mails de notification et titre
       # d'onglet. Posé seulement s'il vaut encore le défaut « InvenTree ».
       INST_TITLE="${BRAND_NAME:-$(printf '%s' "$NAME" | tr '[:lower:]' '[:upper:]')}"

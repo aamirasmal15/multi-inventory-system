@@ -20,7 +20,11 @@ Se connecte avec le compte admin (créé par create-asso.sh), puis :
      InvenTree ; couvre le cas où le plugin serait désactivé)
 
 Zéro dépendance (stdlib uniquement). Zéro exception non gérée : chaque étape
-affiche OK ou un warning et on continue. Code retour toujours 0.
+affiche OK ou un warning et on continue. Le code retour, lui, EST significatif :
+0 = finalisation aboutie, != 0 = étape structurelle ratée (API injoignable,
+login refusé, groupe non créé, aucun réglage posé). create-asso.sh s'en sert
+pour décider s'il pose le marqueur .provisioned ; sans cela un échec passait
+inaperçu et l'asso restait figée sans groupe ni réglages.
 
 --url doit viser l'instance EN DIRECT (IP du conteneur sur le réseau Docker),
 jamais le domaine public : celui-ci passe par Cloudflare, qui depuis le serveur
@@ -162,6 +166,10 @@ def apply_settings(api, pairs):
         print(f"{KO}  -> à poser à la main dans Admin Center > System Settings.")
     if len(fails) < len(pairs):
         print(f"{OK}{len(pairs) - len(fails)}/{len(pairs)} réglages appliqués (modifiables dans l'UI).")
+        return True
+    # Aucun réglage posé : l'API a refusé le lot entier (serveur en cours de
+    # rechargement, token invalide...), ce n'est pas une clé renommée isolée.
+    return False
 
 
 # 'admin' est volontairement inclus mais DORMANT : sans is_staff sur le compte,
@@ -200,7 +208,7 @@ def seed_group(api, name):
         else:
             print(f"{KO}Groupe '{group}' non créé (HTTP {status}) : {data}")
             print(f"{KO}  -> à créer à la main dans Admin Center > Groups.")
-            return
+            return False
 
     # 3) récupérer le détail avec les rôles
     status, detail = api.call("GET", f"/api/user/group/{pk}/?role_detail=true")
@@ -212,7 +220,7 @@ def seed_group(api, name):
         print(f"{OK}Groupe '{group}' créé, mais rôles non exposés par l'API sur cette version.")
         print(f"{KO}  -> coche les rôles à la main : Admin Center > Groups > {group}")
         print(f"{KO}     (admin, part, part categories, stock items, stock locations : view/add/change/delete)")
-        return
+        return False
 
     # 4) mettre à jour les rôles voulus. Deux formats possibles selon la version :
     #    a) chaque rôle a un pk -> PATCH /api/user/ruleset/<pk>/
@@ -238,14 +246,16 @@ def seed_group(api, name):
 
     if patched_via_ruleset == len(ROLES):
         print(f"{OK}Groupe '{group}' prêt ({len(ROLES)} rôles en view/add/change/delete).")
-        return
+        return True
 
     status, data = api.call("PATCH", f"/api/user/group/{pk}/", {"roles": roles})
     if status == 200:
         print(f"{OK}Groupe '{group}' prêt ({len(ROLES)} rôles en view/add/change/delete).")
+        return True
     else:
         print(f"{OK}Groupe '{group}' créé, mais permissions non posées via l'API (HTTP {status}).")
         print(f"{KO}  -> coche les rôles à la main : Admin Center > Groups > {group}")
+        return False
 
 
 def disable_spotlight(api):
@@ -304,16 +314,20 @@ def main():
 
     if not api.wait_ready():
         print(f"{KO}L'API {args.url} ne répond pas, finalisation sautée (FORCE_SETTINGS=1 pour retenter).")
-        return 0
+        return 2
     if not api.login():
-        return 0   # login() a déjà expliqué la cause (identifiants vs CDN/proxy)
+        return 3   # login() a déjà expliqué la cause (identifiants vs CDN/proxy)
 
     pairs = parse_settings_file(args.settings_file, args.name)
-    if pairs:
-        apply_settings(api, pairs)
-    seed_group(api, args.name)
+    settings_ok = apply_settings(api, pairs) if pairs else True
+    group_ok = seed_group(api, args.name)
+    # Confort, jamais bloquants : leur échec ne remet pas l'asso en cause.
     disable_spotlight(api)
     set_date_format(api)
+    if not group_ok:
+        return 4
+    if not settings_ok:
+        return 5
     return 0
 
 
