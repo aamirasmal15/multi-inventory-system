@@ -81,6 +81,36 @@ case "${1:-}" in
     ;;
 esac
 
+# ====== Pré-vol sudo ======
+# Des étapes à mi-run passent par sudo (logos dans les static root, iptables et
+# unité systemd du clamp MSS, bloc SSO du config.yaml). Valider les droits AVANT
+# de rien créer : un échec sudo en cours de route laisse une asso à moitié
+# provisionnée, que la relance croit existante (.env orphelin).
+if [ "$(id -u)" = 0 ]; then
+  # Hôte administré en root sans sudo installé : les appels « sudo » en dur
+  # (hors helper _sudo) échoueraient à mi-run. En root, exécuter directement.
+  command -v sudo >/dev/null 2>&1 || sudo() { "$@"; }
+elif ! sudo -n true 2>/dev/null; then
+  if [ -t 0 ]; then
+    echo ">> Validation sudo (des étapes root arrivent en cours de run) :"
+    sudo -v || { echo "ERREUR : validation sudo échouée." >&2; exit 1; }
+  else
+    echo "ERREUR : ce script a besoin de sudo et aucun terminal n'est disponible" >&2
+    echo "         pour saisir le mot de passe. Relance-le dans un terminal interactif." >&2
+    exit 1
+  fi
+fi
+# Le ticket sudo expire (15 min par défaut) alors qu'un run dure plus longtemps
+# (invoke update, build de la Scannette, attente du venv) : sans entretien, le
+# premier sudo d'après l'expiration redemande le mot de passe — mort du script
+# en headless, soit précisément la panne à mi-course que le pré-vol évite.
+if [ "$(id -u)" != 0 ]; then
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || exit 0; sleep 60; done ) &
+  SUDO_KEEPALIVE_PID=$!
+  # Les enfants d'abord : tuer la boucle seule laisserait son « sleep » orphelin.
+  trap 'pkill -P "$SUDO_KEEPALIVE_PID" 2>/dev/null || true; kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true' EXIT
+fi
+
 # ====== Configuration ======
 # Domaine + version InvenTree épinglée : chargés depuis settings.env (demandés
 # au premier run). Un override d'environnement ponctuel reste respecté.
@@ -646,8 +676,13 @@ echo ">> invoke update (création/màj de la base, quelques minutes)..."
 docker compose run --rm -T inventree-server invoke update
 
 # Un seul background worker, sinon chaque worker supplémentaire coûte ~1 Go de RAM.
+# Via le conteneur : config.yaml appartient à root, et un sudo à mi-run tuerait
+# les relances sans TTY. (INVENTREE_BACKGROUND_WORKERS=1 du .env prime déjà,
+# ceci aligne le config.yaml par cohérence.)
 echo ">> Réglage background workers=1"
-sudo sed -i '/^background:/,/^[^[:space:]]/ s/^\(\s*workers:\).*/\1 1/' "$DIR/$NAME-data/config.yaml"
+docker compose run --rm -T --no-deps --entrypoint sed inventree-server \
+  -i '/^background:/,/^[^[:space:]]/ s/^\([[:space:]]*workers:\).*/\1 1/' \
+  /home/inventree/data/config.yaml
 
 # ====== Démarrage InvenTree ======
 # (Le bloc SSO du config.yaml est injecté plus bas par setup_asso_sso, qui relance proprement.)
@@ -899,25 +934,55 @@ fi
 
 # ====== Finalisation InvenTree (réglages + groupe membre) : non bloquant ======
 # Via l'API REST avec le compte admin (lib/finalize.py, stdlib uniquement).
-# À la création seulement (FORCE_SETTINGS=1 pour forcer sur une asso existante).
-if [ "$KEEP_ENV" = "0" ] || [ "${FORCE_SETTINGS:-0}" = "1" ]; then
-  FIN_API="$(api_url || true)"
+# À la création, ou tant qu'aucun run n'est arrivé au bout (.provisioned absent :
+# un premier run interrompu laisse un .env orphelin qui, sans ce rattrapage,
+# ferait sauter groupe et réglages à toutes les relances — vu sur sandbox et
+# laruche). FORCE_SETTINGS=1 pour forcer sur une asso déjà finalisée.
+if [ "$KEEP_ENV" = "0" ] || [ ! -f "$DIR/.provisioned" ] || [ "${FORCE_SETTINGS:-0}" = "1" ]; then
+  # Le bloc SSO vient de recréer le serveur (sso.sh : up -d --force-recreate) :
+  # docker inspect ne publie pas forcément son IP dans la seconde qui suit.
+  # Réessayer au lieu de sauter la finalisation — vu sur laruche, sautée en
+  # silence juste après le recreate, laissant l'asso sans groupe ni réglages.
+  FIN_API=""
+  for _fin_try in $(seq 1 12); do
+    FIN_API="$(api_url || true)"
+    [ -n "$FIN_API" ] && break
+    sleep 5
+  done
   if [ -z "$FIN_API" ]; then
     echo "!! Conteneur $NAME-server introuvable : finalisation sautée (relance le script)."
   elif [ -f "$SCRIPT_DIR/lib/finalize.py" ] && command -v python3 >/dev/null 2>&1; then
     echo ">> Finalisation InvenTree via l'API (réglages + groupe membre + spotlight) ..."
+    # Forme --opt=valeur OBLIGATOIRE : gen_admin_pw peut produire un mot de
+    # passe commençant par « - », qu'argparse prendrait pour une option (erreur
+    # d'usage, finalisation avortée avant la moindre requête — cas laruche).
     python3 "$SCRIPT_DIR/lib/finalize.py" \
-      --url "$FIN_API" \
-      --user "$(sed -n 's/^INVENTREE_ADMIN_USER=//p' .env | head -1)" \
-      --password "$(sed -n 's/^INVENTREE_ADMIN_PASSWORD=//p' .env | head -1)" \
-      --name "$NAME" \
-      --settings-file "${SETTINGS_CONF:-$SCRIPT_DIR/inventree-settings.conf}" \
+      --url="$FIN_API" \
+      --user="$(sed -n 's/^INVENTREE_ADMIN_USER=//p' .env | head -1)" \
+      --password="$(sed -n 's/^INVENTREE_ADMIN_PASSWORD=//p' .env | head -1)" \
+      --name="$NAME" \
+      --settings-file="${SETTINGS_CONF:-$SCRIPT_DIR/inventree-settings.conf}" \
       || echo "!! Finalisation en échec : réglages à vérifier dans l'UI."
   else
     echo "!! lib/finalize.py ou python3 introuvable : finalisation sautée (à faire dans l'UI)."
   fi
 else
   echo ">> Finalisation InvenTree : asso existante -> réglages non retouchés (FORCE_SETTINGS=1 pour forcer)."
+fi
+
+# Le marqueur .provisioned atteste une finalisation VÉRIFIÉE (groupe présent en
+# base), pas un simple run complet : finalize.py est volontairement non bloquant
+# et renvoie toujours 0 (API pas prête après un recreate, login refusé... rien
+# ne remonte). Tant que le groupe manque, la garde ci-dessus fait retenter la
+# finalisation à chaque relance.
+if [ ! -f "$DIR/.provisioned" ]; then
+  if docker exec "$NAME-db" psql -U "$NAME" -d "$NAME" -tAc \
+       "SELECT 1 FROM auth_group WHERE name='membres_$NAME' LIMIT 1;" 2>/dev/null | grep -q 1; then
+    touch "$DIR/.provisioned"
+  else
+    echo "!! Finalisation incomplète : groupe membres_$NAME absent en base."
+    echo "!!   Elle sera retentée automatiquement à la prochaine relance du script."
+  fi
 fi
 
 # ====== Plugin Prêts (plugins/inventree-prets) : emprunts & réservations ======
@@ -1030,14 +1095,40 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
       done
       curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
         -d '{"active":true}' "$API/api/plugins/prets/activate/"
+      # Activer un plugin « app » recharge le serveur : pendant cette fenêtre
+      # l'API répond 503, que « curl -s » avale sans bruit — les réglages posés
+      # juste après étaient perdus DÉFINITIVEMENT (au run suivant le plugin est
+      # déjà actif : on ne repasse plus jamais ici). Vu sur sandbox. Sonder le
+      # retour de l'API ne suffit pas : la première sonde peut répondre 200
+      # depuis l'ancien worker, avant que le reload n'ait coupé. Tout ce qui
+      # suit passe donc par un retry sur la requête elle-même.
+      api_retry() {   # <méthode> <chemin> [corps-json] -> corps sur stdout ; 1 si abandon
+        local _m="$1" _p="$2" _b="${3:-}" _out _rc _i
+        for _i in $(seq 1 60); do
+          if [ -n "$_b" ]; then
+            _out="$(curl -s -w '\n%{http_code}' -X "$_m" -H "Authorization: Token $PLG_TOK" \
+              -H "Content-Type: application/json" -d "$_b" "$API$_p" 2>/dev/null || true)"
+          else
+            _out="$(curl -s -w '\n%{http_code}' -X "$_m" -H "Authorization: Token $PLG_TOK" \
+              "$API$_p" 2>/dev/null || true)"
+          fi
+          _rc="$(printf '%s\n' "$_out" | tail -n1)"
+          if [ "$_rc" = "200" ]; then printf '%s\n' "$_out" | sed '$d'; return 0; fi
+          sleep 5
+        done
+        return 1
+      }
       # Titre d'instance = préfixe des sujets d'e-mails de notification et titre
       # d'onglet. Posé seulement s'il vaut encore le défaut « InvenTree ».
       INST_TITLE="${BRAND_NAME:-$(printf '%s' "$NAME" | tr '[:lower:]' '[:upper:]')}"
-      INST_CUR="$(curl -s -H "Authorization: Token $PLG_TOK" "$API/api/settings/global/INVENTREE_INSTANCE/" \
-        | sed -n 's/.*"value":"\([^"]*\)".*/\1/p' || true)"
-      if [ "$INST_CUR" = "InvenTree" ]; then
-        curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-          -d "{\"value\":\"$INST_TITLE\"}" "$API/api/settings/global/INVENTREE_INSTANCE/"
+      if INST_BODY="$(api_retry GET "/api/settings/global/INVENTREE_INSTANCE/")"; then
+        INST_CUR="$(printf '%s' "$INST_BODY" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p' || true)"
+        if [ "$INST_CUR" = "InvenTree" ]; then
+          api_retry PATCH "/api/settings/global/INVENTREE_INSTANCE/" "{\"value\":\"$INST_TITLE\"}" >/dev/null \
+            || echo "!!   Titre d'instance non posé : à régler dans l'UI (Réglages > Serveur)."
+        fi
+      else
+        echo "!!   API pas revenue après l'activation du plugin : titre d'instance non posé."
       fi
       # Défauts posés à la première install seulement : noms complets affichés
       # (DISPLAY_FULL_NAMES) et purge du suivi de stock à 1 an. L'historique des
@@ -1045,8 +1136,8 @@ if [ "${SKIP_PRETS_PLUGIN:-0}" != "1" ] && [ -d "$PLUGIN_SRC" ]; then
       # défaut ON). Réservations et champ « pour l'asso » restent OFF.
       if [ "$PLG_FRESH" = "1" ]; then
         for _kv in "DISPLAY_FULL_NAMES:True" "STOCK_TRACKING_DELETE_OLD_ENTRIES:True"; do
-          curl -s -o /dev/null -X PATCH -H "Authorization: Token $PLG_TOK" -H "Content-Type: application/json" \
-            -d "{\"value\":\"${_kv#*:}\"}" "$API/api/settings/global/${_kv%%:*}/"
+          api_retry PATCH "/api/settings/global/${_kv%%:*}/" "{\"value\":\"${_kv#*:}\"}" >/dev/null \
+            || echo "!!   Réglage ${_kv%%:*} non posé : à vérifier dans l'UI."
         done
         echo ">>   Défauts posés : noms complets affichés + purge du suivi de stock à 1 an."
       fi

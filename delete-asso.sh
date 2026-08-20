@@ -145,6 +145,9 @@ if [ -d "$DIR" ]; then
   TAR_ITEMS=()
   [ -d "$DIR/$NAME-data" ] && TAR_ITEMS+=("$NAME/$NAME-data")
   [ -f "$DIR/.env" ]       && TAR_ITEMS+=("$NAME/.env")
+  # Sans lui, une asso restaurée repasse pour « jamais finalisée » et le
+  # premier re-run réimpose les réglages par défaut sur ceux qu'on restaure.
+  [ -f "$DIR/.provisioned" ] && TAR_ITEMS+=("$NAME/.provisioned")
   if [ ${#TAR_ITEMS[@]} -gt 0 ]; then
     sudo tar czf "$BK" -C "$(dirname "$DIR")" "${TAR_ITEMS[@]}"
     if sudo chattr +i "$BK" 2>/dev/null; then

@@ -92,7 +92,11 @@ class Api:
         except Exception as e:  # réseau, TLS, JSON...
             return None, str(e)
 
-    def wait_ready(self, tries=12, delay=5):
+    # 5 min : la finalisation suit un recreate du serveur (bloc SSO), dont le
+    # boot dépasse largement une minute quand plusieurs instances tournent.
+    # Trop court, l'API n'est pas là, la finalisation est sautée en silence et
+    # l'asso reste sans groupe (vu sur laruche).
+    def wait_ready(self, tries=60, delay=5):
         """Attend que l'API réponde (serveur en cours de démarrage)."""
         for i in range(tries):
             status, _ = self.call("GET", "/api/")
