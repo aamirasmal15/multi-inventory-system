@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!--
+  Page 404 du Caddy frontal : servie pour tout HÔTE inconnu de la zone (faute de
+  frappe, asso supprimée, vieux lien). Rien à voir avec scannette-src/404.html,
+  qui couvre les chemins inconnus À L'INTÉRIEUR d'une Scannette.
+
+  create-asso.sh la copie telle quelle dans ~/front/pages/404.html, monté sur
+  /srv/pages du conteneur.
+
+  PAGE COMMUNE ET PUBLIQUE : une seule pour toutes les assos. Sur un hôte
+  inconnu, on ignore par construction à qui l'utilisateur voulait parler — donc
+  aucune asso nommée, aucun lien vers une instance (envoyer un membre de LA
+  RUCHE chez EIRSPACE n'aurait aucun sens) et aucune liste d'assos affichée
+  (n'importe qui sur Internet peut tomber ici). Autonome : aucun asset externe,
+  elle doit s'afficher même si toutes les instances sont à terre.
+-->
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>Adresse introuvable</title>
+<script>
+  // même mécanique de thème que la Scannette : cookie eir_theme si choix
+  // explicite, sinon le thème du système — posé avant le rendu (pas de flash)
+  (function(){
+    var m = document.cookie.match(/(?:^|; )eir_theme=([^;]+)/);
+    var t = m ? decodeURIComponent(m[1]) : (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", t);
+  })();
+  // langue : cookie eir_lang (posé par l'app selon le profil InvenTree), sinon
+  // navigateur — fr sinon anglais, même règle que core/i18n.js
+  window.PAGE_LANG = (function(){
+    var m = document.cookie.match(/(?:^|; )eir_lang=([^;]+)/);
+    var l = (m ? decodeURIComponent(m[1]) : (navigator.language || "fr")).toLowerCase().split("-")[0];
+    return l === "fr" ? "fr" : "en";
+  })();
+</script>
+<style>
+  /* Palette recopiée de la Scannette : la page ne dépend d'aucune feuille externe. */
+  :root{
+    --bg:#f1f3f5; --surface:#fff; --surface-2:#f8f9fa;
+    --border:#dee2e6; --text:#212529; --muted:#868e96;
+    --primary:#228be6; --primary-hover:#1c7ed6;
+    --shadow-md:0 1px 3px rgba(0,0,0,.05),0 10px 30px -12px rgba(0,0,0,.18);
+    --radius:8px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  [data-theme=dark]{
+    --bg:#1a1b1e; --surface:#25262b; --surface-2:#2c2e33;
+    --border:#373a40; --text:#e9ecef; --muted:#909296;
+    --primary:#4dabf7; --primary-hover:#74c0fc;
+    --shadow-md:0 10px 30px -12px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.5;display:grid;place-items:center;padding:24px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-md);max-width:400px;width:100%;padding:34px 28px calc(30px + env(safe-area-inset-bottom));text-align:center}
+  /* même code-barres « raté » que la 404 de la Scannette : famille visuelle */
+  .barcode{display:flex;justify-content:center;align-items:flex-end;gap:4px;height:74px;margin:2px auto 18px}
+  .barcode i{display:block;width:5px;height:100%;border-radius:2px;background:var(--text);opacity:.85}
+  .barcode i:nth-child(2n){width:3px;opacity:.45}
+  .barcode i:nth-child(3n){height:86%}
+  .barcode b{font-family:var(--mono);font-weight:700;font-size:44px;line-height:1;color:var(--primary);letter-spacing:2px;padding:0 2px}
+  h1{font-size:19px;margin:0 0 8px}
+  p{margin:0 0 14px;font-size:14px;color:var(--muted)}
+  .host{display:block;font-family:var(--mono);font-size:13px;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;margin:0 0 18px;overflow-wrap:anywhere}
+  /* Pas de bouton : sur un hôte inconnu, aucune instance n'est la « bonne ». */
+  .hint{margin:0;font-size:13px}
+  .foot{margin-top:22px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);opacity:.85}
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="barcode" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i>
+      <b>4</b><i></i><b>0</b><i></i><b>4</b>
+      <i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <h1 id="t404">Adresse introuvable</h1>
+    <p id="p404">Aucun service ne répond à cette adresse.</p>
+    <code class="host" id="host404"></code>
+    <p class="hint" id="i404">Vérifiez l'orthographe du sous-domaine, ou redemandez le lien exact à votre association.</p>
+    <!-- Volontairement sans mention d'un service : la plateforme n'héberge pas
+         que l'inventaire, et cette page couvre TOUT le domaine. -->
+    <div class="foot" id="f404">EirSpace</div>
+  </main>
+<script>
+  // L'hôte demandé, affiché tel quel : sur une faute de frappe, la coquille
+  // saute aux yeux (textContent, jamais innerHTML : l'hôte vient du client).
+  document.getElementById("host404").textContent = location.hostname + location.pathname;
+  // page en français par défaut : on ne réécrit qu'en anglais
+  (function(){
+    if (window.PAGE_LANG !== "en") return;
+    document.documentElement.lang = "en";
+    document.title = "Address not found";
+    document.getElementById("t404").textContent = "Address not found";
+    document.getElementById("p404").textContent = "No service answers at this address.";
+    document.getElementById("i404").textContent = "Check the spelling of the subdomain, or ask your association for the exact link.";
+    document.getElementById("f404").textContent = "EirSpace";
+  })();
+</script>
+</body>
+</html>

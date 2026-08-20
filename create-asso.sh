@@ -410,10 +410,11 @@ if [ ! -f "$FRONT/docker-compose.yml" ]; then
   touch "$FRONT/Caddyfile"
 fi
 
-# ====== Pages statiques du front (répertoire optionnel, conservé vide) ======
-# Historiquement l'interstitiel mobile ; le mount reste posé pour d'éventuelles
-# pages statiques futures. Un front déployé avant n'a pas le mount pages/ : on
-# l'injecte dans son docker-compose.yml (le force-recreate final le prendra).
+# ====== Pages statiques du front (/srv/pages) ======
+# Historiquement l'interstitiel mobile ; sert aujourd'hui la page 404 des hôtes
+# inconnus (écrite plus bas, avec son bloc Caddy fourre-tout). Un front déployé
+# avant n'a pas le mount pages/ : on l'injecte dans son docker-compose.yml
+# (le force-recreate final le prendra).
 mkdir -p "$FRONT/pages"
 if ! grep -q "pages:/srv/pages" "$FRONT/docker-compose.yml"; then
   echo ">> Front existant sans le mount pages/ : ajout dans $FRONT/docker-compose.yml"
@@ -859,6 +860,25 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
       | sed "s/__SCAN_HOST__/$SCAN_HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
   fi
 fi
+
+# ====== Bloc fourre-tout : hôte inconnu -> page 404 ======
+# Le wildcard DNS envoie TOUT *.<domaine> sur ce Caddy. Sans ce bloc, une
+# coquille d'URL ne matche aucun site et Caddy répond 200 avec un corps vide :
+# page blanche. Bloc unique (pas par asso) : retiré puis réécrit à chaque run
+# via son marqueur, comme les blocs d'asso, et jamais dupliqué. La page est
+# recopiée à chaque run pour que ses corrections se propagent. Elle est COMMUNE
+# à toutes les assos et publique : rien d'asso-spécifique dedans (sur un hôte
+# inconnu, on ne sait pas à qui l'utilisateur voulait parler).
+if [ -f "$TEMPLATES_DIR/front-404.html" ]; then
+  cp -f "$TEMPLATES_DIR/front-404.html" "$FRONT/pages/404.html"
+  awk 'BEGIN{RS="";ORS="\n\n"} $0 !~ /EIR-FALLBACK-404/' \
+    "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp" && mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
+  # jamais dans apply_edge : ce bloc est en http:// dans les deux modes d'edge
+  extract_section "$CADDY_TPL" fallback >> "$FRONT/Caddyfile"
+else
+  echo "!! Template front-404.html introuvable : pas de page 404 pour les hôtes inconnus."
+fi
+
 ( cd "$FRONT" && docker compose up -d --force-recreate )
 if [ "$EDGE" = "cloudflare-tunnel" ] && command -v docker >/dev/null 2>&1 \
    && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q cloudflared; then
