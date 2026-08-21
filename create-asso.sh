@@ -629,6 +629,16 @@ grep -q '^INVENTREE_LANGUAGE=' .env || echo "INVENTREE_LANGUAGE=fr" >> .env
 # écrites dans les e-mails (notifications de compte allauth) sont décalées.
 grep -q '^INVENTREE_TIMEZONE=' .env || echo "INVENTREE_TIMEZONE=Europe/Paris" >> .env
 
+# Page de blocage mobile d'InvenTree (MobileAppView) : neutralisée. Elle se
+# déclenche sur la TAILLE du viewport (<425px de large OU de haut), pas sur
+# l'User-Agent, donc elle tombe aussi sur qui a forcé la version desktop
+# volontairement -- l'aiguillage du front gère déjà le cas des mobiles.
+# 'allow-always' = la page n'est jamais affichée (les autres valeurs :
+# absent = blocage sec, 'allow-ignore' = blocage + lien « continuer »).
+# Dict JSON entier lu par le frontend : fusionner ici tout autre réglage.
+# Ajouté si absent : un choix manuel est respecté.
+grep -q '^INVENTREE_FRONTEND_SETTINGS=' .env || echo 'INVENTREE_FRONTEND_SETTINGS={"mobile_mode":"allow-always"}' >> .env
+
 # ====== docker-compose.yml InvenTree ======
 sed "s/__NAME__/$NAME/g" "$TEMPLATES_DIR/inventree-docker-compose.yml" > docker-compose.yml
 docker compose config >/dev/null && echo ">> YAML InvenTree OK"
