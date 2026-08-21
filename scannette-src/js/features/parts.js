@@ -7,20 +7,43 @@
    Remis à null à chaque nouveau flux (scan, lien profond, part mono-lot). */
 let CHOOSE_PART = null;
 let CHOOSE_SEQ = 0; // invalide les pastilles d'état arrivées après un changement d'écran
-async function loadFromPart(pk) {
+/* La famille d'un modèle (VARIANT_PARENT, écran variantes) vit dans
+   features/variants.js. */
+
+/* opts : { from } modèle d'où l'on descend — la flèche retour y remontera ;
+   { ownStock } n'ouvre PAS la famille d'un modèle mais les lots qu'il porte
+   lui-même (carte « stock du modèle »). */
+async function loadFromPart(pk, opts) {
+  opts = opts || {};
   CHOOSE_PART = null;
+  VARIANT_PARENT = opts.from != null ? opts.from : null;
   const seq = ++CHOOSE_SEQ;
-  let list = await api("/api/stock/?part=" + pk + "&part_detail=true&location_detail=true");
-  let items = list.results || list;
+  /* Un modèle ne porte pas le stock : celui-ci vit sur ses variantes. Or
+     /api/stock/?part= remonte PAR DÉFAUT les lots des variantes (filtre
+     include_variants) — d'où une liste de lots mélangés, sans dire duquel des
+     jus d'orange il s'agit. On coupe le rabattage et on traite le modèle à
+     part (écran famille, features/variants.js), comme le fait InvenTree. */
+  const stockQ =
+    "/api/stock/?part=" + pk + "&include_variants=false&part_detail=true&location_detail=true";
+  const [part, first] = await Promise.all([
+    api("/api/part/" + pk + "/").catch(() => null),
+    api(stockQ),
+  ]);
+  if (part && part.pk) cachePart(part); // la pastille « Variante de … » s'en sert
+  let items = first.results || first;
+  if (part && part.is_template && !opts.ownStock) {
+    // le stock est sur les variantes : on montre la famille, pas une fiche vide
+    await openVariants(part, items, opts.from);
+    return;
+  }
   if (!items || !items.length) {
     await new Promise((r) => setTimeout(r, 450));
-    list = await api("/api/stock/?part=" + pk + "&part_detail=true&location_detail=true");
+    const list = await api(stockQ);
     items = list.results || list;
   }
   if (!items || !items.length) {
-    const p = await api("/api/part/" + pk + "/").catch(() => null);
-    if (p && p.pk) offerAddStock(p);
-    else offerCreate(PENDING_CODE, p);
+    if (part && part.pk) offerAddStock(part);
+    else offerCreate(PENDING_CODE, part);
     return;
   }
   const total = items.reduce((s, x) => s + (Number(x.quantity) || 0), 0);
@@ -42,6 +65,12 @@ async function loadFromPart(pk) {
     renderItem(items[0]);
     return;
   }
+  showChooseList(pk, items, seq);
+}
+
+/* Liste « choisis le lot / l'exemplaire ». Partagée par le flux normal et par
+   les lots posés sur un modèle lui-même (openPart avec ownStock). */
+function showChooseList(pk, items, seq) {
   CHOOSE_PART = pk;
   rememberView("part", pk); // rouvre la liste de sélection après un refresh
   show("#screen-item");
@@ -210,6 +239,8 @@ async function loadParts(force) {
       ipn: p.IPN || "",
       thumb: p.thumbnail || p.image || "",
       img: p.image || "",
+      tpl: !!p.is_template, // modèle : ouvre la liste des variantes
+      of: p.variant_of || null, // variante : modèle dont elle relève
       _n: norm([p.full_name || p.name, p.IPN, p.description, p.keywords].filter(Boolean).join(" ")),
     }));
     partsLoading = null;
@@ -262,6 +293,17 @@ async function searchParts() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "sr-item";
+    /* La famille se lit AVANT d'ouvrir : sans ça, chercher « jus d'orange »
+       renvoie sept lignes presque identiques (le modèle et ses variantes)
+       sans dire laquelle est le générique. Compté dans le catalogue déjà en
+       mémoire — aucun appel réseau de plus. */
+    const nv = p.tpl ? PARTS.filter((x) => x.of === p.pk).length : 0;
+    const parent = p.of ? PARTS.find((x) => x.pk === p.of) : null;
+    const sub = p.tpl
+      ? t("tpl_variants_n", nv)
+      : parent
+        ? t("sr_variant_html", esc(parent.full || parent.name))
+        : "";
     b.innerHTML =
       (p.thumb
         ? '<img class="sr-thumb" src="' +
@@ -272,8 +314,13 @@ async function searchParts() {
         : '<span class="sr-box">📦</span>') +
       '<span style="min-width:0"><span class="sr-name">' +
       esc(p.full || p.name) +
+      (p.tpl ? '<span class="sr-badge">' + t("tpl_badge") + "</span>" : "") +
       "</span>" +
-      (p.ipn ? '<span class="sr-sub">' + esc(p.ipn) + "</span>" : "") +
+      (p.ipn || sub
+        ? '<span class="sr-sub">' +
+          [p.ipn ? esc(p.ipn) : "", sub].filter(Boolean).join(" · ") +
+          "</span>"
+        : "") +
       "</span>";
     b.onclick = () => openPart(p.pk);
     box.appendChild(b);
@@ -284,7 +331,10 @@ function clearSearch() {
   $("#searchResults").innerHTML = "";
   $("#partSearchClear").style.display = "none";
 }
-function openPart(pk) {
+/* opts (facultatif) : voir loadFromPart — { from } pour une descente depuis un
+   modèle, { ownStock } pour ses lots à lui. Sans opts, c'est un nouveau flux :
+   la flèche retour repart du scanner. */
+function openPart(pk, opts) {
   clearSearch();
   PENDING_CODE = "";
   stopCamera();
@@ -299,7 +349,7 @@ function openPart(pk) {
     "beforeend",
     '<div class="skeleton" id="loader">' + t("loading") + "</div>",
   );
-  loadFromPart(pk)
+  loadFromPart(pk, opts)
     .catch((e) => {
       gotoScan();
       showErr($("#scanErr"), e.message);

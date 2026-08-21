@@ -98,9 +98,9 @@ function segSync(seg) {
 /* ---- reprise après rafraîchissement ----
    Mémorise l'écran où on se trouve pour le rouvrir au boot au lieu de
    repartir du scan. sessionStorage : survit au refresh, pas à la fermeture
-   de l'onglet. { t, pk?, ...extra } avec t : "item" | "part" | "loc" |
-   "account" | "create" (extra.code) | "addstock" (extra.code, extra.depleted)
-   | "qr" (extra.name). Le contenu des formulaires, lui, ne survit pas. */
+   de l'onglet. { t, pk?, ...extra } avec t : "item" | "part" | "variants" |
+   "loc" | "account" | "create" (extra.code) | "addstock" (extra.code,
+   extra.depleted) | "qr" (extra.name). Le contenu des formulaires, lui, ne survit pas. */
 function rememberView(type, pk, extra) {
   try {
     const v = Object.assign({ t: type }, extra || {});
@@ -131,6 +131,7 @@ function readView() {
 function openView(v) {
   if (v.t === "loc") loadLocation(Number(v.pk));
   else if (v.t === "part") openPart(Number(v.pk));
+  else if (v.t === "variants") openVariantsByPk(Number(v.pk));
   else if (v.t === "account") openAccount();
   else if (v.t === "users") openUsers();
   else if (v.t === "create") offerCreate(v.code || "");

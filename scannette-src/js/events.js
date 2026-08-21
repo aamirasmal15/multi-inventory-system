@@ -57,11 +57,25 @@ $("#createNoCodeBtn")?.addEventListener("click", createNoCode);
 $("#camBtn")?.addEventListener("click", startCamera);
 $("#backBtn")?.addEventListener("click", () => {
   stopCamera();
-  // fiche ouverte depuis la liste « choisis le lot / l'exemplaire » : la
-  // flèche ramène à cette liste (re-fetch, les états ont pu changer) — le
-  // scanner n'est qu'un cran plus haut. Depuis la liste elle-même (ou après
-  // une confirmation), retour au scanner comme avant.
-  if (CHOOSE_PART && $("#itemBody").style.display !== "none") openPart(CHOOSE_PART);
+  // La flèche remonte d'un cran à la fois, dans l'ordre où l'on est descendu :
+  // fiche -> liste « choisis le lot / l'exemplaire » -> famille du modèle ->
+  // scanner (re-fetch à chaque cran : stocks et états ont pu changer). Depuis
+  // un écran atteint directement, ou après une confirmation, retour au scanner.
+  if (CHOOSE_PART && $("#itemBody").style.display !== "none") {
+    // une liste de lots dont la part EST le modèle d'où l'on vient, ce sont
+    // les lots posés sur le modèle lui-même : à rouvrir comme tels
+    openPart(
+      CHOOSE_PART,
+      VARIANT_PARENT != null
+        ? { from: VARIANT_PARENT, ownStock: CHOOSE_PART === VARIANT_PARENT }
+        : null,
+    );
+  } else if (VARIANT_PARENT != null) openVariantsByPk(VARIANT_PARENT);
+  else gotoScan();
+});
+/* écran famille : remonte à la famille parente (sous-famille) ou au scanner */
+$("#backBtnVar")?.addEventListener("click", () => {
+  if (VARIANT_PARENT != null) openVariantsByPk(VARIANT_PARENT);
   else gotoScan();
 });
 $("#backBtn2")?.addEventListener("click", () => {

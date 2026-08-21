@@ -373,9 +373,11 @@ async function processBarcode(raw) {
   const code = (raw || "").trim();
   if (!code) return;
   stopCamera();
-  // nouveau flux : la flèche retour de la fiche ne doit pas ramener vers la
-  // liste d'exemplaires d'un scan précédent (loadFromPart la re-pose si besoin)
+  // nouveau flux : la flèche retour de la fiche ne doit ramener ni vers la
+  // liste d'exemplaires ni vers le modèle d'un scan précédent (loadFromPart
+  // les re-pose si besoin)
   CHOOSE_PART = null;
+  VARIANT_PARENT = null;
   hideErr($("#scanErr"));
   show("#screen-item");
   $("#itemBody").style.display = "none";

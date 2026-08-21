@@ -30,6 +30,7 @@ scannette-src/
     ├── features/
     │   ├── scanner.js    caméra + décodage (natif / WASM / JS) + résolution des codes
     │   ├── parts.js      articles : recherche, ouverture depuis un code
+    │   ├── variants.js   modèles (is_template) : famille, stock cumulé, choix de la variante
     │   ├── location.js   scan d'un emplacement : liste + correction rapide des stocks
     │   ├── item.js       fiche article : quantité, ajustement, confirmation
     │   ├── loan.js       prêts / réservations des objets trackables (plugin inventree-prets)
@@ -145,6 +146,29 @@ Deux détails d'ergonomie du formulaire :
   page pour l'amener sous la topbar collante, mais **seulement s'il est
   réellement hors champ**, pas de saut intempestif sinon.
 
+## Modèles et variantes
+
+Un article **modèle** InvenTree (`is_template`) ne porte pas de stock : celui-ci
+vit sur ses **variantes** (`variant_of`) — même produit, marques ou formats
+différents. L'ouvrir affiche donc l'écran **famille** (`features/variants.js`,
+section `#screen-variants`) plutôt qu'une fiche vide : stock cumulé et nombre de
+variantes en tête, une carte par variante avec son propre stock (les mieux
+fournies d'abord), le tap descend et reprend le flux normal.
+
+Piège de l'API, à connaître avant de toucher à `loadFromPart` :
+`/api/stock/?part=<pk>` remonte **par défaut** les lots des variantes (filtre
+`include_variants`). Les appels passent donc `include_variants=false`, sans quoi
+un modèle listait les lots de toutes ses variantes mélangés, sans dire de
+laquelle il s'agissait.
+
+Deux cas limites traités : un modèle **sans variante** (message, et surtout
+aucune proposition d'y poser du stock) et du stock posé **sur le modèle
+lui-même** (carte dédiée qui l'ouvre pour le recompter ou le déplacer — un stock
+invisible serait un stock perdu).
+
+Vocabulaire des textes : *Modèle* / *Variante* en français (les mots du
+catalogue InvenTree), *Template* / *Variant* en anglais.
+
 ## Prêts et réservations (objets trackables)
 
 Si l'InvenTree de l'asso a le plugin [inventree-prets](../plugins/inventree-prets/)
@@ -211,3 +235,11 @@ Détails d'implémentation :
 Copié tel quel dans l'image nginx de chaque asso par `create-asso.sh`
 (copie **récursive** requise : le dossier contient des sous-répertoires).
 Aucune étape de build : ce dossier EST le site.
+
+`index.html` référence ses fichiers via le marqueur `?v=__ASSETV__`, que
+`create-asso.sh` remplace au déploiement par une empreinte du contenu réel des
+`.js`/`.css` de l'instance. Sans ça, une mise à jour reste invisible pendant des
+heures : Cloudflare ignore le `Cache-Control: no-cache` du nginx et impose son
+propre cache navigateur (4 h) aux fichiers statiques, alors qu'`index.html`, lui,
+n'est jamais mis en cache. Un fichier servi avec `__ASSETV__` tel quel signale
+une copie manuelle qui a sauté l'estampillage.

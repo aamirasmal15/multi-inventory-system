@@ -146,8 +146,10 @@ textarea{resize:none;min-height:56px}
 .sr-item:hover{background:var(--surface-2)}
 .sr-thumb{width:38px;height:38px;border-radius:8px;object-fit:contain;background:var(--surface-2);flex:none}
 .sr-box{width:38px;height:38px;border-radius:8px;background:var(--surface-2);display:grid;place-items:center;color:var(--muted);flex:none;font-size:16px}
-.sr-name{font-weight:600;font-size:14px;line-height:1.2}
-.sr-sub{color:var(--muted);font-size:12px;margin-top:1px}
+.sr-name{display:block;font-weight:600;font-size:14px;line-height:1.2}
+.sr-sub{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+/* générique d'une famille : repérable dans la liste sans avoir à l'ouvrir */
+.sr-badge{display:inline-block;margin-left:7px;vertical-align:1px;padding:1px 7px;border-radius:999px;border:1px solid var(--primary);background:var(--primary-light);color:var(--primary);font-size:10px;font-weight:700}
 .sr-empty{padding:10px 2px;color:var(--muted);font-size:13px}
 
 /* ---- fiche pièce / stock ---- */
@@ -195,13 +197,22 @@ textarea{resize:none;min-height:56px}
 .skeleton{color:var(--muted);text-align:center;padding:40px 0;font-size:13px}
 .choose-card{cursor:pointer;transition:background .12s,border-color .12s}
 .choose-card:active{background:var(--surface-2)}
-.choose-card .pill-q{color:var(--green);border-color:var(--green);font-weight:600}
+.pill-q{color:var(--green);border-color:var(--green);font-weight:600}
 /* pastille d'état d'emprunt d'un exemplaire (part trackable) */
 .pill-loan{font-weight:600}
 .pill-loan-free{color:var(--green);border-color:var(--green);background:var(--green-light)}
 .pill-loan-res{color:var(--violet);border-color:var(--violet);background:var(--violet-light)}
 .pill-loan-out{color:var(--amber);border-color:var(--amber);background:var(--amber-light)}
 .pill-loan-late{color:var(--red);border-color:var(--red);background:var(--red-light)}
+
+/* ---- modèle (part « template » InvenTree) et ses variantes ---- */
+/* un modèle ne se compte pas : bleu (repère de famille), jamais le vert du stock */
+.pill-tpl{color:var(--primary);border-color:var(--primary);background:var(--primary-light);font-weight:600}
+/* même pastille, sur la fiche d'une variante : cliquable, elle remonte à la
+   famille (« Variante de Jus d'Orange (Générique) ») */
+.pill-var{color:var(--primary);border-color:var(--primary);background:var(--primary-light);font-weight:600;font-family:inherit;cursor:pointer;transition:transform .12s}
+.pill-var:active{transform:scale(.95)}
+
 .choose-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;border-top:1px solid var(--border);cursor:pointer}
 .choose-item:first-child{border-top:none} .choose-item:hover{background:var(--surface-2)}
 .choose-item .q{font-weight:700;color:var(--green)}

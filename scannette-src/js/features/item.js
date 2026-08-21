@@ -68,7 +68,10 @@ function renderItem(it) {
   $("#comment").value = "";
   // objet trackable + plugin prêts actif -> bloc prêt à la place de la quantité
   applyItemMode(it);
+  // pastille « Variante de <modèle> », posée en différé (features/variants.js)
+  applyVariantPill(it);
 }
+
 function boxIcon() {
   const d = document.createElement("div");
   d.className = "thumb";

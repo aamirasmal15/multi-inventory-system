@@ -118,6 +118,16 @@ const I18N = {
     st_res: "Réservé",
     st_out: "Emprunté",
     st_late: "En retard",
+    /* modèle (part « template » InvenTree) et sa famille de variantes */
+    variants_crumb: "Variantes",
+    variants_sub: "Choisissez la variante souhaitée :",
+    variants_none:
+      "Ce modèle n'a pas encore de variante : créez-les dans InvenTree, puis comptez-les ici.",
+    variants_own: "Stock posé sur le modèle lui-même",
+    tpl_badge: "Modèle",
+    tpl_variants_n: (n) => n + " variante" + (n > 1 ? "s" : ""),
+    variant_of: (name) => "Variante de " + name,
+    sr_variant_html: (name) => "variante de " + name,
     /* recherche */
     catalog_loading: "Chargement du catalogue…",
     no_item_found: "Aucun article trouvé.",
@@ -482,6 +492,16 @@ const I18N = {
     st_res: "Reserved",
     st_out: "On loan",
     st_late: "Overdue",
+    /* template part and its family of variants */
+    variants_crumb: "Variants",
+    variants_sub: "Choose the variant you want:",
+    variants_none:
+      "This template has no variants yet — create them in InvenTree, then count them here.",
+    variants_own: "Stock held on the template itself",
+    tpl_badge: "Template",
+    tpl_variants_n: (n) => n + " variant" + (n > 1 ? "s" : ""),
+    variant_of: (name) => "Variant of " + name,
+    sr_variant_html: (name) => "variant of " + name,
     /* search */
     catalog_loading: "Loading the catalogue…",
     no_item_found: "No items found.",
