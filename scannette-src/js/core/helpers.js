@@ -335,20 +335,25 @@ function openLightbox(img) {
   const prevOverflow = document.body.style.overflow;
   document.body.style.overflow = "hidden";
   const done = () => {
-    clearTimeout(clickTimer);
     document.removeEventListener("keydown", onKey);
     document.body.style.overflow = prevOverflow;
     ov.classList.add("closing");
     setTimeout(() => ov.remove(), 180);
   };
 
-  /* ---- zoom (pincement, double-tap, molette) + déplacement une fois zoomé ----
+  /* ---- zoom (pincement, molette) + déplacement une fois zoomé ----
      transform "translate() scale()" sur <img> : translate() s'applique dans
      l'espace déjà mis à l'échelle (ordre CSS), donc tx/ty restent en px écran
-     quel que soit le zoom — pas de conversion à faire pour le glisser. */
+     quel que soit le zoom — pas de conversion à faire pour le glisser.
+     Pas de double-tap : ce geste partage l'événement "clic" avec le tap simple
+     (le navigateur envoie toujours clic, clic, PUIS double-clic — impossible de
+     savoir au 1er clic si un 2e arrive), ce qui aurait forcé à retarder la
+     fermeture-par-tap pour laisser la chance au double-tap de s'exprimer. Le
+     pincement à deux doigts n'a pas ce problème (jamais interprété comme un
+     clic) : on garde la fermeture par tap simple INSTANTANÉE et on zoome
+     uniquement au pincement (+ molette sur desktop). */
   const MINZ = 1,
-    MAXZ = 4,
-    DTAPZ = 3;
+    MAXZ = 4;
   let scale = 1,
     tx = 0,
     ty = 0;
@@ -381,15 +386,6 @@ function openLightbox(img) {
     scale = ns;
     clampPan();
     applyTransform();
-  };
-  const toggleZoom = (clientX, clientY) => {
-    big.style.transition = "transform .22s " + "var(--ease-spring)";
-    setZoom(scale > 1.02 ? MINZ : DTAPZ, clientX, clientY);
-    const clear = () => {
-      big.style.transition = "";
-      big.removeEventListener("transitionend", clear);
-    };
-    big.addEventListener("transitionend", clear);
   };
   const pointers = new Map();
   let pinchDist = 0,
@@ -465,28 +461,14 @@ function openLightbox(img) {
       e.stopPropagation();
     }
   });
-  big.addEventListener("dblclick", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    clearTimeout(clickTimer);
-    toggleZoom(e.clientX, e.clientY);
-  });
 
-  // tap n'importe où = fermer, sauf : dans les 300 ms suivant l'ouverture (le 2e
-  // tap d'un double-tap réflexe refermait ce qu'il venait d'ouvrir), une fois
-  // zoomé (le tap sert à dézoomer/glisser, pas à fermer), ou juste après un
-  // double-tap (attente le temps que le double-clic natif s'annule avant de
-  // fermer sur le premier des deux clics qui le composent — le délai est
-  // volontairement au-dessus des ~300-350 ms de détection du double-tap des
-  // navigateurs mobiles, sinon un double-tap un peu lent fermait puis
-  // laissait passer un tap fantôme sur l'écran en dessous, via pointer-events:
-  // none pendant la fermeture).
+  // tap n'importe où = fermer, instantané — sauf dans les 300 ms suivant
+  // l'ouverture (le 2e tap d'un double-tap réflexe refermait ce qu'il venait
+  // d'ouvrir) ou une fois zoomé (le tap sert à glisser/pincer, pas à fermer).
   const openedAt = performance.now();
-  let clickTimer = null;
   ov.addEventListener("click", () => {
     if (performance.now() - openedAt < 300 || scale > 1.02) return;
-    clearTimeout(clickTimer);
-    clickTimer = setTimeout(done, 420);
+    done();
   });
   x.addEventListener("click", (e) => {
     e.stopPropagation();
