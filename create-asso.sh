@@ -793,6 +793,20 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
     echo ">> Scannette : logo black = img/$LOGO_BLACK injecté."
   fi
 
+  # ====== Empreinte de version sur les js/css (cache-busting) ======
+  # Cloudflare ignore le "Cache-Control: no-cache" de nginx sur les fichiers
+  # statiques et impose son Browser Cache TTL (4 h par défaut) : sans ça, une
+  # Scannette redéployée continue de tourner en ANCIENNE version chez les
+  # utilisateurs pendant des heures, sans aucun moyen de le forcer côté serveur.
+  # index.html, lui, n'est jamais mis en cache (cf-cache-status: DYNAMIC) : il
+  # suffit donc que les URL qu'il référence changent quand les fichiers changent.
+  # Empreinte calculée APRÈS toutes les injections (BRAND, logos) pour refléter
+  # ce qui est réellement servi.
+  ASSET_V="$(find "$SCANDIR/html" -type f \( -name '*.js' -o -name '*.css' \) -print0 \
+    | sort -z | xargs -0 cat | md5sum | cut -c1-10)"
+  sed -i "s/__ASSETV__/$ASSET_V/g" "$SCANDIR/html/index.html"
+  echo ">> Scannette : version des fichiers = $ASSET_V (cache navigateur invalidé)"
+
   # ====== Le même logo pour InvenTree (customize.logo, PUI) ======
   # Copié vers static/img/custom_logo.png (servi public via /static/, pas /media/
   # qui est token-gated). À refaire à chaque run : 'invoke update' passe un
