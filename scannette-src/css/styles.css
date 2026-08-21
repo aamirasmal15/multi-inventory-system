@@ -318,7 +318,7 @@ textarea{resize:none;min-height:56px}
    z-index 200 : au-dessus des pickers (50), sous la modale de confirmation (220). */
 .zoomable{cursor:zoom-in}
 .lightbox-ov{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;z-index:200;animation:ovIn .18s ease;cursor:zoom-out}
-.lightbox-ov img{width:min(100%,500px);max-height:72vh;max-height:72dvh;object-fit:contain;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);box-shadow:var(--shadow-md);animation:pkSheetIn .24s var(--ease-spring)}
+.lightbox-ov img{width:min(100%,500px);max-height:72vh;max-height:72dvh;object-fit:contain;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);box-shadow:var(--shadow-md);animation:pkSheetIn .24s var(--ease-spring);touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;will-change:transform}
 .lightbox-cap{max-width:min(100%,500px);color:#fff;font-size:13.5px;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.5)}
 .lightbox-x{position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:max(12px,calc(50% - 270px + 12px));width:38px;height:38px;padding:0;display:flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:24px;line-height:1;cursor:pointer}
 .lightbox-x:active{transform:scale(.92)}

@@ -312,6 +312,7 @@ function openLightbox(img) {
     hi.onload = () => (big.src = full);
     hi.src = full;
   }
+  big.draggable = false; // pas de fantôme d'image en glissant (souris)
   const x = document.createElement("button");
   x.type = "button";
   x.className = "lightbox-x";
@@ -334,16 +335,158 @@ function openLightbox(img) {
   const prevOverflow = document.body.style.overflow;
   document.body.style.overflow = "hidden";
   const done = () => {
+    clearTimeout(clickTimer);
     document.removeEventListener("keydown", onKey);
     document.body.style.overflow = prevOverflow;
     ov.classList.add("closing");
     setTimeout(() => ov.remove(), 180);
   };
-  // tap n'importe où = fermer — mais pas dans les 300 ms suivant l'ouverture :
-  // le 2e tap d'un double-tap réflexe refermait ce qu'il venait d'ouvrir
+
+  /* ---- zoom (pincement, double-tap, molette) + déplacement une fois zoomé ----
+     transform "translate() scale()" sur <img> : translate() s'applique dans
+     l'espace déjà mis à l'échelle (ordre CSS), donc tx/ty restent en px écran
+     quel que soit le zoom — pas de conversion à faire pour le glisser. */
+  const MINZ = 1,
+    MAXZ = 4,
+    DTAPZ = 3;
+  let scale = 1,
+    tx = 0,
+    ty = 0;
+  // repère fixe (centre, taille) capté juste après l'insertion dans la page ;
+  // la vignette est déjà rendue à cet instant et le cadre CSS (width/max-height)
+  // ne bouge pas quand data-full remplace la vignette, donc reste valable ensuite
+  let baseRect = null,
+    bcx = 0,
+    bcy = 0;
+  const applyTransform = () => {
+    big.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
+    big.style.cursor = scale > 1.02 ? "grab" : "zoom-in";
+  };
+  const clampPan = () => {
+    const w = big.offsetWidth * scale,
+      h = big.offsetHeight * scale;
+    const maxX = Math.max(0, (w - big.offsetWidth) / 2),
+      maxY = Math.max(0, (h - big.offsetHeight) / 2);
+    tx = Math.min(maxX, Math.max(-maxX, tx));
+    ty = Math.min(maxY, Math.max(-maxY, ty));
+  };
+  // change le zoom en gardant le point (clientX,clientY) fixe à l'écran
+  const setZoom = (ns, clientX, clientY) => {
+    ns = Math.min(MAXZ, Math.max(MINZ, ns));
+    const ratio = ns / scale;
+    const d = clientX - bcx,
+      e = clientY - bcy;
+    tx = d * (1 - ratio) + ratio * tx;
+    ty = e * (1 - ratio) + ratio * ty;
+    scale = ns;
+    clampPan();
+    applyTransform();
+  };
+  const toggleZoom = (clientX, clientY) => {
+    big.style.transition = "transform .22s " + "var(--ease-spring)";
+    setZoom(scale > 1.02 ? MINZ : DTAPZ, clientX, clientY);
+    const clear = () => {
+      big.style.transition = "";
+      big.removeEventListener("transitionend", clear);
+    };
+    big.addEventListener("transitionend", clear);
+  };
+  const pointers = new Map();
+  let pinchDist = 0,
+    pinchScale = 1,
+    panId = null,
+    panStart = null,
+    gestureMoved = false;
+  const startPan = (id, p) => {
+    panId = id;
+    panStart = { x: p.x, y: p.y, tx0: tx, ty0: ty };
+  };
+  big.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    big.setPointerCapture(e.pointerId);
+    if (pointers.size === 2) {
+      const [p1, p2] = [...pointers.values()];
+      pinchDist = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1;
+      pinchScale = scale;
+      panId = null;
+    } else if (pointers.size === 1 && scale > 1.02) {
+      startPan(e.pointerId, pointers.get(e.pointerId));
+      big.style.cursor = "grabbing";
+    }
+  });
+  big.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const [p1, p2] = [...pointers.values()];
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1;
+      setZoom(pinchScale * (dist / pinchDist), (p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+      gestureMoved = true;
+    } else if (panId === e.pointerId && panStart) {
+      tx = panStart.tx0 + (e.clientX - panStart.x);
+      ty = panStart.ty0 + (e.clientY - panStart.y);
+      clampPan();
+      applyTransform();
+      gestureMoved = true;
+    }
+  });
+  const endPointer = (e) => {
+    pointers.delete(e.pointerId);
+    if (e.pointerId === panId) {
+      panId = null;
+      panStart = null;
+      applyTransform(); // remet le curseur grab (pas grabbing)
+    }
+    if (pointers.size < 2) pinchDist = 0;
+    // un doigt reste après un pincement à deux doigts : reprend le glisser sans à-coup
+    if (pointers.size === 1 && scale > 1.02) {
+      const [[id, p]] = pointers;
+      startPan(id, p);
+    }
+  };
+  big.addEventListener("pointerup", endPointer);
+  big.addEventListener("pointercancel", endPointer);
+  // molette (desktop) : zoom centré sur le curseur
+  ov.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.target === x) return;
+      e.preventDefault();
+      setZoom(scale * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+    },
+    { passive: false },
+  );
+  // une vraie glissade/pincement vient d'avoir lieu : le clic de relâchement
+  // qui suit ne doit pas fermer le lightbox (capté avant qu'il n'atteigne ov)
+  big.addEventListener("click", (e) => {
+    if (gestureMoved) {
+      gestureMoved = false;
+      e.stopPropagation();
+    }
+  });
+  big.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearTimeout(clickTimer);
+    toggleZoom(e.clientX, e.clientY);
+  });
+
+  // tap n'importe où = fermer, sauf : dans les 300 ms suivant l'ouverture (le 2e
+  // tap d'un double-tap réflexe refermait ce qu'il venait d'ouvrir), une fois
+  // zoomé (le tap sert à dézoomer/glisser, pas à fermer), ou juste après un
+  // double-tap (attente le temps que le double-clic natif s'annule avant de
+  // fermer sur le premier des deux clics qui le composent — le délai est
+  // volontairement au-dessus des ~300-350 ms de détection du double-tap des
+  // navigateurs mobiles, sinon un double-tap un peu lent fermait puis
+  // laissait passer un tap fantôme sur l'écran en dessous, via pointer-events:
+  // none pendant la fermeture).
   const openedAt = performance.now();
+  let clickTimer = null;
   ov.addEventListener("click", () => {
-    if (performance.now() - openedAt > 300) done();
+    if (performance.now() - openedAt < 300 || scale > 1.02) return;
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(done, 420);
   });
   x.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -354,6 +497,20 @@ function openLightbox(img) {
   ov.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
   document.addEventListener("keydown", onKey);
   document.body.appendChild(ov);
+  // repère de zoom (centre écran de l'image non transformée) : capté après
+  // insertion, puis retenu à chaque chargement d'image tant que le zoom n'a
+  // pas commencé — au cas où la vignette et la pleine taille n'auraient pas
+  // exactement le même format (recadrage éventuel côté génération InvenTree),
+  // ce qui changerait la boîte CSS. Ne pas y toucher une fois zoomé : l'image
+  // sauterait sous les doigts de l'utilisateur.
+  const refreshBaseRect = () => {
+    if (scale > 1.02) return;
+    baseRect = big.getBoundingClientRect();
+    bcx = baseRect.left + baseRect.width / 2;
+    bcy = baseRect.top + baseRect.height / 2;
+  };
+  big.addEventListener("load", refreshBaseRect);
+  refreshBaseRect();
   x.focus();
 }
 function fmt(n) {
