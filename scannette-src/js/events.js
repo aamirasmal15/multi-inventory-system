@@ -193,6 +193,7 @@ $("#addElsewhereBtn")?.addEventListener("click", () => {
   const part = {
     pk: CURRENT.part || pd.pk,
     name: pd.full_name || pd.name || "",
+    description: pd.description, // le bandeau la reprend (descHtml)
     thumbnail: pd.thumbnail,
     image: pd.image,
     trackable: !!pd.trackable,

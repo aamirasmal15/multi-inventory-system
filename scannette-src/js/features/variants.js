@@ -119,13 +119,18 @@ function paintVariantHead(part, n) {
       : boxIcon().outerHTML) +
     '<div style="min-width:0;flex:1"><p class="name">' +
     esc(part.full_name || part.name || "") +
-    '</p><div class="sub"><span class="pill pill-tpl">' +
+    "</p>" +
+    // description du modèle : c'est là qu'elle est la plus utile (« Jus
+    // d'orange, toutes marques confondues » dit ce que la famille regroupe)
+    descHtml(part) +
+    '<div class="sub"><span class="pill pill-tpl">' +
     t("tpl_badge") +
     "</span>" +
     qpill +
     (n != null ? '<span class="pill">' + t("tpl_variants_n", n) + "</span>" : "") +
     (part.IPN ? '<span class="pill">' + esc(part.IPN) + "</span>" : "") +
     "</div></div>";
+  armDesc($("#varHead"));
 }
 
 /* Une carte de la liste : une variante, ou (opts.own) le stock que le modèle

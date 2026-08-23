@@ -89,6 +89,9 @@ const I18N = {
     item_crumb: "Article scanné",
     item_n: (pk) => "Article #" + pk,
     item_word: "Article",
+    /* description de l'article : dépliage quand elle dépasse ses 3 lignes */
+    desc_more: "Voir plus",
+    desc_less: "Voir moins",
     qty_in_stock: "Quantité en stock",
     comment_opt: "Commentaire (facultatif)",
     comment_ph: "ex. recomptage, casse, prêt…",
@@ -463,6 +466,9 @@ const I18N = {
     item_crumb: "Scanned item",
     item_n: (pk) => "Item #" + pk,
     item_word: "Item",
+    /* item description: unfold when it runs past its 3 lines */
+    desc_more: "Show more",
+    desc_less: "Show less",
     qty_in_stock: "Quantity in stock",
     comment_opt: "Comment (optional)",
     comment_ph: "e.g. recount, breakage, loan…",

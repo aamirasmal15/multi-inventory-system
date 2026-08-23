@@ -53,6 +53,7 @@ async function loadFromPart(pk, opts) {
       {
         pk: items[0].part || pd0.pk || pk,
         name: pd0.full_name || pd0.name || "",
+        description: pd0.description, // le bandeau la reprend (descHtml)
         thumbnail: pd0.thumbnail,
         image: pd0.image,
         trackable: !!pd0.trackable,
@@ -211,6 +212,46 @@ function mediaUrl(u) {
   if (u.indexOf(API + "/") === 0) return u;
   return API + (u[0] === "/" ? u : "/" + u);
 }
+
+/* ---- description d'un article ---- */
+/* Le champ `description` d'InvenTree n'est rendu que s'il APPORTE quelque
+   chose : l'import CSV et la création rapide y recopient le nom (10 des 15
+   articles de sandbox, tout le catalogue de jus du BDE), et une fiche qui
+   répète son propre titre en gris n'apprend rien à personne. Sont donc
+   écartées la description vide, celle qui égale le nom, et celle que le nom
+   contient déjà (« Jus de banane » sous « Jus de banane (Auchan) »).
+   p : tout objet portant description / name / full_name — un part comme le
+   part_detail d'un lot. */
+function descHtml(p) {
+  const d = ((p && p.description) || "").trim();
+  if (!d) return "";
+  const dn = norm(d);
+  if (!dn) return "";
+  if ([p.full_name, p.name].some((n) => n && norm(n).includes(dn))) return "";
+  return '<p class="item-desc">' + esc(d) + "</p>";
+}
+
+/* Le clamp à 3 lignes est purement CSS : rien dans le DOM ne dit qu'une
+   description est coupée, il faut la MESURER une fois rendue (donc sur un
+   écran déjà affiché). Seules celles qui débordent reçoivent leur « Voir
+   plus » — pas de bouton mort sous les descriptions d'une ligne, qui sont
+   l'écrasante majorité. */
+function armDesc(root) {
+  (root || document).querySelectorAll(".item-desc").forEach((el) => {
+    const next = el.nextElementSibling;
+    if (next && next.classList.contains("desc-more")) return; // déjà armée
+    if (el.scrollHeight - el.clientHeight < 2) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "desc-more";
+    b.textContent = t("desc_more");
+    b.onclick = () => {
+      b.textContent = el.classList.toggle("desc-open") ? t("desc_less") : t("desc_more");
+    };
+    el.insertAdjacentElement("afterend", b);
+  });
+}
+
 window.srBox = function () {
   const s = document.createElement("span");
   s.className = "sr-box";

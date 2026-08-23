@@ -140,9 +140,14 @@ async function offerAddStock(part, opts) {
     badge +
     '<p class="name">' +
     esc(part.name || "") +
-    '</p><p class="sb-hint">' +
+    "</p>" +
+    // même règle que la fiche : la description n'apparaît que si elle dit
+    // autre chose que le nom (features/parts.js)
+    descHtml(part) +
+    '<p class="sb-hint">' +
     hint +
     "</p></div>";
+  armDesc(ban);
   const tt = $("#createTitle");
   if (tt) tt.textContent = depleted ? t("add_stock_title") : t("add_elsewhere_title");
   const cc = $("#createCrumb");

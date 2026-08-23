@@ -29,7 +29,7 @@ scannette-src/
     │   └── sso.js        retour SSO : session -> token, droits, écran "en attente", logout
     ├── features/
     │   ├── scanner.js    caméra + décodage (natif / WASM / JS) + résolution des codes
-    │   ├── parts.js      articles : recherche, ouverture depuis un code
+    │   ├── parts.js      articles : recherche, ouverture depuis un code, description
     │   ├── variants.js   modèles (is_template) : famille, stock cumulé, choix de la variante
     │   ├── location.js   scan d'un emplacement : liste + correction rapide des stocks
     │   ├── item.js       fiche article : quantité, ajustement, confirmation
@@ -145,6 +145,37 @@ Deux détails d'ergonomie du formulaire :
   réservation…), `ensureVisible()` (dans `core/helpers.js`) fait défiler la
   page pour l'amener sous la topbar collante, mais **seulement s'il est
   réellement hors champ**, pas de saut intempestif sinon.
+
+## Description d'un article
+
+Le champ `description` d'InvenTree (250 caractères) s'affiche **sous le nom**,
+en gris, sur les trois écrans qui présentent *l'article* : la fiche
+(`#itemHead`), l'en-tête d'une famille de variantes (`#varHead`) et le bandeau
+« stock épuisé / ajouter ailleurs » (`#addStockBanner`). Il n'apparaît **ni**
+dans la liste « choisis le lot » (tous les lots sont le même article : la même
+phrase répétée sur chaque carte), **ni** sur les cartes de variantes (le nom
+suffit à les distinguer, la description s'affiche en ouvrant la variante).
+
+Deux règles, portées par `descHtml()` / `armDesc()` (`features/parts.js`) :
+
+- **elle doit apporter quelque chose.** L'import CSV et la création rapide
+  d'InvenTree recopient le nom dans la description (10 des 15 articles de
+  `sandbox`, tout le catalogue de jus du BDE) : `descHtml()` écarte donc la
+  description vide, celle qui **égale** le nom et celle que le nom **contient
+  déjà** (« Jus de banane » sous « Jus de banane (Auchan) »), comparaison faite
+  sans accents ni casse (`norm()`). Sans ce filtre, la fiche répéterait son
+  propre titre en gris ;
+- **elle ne repousse pas l'action.** Bornée à 3 lignes (`-webkit-line-clamp`)
+  pour laisser le compteur de quantité à l'écran. Le clamp étant purement CSS,
+  rien dans le DOM ne dit qu'une description est coupée : `armDesc()` la mesure
+  une fois rendue et n'ajoute son bouton « Voir plus » (`.desc-more`) qu'aux
+  descriptions qui débordent réellement — pas de bouton mort sous celles d'une
+  ligne, qui sont l'écrasante majorité. Simple bascule de classe, **aucune
+  animation** ajoutée.
+
+Corollaire pour tout appelant d'`offerAddStock()` : l'objet `part` passé doit
+porter `description` (les deux appels qui en construisent un à la main, depuis
+`part_detail`, la recopient).
 
 ## Modèles et variantes
 

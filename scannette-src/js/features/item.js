@@ -44,7 +44,10 @@ function renderItem(it) {
       : boxIcon().outerHTML) +
     '<div style="min-width:0"><p class="name">' +
     esc(pd.full_name || pd.name || t("item_n", it.pk)) +
-    '</p><div class="sub">' +
+    "</p>" +
+    // description de l'article, seulement si elle dit autre chose que le nom
+    descHtml(pd) +
+    '<div class="sub">' +
     pills +
     "</div>" +
     (path && path.includes("/")
@@ -63,6 +66,7 @@ function renderItem(it) {
         "</div>"
       : "") +
     "</div>";
+  armDesc($("#itemHead")); // « Voir plus » si la description déborde de ses 3 lignes
   $("#qtyInput").value = fmt(it.quantity);
   $(".qty-label").textContent = t("qty_in_stock") + (units ? " (" + units + ")" : "");
   $("#comment").value = "";
