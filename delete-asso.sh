@@ -175,10 +175,14 @@ else
 fi
 
 # 3. Retirer les blocs de cette asso du Caddy frontal (InvenTree + Scannette,
-#    y compris l'ancien bloc combiné), puis recharger le frontal.
+#    y compris l'ancien bloc combiné), puis recharger le frontal. Le bloc de
+#    l'ancien sous-domaine Scannette n'est plus qu'une redirection, sans
+#    reverse_proxy : il se repère à son marqueur "EIR-SCAN-$NAME" (idem
+#    create-asso.sh), sans quoi il resterait à pointer vers une asso effacée.
+#    Espace final de a3 significatif : cf. create-asso.sh (« eirb » vs « eirbot »).
 if [ -f "$FRONT/Caddyfile" ]; then
-  awk -v a1="$NAME-proxy:80" -v a2="$NAME-scan:80" \
-    'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2' \
+  awk -v a1="$NAME-proxy:80" -v a2="$NAME-scan:80" -v a3="EIR-SCAN-$NAME " \
+    'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2 && $0 !~ a3' \
     "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp"
   mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
   # héritage interstitiel : pages d'avertissement d'anciennes versions (plus générées)

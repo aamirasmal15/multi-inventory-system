@@ -421,8 +421,8 @@ EDGE_EFFECTIVE="$EDGE"
 # La ligne d'adresse est la première ligne NON indentée finissant par « { » :
 # les sections du template commencent par une ligne vide, et les matchers
 # internes (@mobile {...) sont indentés. Les URL https:// À L'INTÉRIEUR des
-# blocs (redirection scanette->scannette) restent intactes : publiques,
-# servies par l'edge.
+# blocs (redirection des anciens sous-domaines Scannette vers $HOST/scannette/)
+# restent intactes : publiques, servies par l'edge.
 apply_edge() {
   if [ "${EDGE_EFFECTIVE:-$EDGE}" = "cloudflare-tunnel" ]; then
     awk '!done && /^[^ \t].*\{[ \t]*$/ { gsub(/[^ ,{]+/, "http://&"); done=1 } { print }'
@@ -856,11 +856,18 @@ PY
 fi
 
 # ====== Blocs Caddy frontaux (on retire les anciens, on réécrit les bons) ======
-# Supprime tout bloc de cette asso : InvenTree ("$NAME-proxy:80") et Scannette
-# ("$NAME-scan:80"), y compris l'ancien bloc combiné qui contenait les deux.
+# Supprime tout bloc de cette asso : InvenTree ("$NAME-proxy:80"), Scannette
+# ("$NAME-scan:80") et l'ancien sous-domaine Scannette, devenu une simple
+# redirection sans reverse_proxy -> repéré par son marqueur "EIR-SCAN-$NAME"
+# (même convention que EIR-FALLBACK-404). Sans ce troisième motif, le bloc
+# survivrait au nettoyage et serait dupliqué au run suivant : deux fois la même
+# adresse de site, Caddy refuse de démarrer. Inclut aussi l'ancien bloc combiné.
+# L'espace final de a3 est SIGNIFICATIF : ces motifs sont des sous-chaînes, et
+# sans lui une asso « eirb » emporterait le bloc de « eirbot ». Le gabarit fait
+# toujours suivre le marqueur d'un espace ; ne pas le retirer d'un côté ni de l'autre.
 if [ -f "$FRONT/Caddyfile" ]; then
-  awk -v a1="$NAME-proxy:80" -v a2="$NAME-scan:80" \
-    'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2' \
+  awk -v a1="$NAME-proxy:80" -v a2="$NAME-scan:80" -v a3="EIR-SCAN-$NAME " \
+    'BEGIN{RS="";ORS="\n\n"} $0 !~ a1 && $0 !~ a2 && $0 !~ a3' \
     "$FRONT/Caddyfile" > "$FRONT/Caddyfile.tmp" && mv "$FRONT/Caddyfile.tmp" "$FRONT/Caddyfile"
 fi
 
@@ -902,21 +909,24 @@ else
   extract_section "$CADDY_TPL" simple \
     | sed "s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
 fi
-# Bloc Scannette (sous-domaine dédié) si demandée. Le mot ayant deux graphies,
-# la variante à un seul n (scanette-...) est aussi servie, en redirection 301
-# vers l'hôte canonique. Un seul bloc pour les deux hosts : Caddy gère les deux
-# certificats, et le nettoyage idempotent ci-dessus matche sans modification.
-# Seule l'orthographe canonique fait du OAuth (la redirection a lieu avant).
+# Bloc de l'ancien sous-domaine Scannette, si Scannette il y a. Il ne sert plus
+# l'app : elle vit désormais sous $HOST/scannette/ (même origine qu'InvenTree),
+# et le sous-domaine ne fait plus que rediriger vers ce montage, {uri} compris.
+# Il n'est gardé que pour ne pas casser les liens déjà diffusés dans les guides,
+# et a vocation à disparaître. Le mot ayant deux graphies, la variante à un seul
+# n (scanette-...) redirige vers la même cible, dans le même bloc : Caddy gère
+# les deux hôtes d'un coup. Le callback OIDC reste enregistré chez Dex sur cet
+# hôte (lib/sso.sh) et transite donc par la redirection — d'où {uri}.
 if [ "$WITH_SCANNETTE" = "1" ]; then
   SCAN_HOST_ALT="${SCAN_HOST/scannette/scanette}"
   if [ "$SCAN_HOST_ALT" != "$SCAN_HOST" ]; then
     extract_section "$CADDY_TPL" scannette-alias \
-      | sed "s/__SCAN_HOST_ALT__/$SCAN_HOST_ALT/g; s/__SCAN_HOST__/$SCAN_HOST/g; s/__NAME__/$NAME/g" \
+      | sed "s/__SCAN_HOST_ALT__/$SCAN_HOST_ALT/g; s/__SCAN_HOST__/$SCAN_HOST/g; s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" \
       | apply_edge >> "$FRONT/Caddyfile"
   else
     # SCAN_HOST personnalisé sans "scannette" dedans : pas d'alias à créer.
     extract_section "$CADDY_TPL" scannette \
-      | sed "s/__SCAN_HOST__/$SCAN_HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
+      | sed "s/__SCAN_HOST__/$SCAN_HOST/g; s/__HOST__/$HOST/g; s/__NAME__/$NAME/g" | apply_edge >> "$FRONT/Caddyfile"
   fi
 fi
 

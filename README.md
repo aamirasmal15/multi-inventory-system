@@ -19,7 +19,7 @@ habituel. Une commande déploie une asso complète, une autre la supprime propre
 ## Les deux commandes
 
 ```bash
-./create-asso.sh eirspace     # déploie / met à jour  → https://inventaire.eirspace.fr + https://scannette.eirspace.fr
+./create-asso.sh eirspace     # déploie / met à jour  → https://inventaire.eirspace.fr (Scannette sous /scannette/)
 ./delete-asso.sh eirspace     # supprime tout (nom exact à retaper + backup auto immuable, gardé 30 j)
 ```
 
@@ -92,4 +92,10 @@ Tout ce qui est **déployé** ou **secret** vit hors du dépôt (`~/assos/`, `~/
 [Architecture](https://github.com/aamirasmal15/multi-inventory-system/wiki/Architecture).
 
 > **« Scannette », avec deux n ?** Le mot n'est dans aucun dictionnaire ; on a gardé l'orthographe
-> qui colle à « scanner ». `scanette-…` redirige vers `scannette-…` : tapez ce que vous voulez.
+> qui colle à « scanner ». Les deux graphies fonctionnent : `scannette-…` comme `scanette-…`.
+>
+> **Où vit la Scannette ?** Sous `inventaire[-asso].eirspace.fr/scannette/`, à la même origine
+> qu'InvenTree — c'est l'adresse à diffuser, et celle vers laquelle la racine aiguille
+> automatiquement les mobiles. Les anciens sous-domaines `scannette[-asso]…` (et leur variante à
+> un n) n'y redirigent plus que par compatibilité, pour les liens déjà imprimés dans les guides ;
+> ils sont amenés à disparaître.
