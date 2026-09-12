@@ -413,23 +413,16 @@ body.noscroll{overflow:hidden}
 .picker-search svg{width:18px;height:18px;color:var(--muted);flex:none}
 .picker-search input{flex:1;border:none;background:transparent;color:var(--text);font-size:15px;outline:none;font-family:inherit}
 .picker-list{overflow-y:auto;padding:6px 0}
-.pick-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;border:none;background:transparent;padding:15px 16px;min-height:54px;color:var(--text);font-size:15px;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--border);transition:background .12s}
+.pick-item{display:flex;align-items:center;gap:2px;width:100%;text-align:left;border:none;background:transparent;padding:15px 16px;min-height:54px;color:var(--text);font-size:15px;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--border);transition:background .12s}
 .pick-item:hover{background:var(--surface-2)}
 .pick-item:active{background:var(--surface-2);transform:scale(.985)}
-.pick-item.picked,.pick-back.picked{background:var(--green-light)!important;color:var(--green)}
+.pick-item.picked{background:var(--green-light)!important;color:var(--green)}
 .pick-item.cur{color:var(--primary);font-weight:600}
 .pick-item .pi-txt{flex:1;min-width:0}
-.pick-item .pi-chev{flex:none;color:var(--muted-2);display:flex}
-.pick-item .pi-chev svg{width:21px;height:21px}
-.pick-back{display:flex;align-items:center;gap:7px;width:100%;text-align:left;border:none;background:var(--surface-2);padding:13px 16px;color:var(--text);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--border)}
-.pick-back:active{filter:brightness(.95)}
-.pick-back svg{width:18px;height:18px;flex:none}
-.pick-path{padding:10px 16px 6px;font-size:12px;color:var(--muted);word-break:break-word}
-/* animations d'entrée/sortie du picker (navigation avant/arrière dans l'arbre) */
-#pickerList.anim-fwd{animation:pkInRight .2s ease}
-#pickerList.anim-back{animation:pkInLeft .2s ease}
-@keyframes pkInRight{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
-@keyframes pkInLeft{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+/* flèche de dépliage : zone de tap pleine hauteur, tourne vers le bas une fois ouvert */
+.pick-item .pi-arrow{flex:none;display:flex;align-items:center;justify-content:center;width:36px;align-self:stretch;margin:-15px 0 -15px -12px;color:var(--muted-2)}
+.pick-item .pi-arrow svg{width:19px;height:19px;transition:transform .15s}
+.pick-item.open .pi-arrow svg{transform:rotate(90deg)}
 .picker-sheet.pk-open{animation:pkSheetIn .22s cubic-bezier(.2,.9,.3,1)}
 @keyframes pkSheetIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
 .picker.closing{animation:pkFadeOut .15s ease forwards}
