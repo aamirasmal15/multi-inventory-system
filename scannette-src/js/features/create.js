@@ -359,6 +359,7 @@ function closePicker() {
 function renderPicker(q) {
   const nq = norm(q),
     list = $("#pickerList");
+  list.classList.remove("tree");
   list.innerHTML = "";
   const none = document.createElement("button");
   none.type = "button";
@@ -425,8 +426,11 @@ function openTreePicker(title, nodes, current, cb, opts) {
   });
   for (const k in treeChildren)
     treeChildren[k].sort((a, b) => norm(a.name).localeCompare(norm(b.name)));
-  // la sélection en cours doit être visible d'emblée : sa lignée est dépliée
+  // petit arbre : tout est déplié d'emblée pour qu'on voie l'arborescence
+  // entière ; gros arbre : seule la lignée de la sélection en cours s'ouvre
   treeOpen = {};
+  if (Object.keys(treeById).length <= 60)
+    for (const k in treeChildren) if (k !== "root") treeOpen[k] = true;
   for (let n = treeById[treeCur], p; n && (p = treeParentOf(n)) != null; n = treeById[p])
     treeOpen[p] = true;
   pickerRender = renderTree;
@@ -456,6 +460,7 @@ function renderTree(q) {
   const list = $("#pickerList");
   list.innerHTML = "";
   const nq = norm(q);
+  list.classList.toggle("tree", !nq);
   if (nq) {
     const all = Object.keys(treeById).map((k) => treeById[k]);
     const matches = all
@@ -479,7 +484,7 @@ function renderTree(q) {
   if (treeAllowNone) {
     const none = document.createElement("button");
     none.type = "button";
-    none.className = "pick-item" + (treeCur === "" ? " cur" : "");
+    none.className = "pick-item pick-none" + (treeCur === "" ? " cur" : "");
     none.innerHTML = '<span class="pi-arrow"></span><span class="pi-txt">' + esc(treeNoneLabel) + "</span>";
     none.onclick = () => {
       none.classList.add("picked");
@@ -490,22 +495,31 @@ function renderTree(q) {
     };
     list.appendChild(none);
   }
-  addTreeRows(list, "root", 0);
+  addTreeRows(list, "root", []);
   if (list.children.length === 0) treeEmpty(list);
 }
 /* arbre dépliable : la flèche ouvre/ferme un niveau, le nom sélectionne le
    nœud — un parent est donc choisissable, contrairement à l'ancien picker
-   qui ne savait que descendre dedans */
-function addTreeRows(list, parentKey, depth) {
-  (treeChildren[parentKey] || []).forEach((n) => {
+   qui ne savait que descendre dedans. Les colonnes pi-guide dessinent les
+   traits de l'arborescence (│ ├ └) comme la vue arbre d'InvenTree ; guides
+   dit, pour chaque niveau d'ancêtre À CONNECTEUR (donc hors racines, qui
+   n'occupent aucune colonne), si sa fratrie continue plus bas (│) */
+function addTreeRows(list, parentKey, guides) {
+  const kids = treeChildren[parentKey] || [];
+  const root = parentKey === "root";
+  kids.forEach((n, i) => {
     const pk = String(n.pk);
     const hasKids = !!(treeChildren[pk] || []).length;
     const open = hasKids && !!treeOpen[pk];
+    const last = i === kids.length - 1;
+    let pre = "";
+    guides.forEach((g) => (pre += '<span class="pi-guide' + (g ? " v" : "") + '"></span>'));
+    if (!root) pre += '<span class="pi-guide ' + (last ? "l" : "t") + '"></span>';
     const b = document.createElement("button");
     b.type = "button";
     b.className = "pick-item" + (pk === treeCur ? " cur" : "") + (open ? " open" : "");
-    b.style.paddingLeft = 16 + Math.min(depth, 5) * 20 + "px";
     b.innerHTML =
+      pre +
       (hasKids
         ? '<span class="pi-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>'
         : '<span class="pi-arrow"></span>') +
@@ -522,7 +536,7 @@ function addTreeRows(list, parentKey, depth) {
         $("#pickerList").scrollTop = st;
       };
     list.appendChild(b);
-    if (open) addTreeRows(list, pk, depth + 1);
+    if (open) addTreeRows(list, pk, root ? [] : guides.concat(!last));
   });
 }
 function treeEmpty(list) {

@@ -413,16 +413,26 @@ body.noscroll{overflow:hidden}
 .picker-search svg{width:18px;height:18px;color:var(--muted);flex:none}
 .picker-search input{flex:1;border:none;background:transparent;color:var(--text);font-size:15px;outline:none;font-family:inherit}
 .picker-list{overflow-y:auto;padding:6px 0}
-.pick-item{display:flex;align-items:center;gap:2px;width:100%;text-align:left;border:none;background:transparent;padding:15px 16px;min-height:54px;color:var(--text);font-size:15px;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--border);transition:background .12s}
+.pick-item{--pkv:15px;display:flex;align-items:center;gap:2px;width:100%;text-align:left;border:none;background:transparent;padding:var(--pkv) 16px;min-height:54px;color:var(--text);font-size:15px;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--border);transition:background .12s}
 .pick-item:hover{background:var(--surface-2)}
 .pick-item:active{background:var(--surface-2);transform:scale(.985)}
 .pick-item.picked{background:var(--green-light)!important;color:var(--green)}
 .pick-item.cur{color:var(--primary);font-weight:600}
 .pick-item .pi-txt{flex:1;min-width:0}
 /* flèche de dépliage : zone de tap pleine hauteur, tourne vers le bas une fois ouvert */
-.pick-item .pi-arrow{flex:none;display:flex;align-items:center;justify-content:center;width:36px;align-self:stretch;margin:-15px 0 -15px -12px;color:var(--muted-2)}
+.pick-item .pi-arrow{flex:none;display:flex;align-items:center;justify-content:center;width:36px;align-self:stretch;margin:calc(-1*var(--pkv)) 0 calc(-1*var(--pkv)) -12px;color:var(--muted-2)}
 .pick-item .pi-arrow svg{width:19px;height:19px;transition:transform .15s}
 .pick-item.open .pi-arrow svg{transform:rotate(90deg)}
+/* mode arbre : lignes plus denses, sans séparateurs (les traits guident l'œil) */
+#pickerList.tree .pick-item{--pkv:12px;min-height:48px;border-bottom:none}
+#pickerList.tree .pick-item.pick-none{border-bottom:1px solid var(--border)}
+/* traits de l'arborescence : une colonne par niveau — v = │ (la fratrie de
+   l'ancêtre continue), t = ├, l = └ ; pleine hauteur pour que les traits de
+   deux lignes voisines se touchent */
+.pick-item .pi-guide{flex:none;width:20px;align-self:stretch;margin:calc(-1*var(--pkv)) 0;position:relative}
+.pick-item .pi-guide.v::before,.pick-item .pi-guide.t::before,.pick-item .pi-guide.l::before{content:"";position:absolute;left:9px;top:0;bottom:0;border-left:1.5px solid var(--border)}
+.pick-item .pi-guide.l::before{bottom:50%}
+.pick-item .pi-guide.t::after,.pick-item .pi-guide.l::after{content:"";position:absolute;left:10.5px;width:9px;top:50%;margin-top:-1px;border-top:1.5px solid var(--border)}
 .picker-sheet.pk-open{animation:pkSheetIn .22s cubic-bezier(.2,.9,.3,1)}
 @keyframes pkSheetIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
 .picker.closing{animation:pkFadeOut .15s ease forwards}
