@@ -359,6 +359,7 @@ function closePicker() {
 function renderPicker(q) {
   const nq = norm(q),
     list = $("#pickerList");
+  list.classList.remove("tree");
   list.innerHTML = "";
   const none = document.createElement("button");
   none.type = "button";
@@ -401,12 +402,15 @@ let pickerRender = renderPicker;
 /* ---- picker hiérarchique (catégories / emplacements) ---- */
 let treeChildren = {},
   treeById = {},
-  treeStack = [],
+  treeOpen = {},
   treeCb = null,
   treeCur = "",
   treeAllowNone = true,
-  treeNoneLabel = "— Aucune —",
-  treeAnim = "";
+  treeNoneLabel = "— Aucune —";
+function treeParentOf(n) {
+  const pv = n.parent && typeof n.parent === "object" ? n.parent.pk : n.parent;
+  return pv == null ? null : String(pv);
+}
 function openTreePicker(title, nodes, current, cb, opts) {
   opts = opts || {};
   treeCb = cb;
@@ -417,18 +421,29 @@ function openTreePicker(title, nodes, current, cb, opts) {
   treeById = {};
   (nodes || []).forEach((n) => {
     treeById[String(n.pk)] = n;
-    const pv = n.parent && typeof n.parent === "object" ? n.parent.pk : n.parent;
-    const p = pv == null ? "root" : String(pv);
-    (treeChildren[p] = treeChildren[p] || []).push(n);
+    const p = treeParentOf(n);
+    (treeChildren[p == null ? "root" : p] = treeChildren[p == null ? "root" : p] || []).push(n);
   });
   for (const k in treeChildren)
     treeChildren[k].sort((a, b) => norm(a.name).localeCompare(norm(b.name)));
-  treeStack = [];
+  // tout arrive replié, sauf la lignée de la sélection en cours
+  treeOpen = {};
+  for (let n = treeById[treeCur], p; n && (p = treeParentOf(n)) != null; n = treeById[p])
+    treeOpen[p] = true;
   pickerRender = renderTree;
   $("#pickerTitle").textContent = title;
   $("#pickerSearch").value = "";
   renderTree("");
   showPicker();
+  // amène la sélection en cours au centre de la liste (scroll interne
+  // seulement : scrollIntoView ferait aussi défiler la page sous le voile)
+  const lst = $("#pickerList"),
+    cur = lst.querySelector(".pick-item.cur");
+  if (cur)
+    lst.scrollTop = Math.max(
+      0,
+      cur.offsetTop - lst.offsetTop - (lst.clientHeight - cur.offsetHeight) / 2,
+    );
 }
 function treePick(n) {
   if (treeCb) treeCb(String(n.pk), n.pathstring || n.name);
@@ -442,6 +457,7 @@ function renderTree(q) {
   const list = $("#pickerList");
   list.innerHTML = "";
   const nq = norm(q);
+  list.classList.toggle("tree", !nq);
   if (nq) {
     const all = Object.keys(treeById).map((k) => treeById[k]);
     const matches = all
@@ -462,78 +478,63 @@ function renderTree(q) {
     });
     return;
   }
-  const parentPk = treeStack.length ? treeStack[treeStack.length - 1] : null;
-  if (parentPk === null) {
-    if (treeAllowNone) {
-      const none = document.createElement("button");
-      none.type = "button";
-      none.className = "pick-item" + (treeCur === "" ? " cur" : "");
-      none.innerHTML = '<span class="pi-txt">' + esc(treeNoneLabel) + "</span>";
-      none.onclick = () => {
-        none.classList.add("picked");
-        setTimeout(() => {
-          if (treeCb) treeCb("", "");
-          closePicker();
-        }, 130);
-      };
-      list.appendChild(none);
-    }
-  } else {
-    const cur = treeById[parentPk];
-    const back = document.createElement("button");
-    back.type = "button";
-    back.className = "pick-back";
-    back.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg> ' +
-      t("back");
-    back.onclick = () => {
-      treeStack.pop();
-      $("#pickerSearch").value = "";
-      treeAnim = "back";
-      renderTree("");
-      $("#pickerList").scrollTop = 0;
+  if (treeAllowNone) {
+    const none = document.createElement("button");
+    none.type = "button";
+    none.className = "pick-item pick-none" + (treeCur === "" ? " cur" : "");
+    none.innerHTML = '<span class="pi-arrow"></span><span class="pi-txt">' + esc(treeNoneLabel) + "</span>";
+    none.onclick = () => {
+      none.classList.add("picked");
+      setTimeout(() => {
+        if (treeCb) treeCb("", "");
+        closePicker();
+      }, 130);
     };
-    list.appendChild(back);
-    const path = document.createElement("div");
-    path.className = "pick-path";
-    path.textContent = cur.pathstring || cur.name;
-    list.appendChild(path);
+    list.appendChild(none);
   }
-  const kids = treeChildren[parentPk == null ? "root" : String(parentPk)] || [];
-  kids.forEach((n) => {
-    const hasKids = !!(treeChildren[String(n.pk)] || []).length;
+  addTreeRows(list, "root", []);
+  if (list.children.length === 0) treeEmpty(list);
+}
+/* arbre dépliable : la flèche ouvre/ferme un niveau, le nom sélectionne le
+   nœud — un parent est donc choisissable, contrairement à l'ancien picker
+   qui ne savait que descendre dedans. Les colonnes pi-guide dessinent les
+   traits de l'arborescence (│ ├ └) comme la vue arbre d'InvenTree ; guides
+   dit, pour chaque niveau d'ancêtre À CONNECTEUR (donc hors racines, qui
+   n'occupent aucune colonne), si sa fratrie continue plus bas (│) */
+function addTreeRows(list, parentKey, guides) {
+  const kids = treeChildren[parentKey] || [];
+  const root = parentKey === "root";
+  kids.forEach((n, i) => {
+    const pk = String(n.pk);
+    const hasKids = !!(treeChildren[pk] || []).length;
+    const open = hasKids && !!treeOpen[pk];
+    const last = i === kids.length - 1;
+    let pre = "";
+    guides.forEach((g) => (pre += '<span class="pi-guide' + (g ? " v" : "") + '"></span>'));
+    if (!root) pre += '<span class="pi-guide ' + (last ? "l" : "t") + '"></span>';
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "pick-item" + (String(n.pk) === treeCur && !hasKids ? " cur" : "");
+    b.className = "pick-item" + (pk === treeCur ? " cur" : "") + (open ? " open" : "");
     b.innerHTML =
+      pre +
+      (hasKids
+        ? '<span class="pi-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>'
+        : '<span class="pi-arrow"></span>') +
       '<span class="pi-txt">' +
       esc(n.name) +
-      "</span>" +
-      (hasKids
-        ? '<span class="pi-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>'
-        : "");
-    b.onclick = () => {
-      if (hasKids) {
-        treeStack.push(String(n.pk));
-        $("#pickerSearch").value = "";
-        treeAnim = "fwd";
+      "</span>";
+    b.onclick = () => pickFlash(b, n);
+    if (hasKids)
+      b.querySelector(".pi-arrow").onclick = (e) => {
+        e.stopPropagation();
+        treeOpen[pk] = !treeOpen[pk];
+        const st = list.scrollTop;
         renderTree("");
-        $("#pickerList").scrollTop = 0;
-      } else {
-        pickFlash(b, n);
-      }
-    };
+        $("#pickerList").scrollTop = st;
+      };
     list.appendChild(b);
+    if (open) addTreeRows(list, pk, root ? [] : guides.concat(!last));
   });
-  if (list.children.length === 0) treeEmpty(list);
-  if (treeAnim) {
-    list.classList.remove("anim-fwd", "anim-back");
-    void list.offsetWidth;
-    list.classList.add(treeAnim === "back" ? "anim-back" : "anim-fwd");
-    treeAnim = "";
-  } else {
-    list.classList.remove("anim-fwd", "anim-back");
-  }
 }
 function treeEmpty(list) {
   const e = document.createElement("div");
