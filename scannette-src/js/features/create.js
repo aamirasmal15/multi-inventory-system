@@ -426,11 +426,8 @@ function openTreePicker(title, nodes, current, cb, opts) {
   });
   for (const k in treeChildren)
     treeChildren[k].sort((a, b) => norm(a.name).localeCompare(norm(b.name)));
-  // petit arbre : tout est déplié d'emblée pour qu'on voie l'arborescence
-  // entière ; gros arbre : seule la lignée de la sélection en cours s'ouvre
+  // tout arrive replié, sauf la lignée de la sélection en cours
   treeOpen = {};
-  if (Object.keys(treeById).length <= 60)
-    for (const k in treeChildren) if (k !== "root") treeOpen[k] = true;
   for (let n = treeById[treeCur], p; n && (p = treeParentOf(n)) != null; n = treeById[p])
     treeOpen[p] = true;
   pickerRender = renderTree;
