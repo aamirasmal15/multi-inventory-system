@@ -11,7 +11,7 @@ séparés) :
 
 - **son InvenTree**, un site d'inventaire complet, sur `https://inventaire[-<asso>].<domaine>` ;
 - **sa Scannette**, une app web **mobile** pour scanner les codes-barres / QR et gérer le stock
-  depuis un téléphone, sur `https://scannette[-<asso>].<domaine>`.
+  depuis un téléphone, sous `https://inventaire[-<asso>].<domaine>/scannette/`.
 
 Le tout branché au **SSO de l'école (EirbConnect)** : les membres se connectent avec leur compte
 habituel. Une commande déploie une asso complète, une autre la supprime proprement.
