@@ -97,11 +97,14 @@ function frigoSetMode(m) {
   frigoRender();
 }
 
-function frigoThumb(p, cls) {
-  return p.thumbnail
+/* vignette d'un produit ; zoom (lightbox) seulement en mode Gérer : en achat,
+   toucher la carte ajoute au panier */
+function frigoThumb(p, cls, zoom) {
+  if (!p.thumbnail) return '<div class="' + cls + ' fr-ph">' + locBox().innerHTML + "</div>";
+  return zoom
     ? '<img class="' + cls + ' zoomable" src="' + esc(mediaUrl(p.thumbnail)) + '" data-full="' +
         esc(mediaUrl(p.image || "")) + '" alt="' + esc(p.name) + '" onerror="thumbErr(this,\'loc\')" onclick="openLightbox(this)">'
-    : '<div class="' + cls + ' fr-ph">' + locBox().innerHTML + "</div>";
+    : '<img class="' + cls + '" src="' + esc(mediaUrl(p.thumbnail)) + '" alt="' + esc(p.name) + '" onerror="thumbErr(this,\'loc\')">';
 }
 
 function frigoRender() {
@@ -128,34 +131,52 @@ function frigoRenderBuy(box, list) {
     box.innerHTML = '<div class="skeleton fr-span">' + esc(t("frigo_empty")) + "</div>";
     return;
   }
-  const cart = frigoCart();
   box.innerHTML = "";
   buyable.forEach((p) => {
     const card = document.createElement("div");
-    const inCart = cart[p.part] || 0;
-    card.className = "fr-card" + (p.available ? "" : " out") + (inCart ? " in" : "");
+    card.className = "fr-card" + (p.available ? "" : " out");
+    card.setAttribute("role", "button");
+    card.tabIndex = p.available ? 0 : -1;
     card.innerHTML =
-      frigoThumb(p, "fr-img") +
+      '<span class="fr-check" aria-hidden="true">' + CHECK + "</span>" +
+      frigoThumb(p, "fr-img", false) +
       '<div class="fr-body"><div class="fr-name">' + esc(p.name) + "</div>" +
       '<div class="fr-meta"><span class="fr-price">' + esc(eur(p.unit_price)) + "</span>" +
       '<span class="fr-left">' + esc(p.available ? t("frigo_left", p.available) : t("frigo_soldout")) + "</span></div>" +
       '<div class="fr-ctrl"></div></div>';
     const ctrl = card.querySelector(".fr-ctrl");
+    const set = (n) => {
+      frigoSetQty(p.part, n);
+      paint();
+      frigoPaintCart();
+    };
     const paint = () => {
       const n = frigoCart()[p.part] || 0;
       card.classList.toggle("in", n > 0);
+      card.setAttribute("aria-pressed", n > 0 ? "true" : "false");
       if (!p.available) {
-        ctrl.innerHTML = '<button class="fr-add" disabled>' + esc(t("frigo_soldout")) + "</button>";
+        ctrl.innerHTML = '<span class="fr-hint-add">' + esc(t("frigo_soldout")) + "</span>";
       } else if (!n) {
-        ctrl.innerHTML = '<button class="fr-add">+ ' + esc(t("frigo_add")) + "</button>";
-        ctrl.firstChild.onclick = () => (frigoSetQty(p.part, 1), paint(), frigoPaintCart());
+        ctrl.innerHTML = '<span class="fr-hint-add">+ ' + esc(t("frigo_add")) + "</span>";
       } else {
         ctrl.innerHTML =
           '<div class="fr-step"><button class="mini" aria-label="−">−</button><b>' + n +
           '</b><button class="mini" aria-label="+"' + (n >= p.available ? " disabled" : "") + ">+</button></div>";
         const [minus, plus] = ctrl.querySelectorAll("button");
-        minus.onclick = () => (frigoSetQty(p.part, n - 1), paint(), frigoPaintCart());
-        plus.onclick = () => (frigoSetQty(p.part, Math.min(p.available, n + 1)), paint(), frigoPaintCart());
+        minus.onclick = (e) => (e.stopPropagation(), set(n - 1));
+        plus.onclick = (e) => (e.stopPropagation(), set(Math.min(p.available, n + 1)));
+      }
+    };
+    // toute la carte : ajoute au panier, ou retire une carte déjà cochée
+    const toggle = () => {
+      if (!p.available) return;
+      set(frigoCart()[p.part] ? 0 : 1);
+    };
+    card.onclick = toggle;
+    card.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggle();
       }
     };
     paint();
@@ -261,7 +282,7 @@ function openPriceSheet(p) {
   ov.className = "modal-ov";
   ov.innerHTML =
     '<div class="modal-card price-sheet" role="dialog" aria-modal="true">' +
-    '<div class="ps-head">' + frigoThumb(p, "lthumb") +
+    '<div class="ps-head">' + frigoThumb(p, "lthumb", false) +
     '<div class="ps-name"><div class="t">' + esc(p.name) + '</div><div class="s">' +
     esc(p.buyable ? (p.price_inherited ? t("frigo_now_model", eur(p.unit_price)) : t("frigo_now", eur(p.unit_price))) : t("frigo_no_price")) +
     '</div></div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">✕</button></div>' +
