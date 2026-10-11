@@ -1,5 +1,8 @@
 """Verrou du frigo : seuls les admins modifient ce qu'il contient, partout.
 
+Couvert : articles de stock et emplacement du frigo (et sous-emplacements),
+fiches produit des boissons du frigo et de leurs modeles, prix de vente.
+
 Branche sur deux mecanismes d'InvenTree :
 - ValidationMixin (core.py) : appele a CHAQUE sauvegarde / suppression d'un
   article de stock ou d'un emplacement, quel que soit le chemin (interface
@@ -65,10 +68,35 @@ def fridge_ids():
     return set(loc.get_descendants(include_self=True).values_list("pk", flat=True))
 
 
+def part_in_fridge(part_id, fridge):
+    """Vrai si ce part, ou une de ses variantes, a du stock dans le frigo.
+
+    Les variantes comptent : une variante sans prix propre herite du prix de
+    son modele, et le modele lui-meme n'est souvent pas range dans le frigo.
+    """
+    from part.models import Part
+    from stock.models import StockItem
+
+    part = Part.objects.filter(pk=part_id).first()
+    if part is None:
+        return False
+    parts = part.get_descendants(include_self=True).values_list("pk", flat=True)
+    return StockItem.objects.filter(part__in=parts, location__in=fridge).exists()
+
+
 def check_instance(instance):
     """Leve ValidationError si un non-admin touche au frigo (sauvegarde)."""
+    from part.models import Part
     from stock.models import StockItem, StockLocation
 
+    if isinstance(instance, Part):
+        # fiche produit d'une boisson du frigo (ou de son modele) : nom,
+        # activation, type... changer l'un d'eux la retirerait de la vente
+        if instance.pk and blocked():
+            fridge = fridge_ids()
+            if fridge and part_in_fridge(instance.pk, fridge):
+                raise ValidationError(MESSAGE)
+        return
     if isinstance(instance, StockItem):
         locs = {instance.location_id}
         if instance.pk:
@@ -87,9 +115,16 @@ def check_instance(instance):
 
 
 def check_deletion(instance):
-    """Leve ValidationError si un non-admin supprime un article ou emplacement du frigo."""
+    """Leve ValidationError si un non-admin supprime un article, un emplacement ou un produit du frigo."""
+    from part.models import Part
     from stock.models import StockItem, StockLocation
 
+    if isinstance(instance, Part):
+        if blocked():
+            fridge = fridge_ids()
+            if fridge and part_in_fridge(instance.pk, fridge):
+                raise ValidationError(MESSAGE)
+        return
     if isinstance(instance, StockItem):
         loc = instance.location_id
     elif isinstance(instance, StockLocation):
@@ -101,13 +136,10 @@ def check_deletion(instance):
 
 
 def check_price(sender, instance, **kwargs):
-    """pre_save / pre_delete PartSellPriceBreak : prix d'un produit du frigo = admins."""
+    """pre_save / pre_delete PartSellPriceBreak : prix d'un produit du frigo
+    (ou de son modele, dont les variantes heritent le prix) = admins."""
     if not blocked():
         return
     fridge = fridge_ids()
-    if not fridge or not instance.part_id:
-        return
-    from stock.models import StockItem
-
-    if StockItem.objects.filter(part_id=instance.part_id, location__in=fridge).exists():
+    if fridge and instance.part_id and part_in_fridge(instance.part_id, fridge):
         raise ValidationError(MESSAGE)
