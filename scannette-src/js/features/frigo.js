@@ -311,6 +311,8 @@ function openPriceSheet(p) {
   };
   const fmtC = (c) => (c / 100).toFixed(2).replace(".", ",");
   const sync = () => {
+    // champ à la largeur du prix : « 1,10 € » reste centré entre − et +
+    input.style.width = Math.max(4, (input.value || input.placeholder).length) + 0.3 + "ch";
     const c = cents();
     const ok = c > 0;
     save.disabled = !ok;

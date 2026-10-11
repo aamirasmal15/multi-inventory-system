@@ -400,7 +400,7 @@ textarea{resize:none;min-height:56px}
 .ps-step:active{transform:scale(.94)}
 .ps-field{display:flex;align-items:baseline;justify-content:center;gap:4px;min-width:0;flex:1;max-width:220px;border-bottom:2px solid var(--border);padding:2px 0 4px;cursor:text}
 .ps-field:focus-within{border-bottom-color:var(--green)}
-.ps-field input{border:none;box-shadow:none!important;background:transparent;font-size:44px;font-weight:800;color:var(--green);text-align:right;padding:0;width:100%;min-width:0;letter-spacing:-.02em}
+.ps-field input{border:none;box-shadow:none!important;background:transparent;font-size:44px;font-weight:800;color:var(--green);text-align:center;padding:0;width:4.3ch;max-width:100%;min-width:0;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .ps-field span{font-size:30px;font-weight:700;color:var(--muted)}
 .ps-steplbl{text-align:center;font-size:11.5px;color:var(--muted);margin:6px 0 16px}
 .ps-note{color:var(--muted);font-size:12.5px;line-height:1.45;margin:-4px 0 12px;text-align:center}
