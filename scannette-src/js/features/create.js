@@ -835,9 +835,6 @@ async function suggestParts() {
       (p.tpl ? '<span class="sr-badge">' + t("tpl_badge") + "</span>" : "") +
       "</span>" +
       (sub ? '<span class="sr-sub">' + sub + "</span>" : "") +
-      "</span>" +
-      '<span class="ns-act">' +
-      t("sugg_pick") +
       "</span>";
     b.onclick = () => pickSuggestion(p);
     // toucher la ligne = choisir cet article ; « Voir » à côté ouvre
