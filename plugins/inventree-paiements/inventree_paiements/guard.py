@@ -126,13 +126,32 @@ def check_deletion(instance):
                 raise ValidationError(MESSAGE)
         return
     if isinstance(instance, StockItem):
-        loc = instance.location_id
+        if instance.location_id and blocked() and instance.location_id in fridge_ids():
+            raise ValidationError(MESSAGE)
     elif isinstance(instance, StockLocation):
-        loc = instance.pk
-    else:
-        return
-    if loc and blocked() and loc in fridge_ids():
-        raise ValidationError(MESSAGE)
+        # le frigo, un de ses sous-emplacements, ou un de ses ANCETRES (supprimer
+        # « Local 2ème » avec son contenu emporterait le frigo)
+        if instance.pk and blocked():
+            fridge = fridge_ids()
+            if fridge and (instance.pk in fridge or fridge_root_under(instance)):
+                raise ValidationError(MESSAGE)
+
+
+def fridge_root_under(location):
+    """Vrai si l'emplacement frigo est sous cet emplacement."""
+    try:
+        from plugin import registry
+
+        loc = registry.get_plugin("paiements").fridge_location()
+    except Exception:
+        loc = None
+    return bool(loc) and loc.get_ancestors().filter(pk=location.pk).exists()
+
+
+def check_deletion_signal(sender, instance, **kwargs):
+    """pre_delete : emis aussi pendant une suppression en cascade, que
+    validate_model_deletion (appele par Model.delete) ne voit pas."""
+    check_deletion(instance)
 
 
 def check_price(sender, instance, **kwargs):
@@ -141,5 +160,14 @@ def check_price(sender, instance, **kwargs):
     if not blocked():
         return
     fridge = fridge_ids()
-    if fridge and instance.part_id and part_in_fridge(instance.part_id, fridge):
+    if not fridge:
+        return
+    parts = {instance.part_id}
+    if instance.pk:
+        # palier deplace vers un autre part : l'ancien part perdrait son prix
+        from part.models import PartSellPriceBreak
+
+        parts.add(PartSellPriceBreak.objects.filter(pk=instance.pk).values_list("part_id", flat=True).first())
+    parts.discard(None)
+    if any(part_in_fridge(pk, fridge) for pk in parts):
         raise ValidationError(MESSAGE)

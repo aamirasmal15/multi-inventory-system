@@ -48,7 +48,10 @@ class InventreePaiementsConfig(AppConfig):
         from part.models import PartSellPriceBreak
         from stock.models import StockItem
 
-        from .guard import check_price
+        from part.models import Part
+        from stock.models import StockLocation
+
+        from .guard import check_deletion_signal, check_price
 
         post_save.connect(
             mark_fridge_part_salable, sender=StockItem, dispatch_uid="paiements_fridge_salable"
@@ -56,3 +59,8 @@ class InventreePaiementsConfig(AppConfig):
         # prix de vente d'un produit du frigo : admins seulement (guard.py)
         pre_save.connect(check_price, sender=PartSellPriceBreak, dispatch_uid="paiements_fridge_price_save")
         pre_delete.connect(check_price, sender=PartSellPriceBreak, dispatch_uid="paiements_fridge_price_delete")
+        # suppressions en cascade (emplacement parent, part) : pre_delete les voit
+        for model in (StockItem, StockLocation, Part):
+            pre_delete.connect(
+                check_deletion_signal, sender=model, dispatch_uid=f"paiements_fridge_del_{model.__name__}"
+            )

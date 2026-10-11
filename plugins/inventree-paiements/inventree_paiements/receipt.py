@@ -85,15 +85,28 @@ def logo_data_uri():
         return hit
     uri = ""
     for u in filter(None, urls):
+        if not u.startswith(("https://", "http://")):
+            continue
         try:
-            r = requests.get(u, timeout=5)
-            ctype = (r.headers.get("Content-Type") or mimetypes.guess_type(u)[0] or "").split(";")[0]
-            if r.status_code == 200 and ctype.startswith("image/") and len(r.content) < 3_000_000:
-                uri = f"data:{ctype};base64," + base64.b64encode(r.content).decode()
+            # lecture bornee (3 Mo), sans redirection, PNG/JPEG/WebP seulement
+            # (pas de SVG : weasyprint suivrait ses references externes)
+            with requests.get(u, timeout=5, stream=True, allow_redirects=False) as r:
+                ctype = (r.headers.get("Content-Type") or mimetypes.guess_type(u)[0] or "").split(";")[0].strip()
+                if r.status_code != 200 or ctype not in ("image/png", "image/jpeg", "image/webp"):
+                    continue
+                data = b""
+                for chunk in r.iter_content(65536):
+                    data += chunk
+                    if len(data) > 3_000_000:
+                        data = b""
+                        break
+            if data:
+                uri = f"data:{ctype};base64," + base64.b64encode(data).decode()
                 break
         except requests.RequestException:
             continue
-    cache.set(key, uri, 86400)
+    # logo trouve : 1 jour ; echec (passager ?) : 10 min seulement
+    cache.set(key, uri, 86400 if uri else 600)
     return uri
 
 

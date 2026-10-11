@@ -26,7 +26,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from plugin import InvenTreePlugin
-from plugin.mixins import AppMixin, SettingsMixin, UrlsMixin, ValidationMixin
+from plugin.mixins import AppMixin, ScheduleMixin, SettingsMixin, UrlsMixin, ValidationMixin
 
 from . import PLUGIN_VERSION
 from . import guard
@@ -37,7 +37,7 @@ logger = logging.getLogger("inventree")
 MAX_QTY = 20  # garde-fou par produit : une Scannette n'est pas une caisse de grossiste
 
 
-class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, InvenTreePlugin):
+class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, ValidationMixin, InvenTreePlugin):
     """Frigo de l'asso : achat des articles de l'emplacement frigo via SumUp."""
 
     NAME = "Paiements"
@@ -114,6 +114,16 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, Inven
             "default": False,
             "validator": bool,
         },
+    }
+
+    # filet de securite : un achat paye dont ni le retour navigateur ni le
+    # webhook n'ont abouti est confirme ici (relecture SumUp toutes les 10 min)
+    SCHEDULED_TASKS = {
+        "reconcile": {
+            "func": "reconcile_pending",
+            "schedule": "I",
+            "minutes": 10,
+        }
     }
 
     def setup_urls(self):
@@ -201,17 +211,19 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, Inven
             pr = products.get(part.pk)
             if pr is None:
                 price, own = self.unit_price(part) if part.active else (None, False)
+                cents = self.cents(price) if price else 0
                 pr = products[part.pk] = {
                     "part": part.pk,
                     "name": part.full_name,
                     "units": part.units or "",
                     "thumbnail": part.get_thumbnail_url() if part.image else None,
                     "image": part.get_image_url() if part.image else None,
-                    "unit_price": str(price.quantize(Decimal("0.01"))) if price else None,
-                    "unit_cents": self.cents(price) if price else None,
+                    # un seul arrondi (en centimes) : prix affiche = prix facture
+                    "unit_price": f"{cents / 100:.2f}" if cents > 0 else None,
+                    "unit_cents": cents if cents > 0 else None,
                     # prix herite du modele (variante sans prix propre)
-                    "price_inherited": bool(price) and not own,
-                    "buyable": bool(price and price > 0),
+                    "price_inherited": cents > 0 and not own,
+                    "buyable": cents > 0,
                     "quantity": Decimal(0),
                     "items": [],
                 }
@@ -408,9 +420,13 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, Inven
             logger.error("Paiements : création du checkout SumUp refusée : %s %s", e, e.body)
             purchase.delete()
             raise
-        purchase.checkout_id = res["id"]
+        checkout_id = (res or {}).get("id")
+        if not checkout_id:
+            purchase.delete()
+            raise SumUpError("Réponse SumUp sans identifiant de paiement")
+        purchase.checkout_id = checkout_id
         purchase.save(update_fields=["checkout_id"])
-        return purchase, res["id"]
+        return purchase, checkout_id
 
     # ---- confirmation ----
     def confirm(self, purchase):
@@ -455,8 +471,11 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, Inven
         data = self.sumup().get_checkout(p.checkout_id) or {}
         if data.get("status") != "PAID":
             return None
-        amount = Decimal(str(data.get("amount", "0"))) * 100
-        if (
+        try:
+            amount = Decimal(str(data.get("amount"))) * 100
+        except (ArithmeticError, ValueError, TypeError):
+            amount = Decimal(-1)
+        if not amount.is_finite() or (
             int(amount.quantize(Decimal("1"), ROUND_HALF_UP)) != p.amount_cents
             or data.get("currency") != "EUR"
             or not str(data.get("checkout_reference", "")).startswith(f"scannette-{p.pk}-")
@@ -476,7 +495,13 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, Inven
         notes = f"Achat frigo #{p.pk} (SumUp {p.payment_ref})"
         warnings = []
         for ln in p.lines.all():
-            sources = list(self.fridge_items(p.location, part=ln.part_id)) if ln.part_id and p.location_id else []
+            # articles verrouilles (select_for_update) : deux achats confirmes
+            # en meme temps ne peuvent pas lire le meme stock et en perdre un retrait
+            sources = (
+                list(self.fridge_items(p.location, part=ln.part_id).select_for_update(of=("self",)))
+                if ln.part_id and p.location_id
+                else []
+            )
             need = Decimal(ln.quantity)
             for item in sources:
                 if need <= 0:
@@ -491,3 +516,26 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, Inven
             ln.save(update_fields=["removed"])
         p.stock_removed = not warnings
         p.warning = " ; ".join(warnings)
+
+    # ---- rattrapage ----
+    def reconcile_pending(self):
+        """Tache planifiee : confirme les achats en attente des dernieres 48 h.
+
+        Cas vise : paiement abouti chez SumUp, mais l'acheteur a ferme l'appli
+        avant la verification et le webhook n'est pas arrive. Sans cela, il
+        serait debite sans retrait de stock ni recu.
+        """
+        import datetime
+
+        from .models import Purchase
+
+        if not self.is_configured():
+            return
+        since = timezone.now() - datetime.timedelta(hours=48)
+        for p in Purchase.objects.filter(status=Purchase.STATUS_PENDING, created_at__gte=since).exclude(
+            checkout_id=None
+        ):
+            try:
+                self.confirm(p)
+            except SumUpError as e:
+                logger.warning("Paiements : rattrapage de l'achat #%s impossible : %s", p.pk, e)

@@ -16,15 +16,21 @@
 
 let FRIGO = null; // dernière réponse de /plugin/paiements/fridge
 let FRIGO_MODE = "buy"; // "buy" | "manage"
-let FRIGO_CART_PAYING = false; // le paiement en cours est celui du panier
 
 /* ---- panier { partPk: quantité } ---- */
 function frigoCart() {
+  let c = {};
   try {
-    return JSON.parse(sessionStorage.getItem("frigo_cart") || "{}") || {};
-  } catch (_) {
-    return {};
+    c = JSON.parse(sessionStorage.getItem("frigo_cart") || "{}") || {};
+  } catch (_) {}
+  // quantités entières strictement positives, rien d'autre (sessionStorage
+  // est modifiable : jamais de chaîne insérée telle quelle dans la page)
+  const out = {};
+  for (const k in c) {
+    const q = Number(c[k]) | 0;
+    if (/^\d+$/.test(k) && q > 0) out[k] = q;
   }
+  return out;
 }
 function frigoCartSave(c) {
   try {
@@ -33,6 +39,17 @@ function frigoCartSave(c) {
 }
 function frigoCartClear() {
   frigoCartSave({});
+  try {
+    sessionStorage.removeItem("frigo_cart_purchase");
+  } catch (_) {}
+}
+/* le reçu payé est-il celui du panier ? (survit au rechargement 3-D Secure) */
+function frigoCartPaidBy(pk) {
+  try {
+    return sessionStorage.getItem("frigo_cart_purchase") === String(pk);
+  } catch (_) {
+    return false;
+  }
 }
 function frigoProduct(pk) {
   return ((FRIGO && FRIGO.products) || []).find((p) => p.part === Number(pk)) || null;
@@ -202,7 +219,6 @@ function frigoPaintCart() {
 async function frigoPay() {
   const lines = frigoCartLines();
   if (!lines.length) return;
-  FRIGO_CART_PAYING = true; // le reçu videra le panier (pas un achat depuis une fiche)
   const btn = $("#frigoPayBtn"),
     html = btn.innerHTML;
   btn.disabled = true;
@@ -210,6 +226,7 @@ async function frigoPay() {
   const paid = await payCheckout(
     { source: "frigo", lines: lines.map((l) => ({ part: l.p.part, quantity: l.q })) },
     lines.map((l) => ({ name: l.p.name, quantity: l.q, total: eurCents(l.q * l.p.unit_cents) })),
+    { cart: true },
   );
   btn.disabled = false;
   btn.innerHTML = html;

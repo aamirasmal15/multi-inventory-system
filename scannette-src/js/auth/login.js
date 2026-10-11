@@ -89,6 +89,12 @@ function logout(silent) {
   delCookie("eir_token");
   delCookie("eir_user");
   forgetView(); // pas de réouverture d'écran après une déconnexion
+  // frigo : panier et catalogue de l'utilisateur précédent effacés (appareil partagé)
+  try {
+    sessionStorage.removeItem("frigo_cart");
+    sessionStorage.removeItem("frigo_cart_purchase");
+  } catch (_) {}
+  FRIGO = null;
   $("#topbar").style.display = "none";
   $("#pass").value = "";
   show("#screen-login");

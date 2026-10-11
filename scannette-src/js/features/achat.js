@@ -62,7 +62,7 @@ function eurCents(c) {
    body : panier pour POST /plugin/paiements/checkout ; recap : lignes à
    rappeler dans la feuille de paiement [{name, quantity, total}].
    Résout quand la feuille se ferme (payé -> le reçu a pris le relais). */
-async function payCheckout(body, recap) {
+async function payCheckout(body, recap, opts) {
   let r;
   try {
     r = await api("/plugin/paiements/checkout", { method: "POST", body });
@@ -70,6 +70,11 @@ async function payCheckout(body, recap) {
     toast(e.message, "bad");
     return false;
   }
+  // achat du panier : son reçu payé videra le panier (même après un
+  // rechargement 3-D Secure) ; un achat depuis une fiche n'y touche pas
+  try {
+    if (opts && opts.cart) sessionStorage.setItem("frigo_cart_purchase", String(r.purchase));
+  } catch (_) {}
   // la feuille s'ouvre tout de suite ; le formulaire s'y monte dès que le
   // script SumUp est là (préchargé à l'ouverture du frigo / de la fiche)
   return openPaySheet(r, recap);
@@ -204,9 +209,8 @@ async function openReceipt(pk, fresh) {
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (p.status === "paid") {
-    // le panier a été payé : on le vide (pas pour un achat depuis une fiche)
-    if (FRIGO_CART_PAYING) frigoCartClear();
-    FRIGO_CART_PAYING = false;
+    // le panier a été payé : on le vide (jamais pour un achat depuis une fiche)
+    if (frigoCartPaidBy(p.pk)) frigoCartClear();
     if (fresh) toast(t("buy_paid_toast"), "ok");
   }
   renderReceipt(p);

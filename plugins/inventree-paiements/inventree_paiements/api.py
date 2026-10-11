@@ -166,7 +166,7 @@ class FridgePriceView(PluginView):
             price = Decimal(raw).quantize(Decimal("0.01")) if raw else None
         except InvalidOperation:
             return Response({"detail": "Prix invalide."}, status=status.HTTP_400_BAD_REQUEST)
-        if price is not None and (price < 0 or price > 1000):
+        if price is not None and (not price.is_finite() or price < 0 or price > 1000):
             return Response({"detail": "Prix invalide."}, status=status.HTTP_400_BAD_REQUEST)
         self.plugin.set_price(part, price if price else None, user=request.user)
         return Response({"part": part.pk, "price": str(price) if price else None})
@@ -245,9 +245,14 @@ class ReceiptEmailView(PluginView):
         from .models import Purchase
         from .receipt import send_receipt_email
 
+        from django.core.cache import cache
+
         p = self.get_purchase(request, pk)
         if p is None or p.status != Purchase.STATUS_PAID:
             return Response({"detail": "Reçu introuvable."}, status=status.HTTP_404_NOT_FOUND)
+        # un envoi par minute et par achat (pas de rafale de mails)
+        if not cache.add(f"paiements_mail:{p.pk}", 1, 60):
+            return Response({"detail": "Reçu déjà envoyé, réessaie dans une minute."}, status=429)
         try:
             to = send_receipt_email(p)
         except Exception:
@@ -278,8 +283,14 @@ class WebhookView(APIView):
     def post(self, request):
         from .models import Purchase
 
+        from django.core.cache import cache
+
         body = request.data if isinstance(request.data, dict) else {}
         p = Purchase.objects.filter(checkout_id=str(body["id"])).first() if body.get("id") else None
+        # une relecture SumUp toutes les 10 s au plus par achat : le webhook est
+        # anonyme, il ne doit pas pouvoir marteler l'API SumUp
+        if p is not None and not cache.add(f"paiements_hook:{p.pk}", 1, 10):
+            p = None
         if p is not None and self.plugin.is_configured():
             try:
                 self.plugin.confirm(p)
