@@ -1,4 +1,9 @@
-"""Admin Django des achats (consultation, avec leurs lignes)."""
+"""Admin Django des achats du frigo (consultation, avec leurs lignes).
+
+Enregistrement tolerant : InvenTree recharge ce module quand il reactive les
+apps de plugins (AppMixin._reregister_contrib_apps) ; un second register
+leverait AlreadyRegistered.
+"""
 
 from django.contrib import admin
 
@@ -14,7 +19,6 @@ class PurchaseLineInline(admin.TabularInline):
     can_delete = False
 
 
-@admin.register(Purchase)
 class PurchaseAdmin(admin.ModelAdmin):
     """Historique des achats du frigo."""
 
@@ -31,3 +35,7 @@ class PurchaseAdmin(admin.ModelAdmin):
     search_fields = ("user__username", "payment_ref", "checkout_id", "lines__name")
     readonly_fields = ("created_at", "paid_at")
     inlines = [PurchaseLineInline]
+
+
+if not admin.site.is_registered(Purchase):
+    admin.site.register(Purchase, PurchaseAdmin)
