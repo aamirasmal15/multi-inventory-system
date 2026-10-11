@@ -143,27 +143,33 @@ function loadSumupSdk() {
   return sumupSdkPromise;
 }
 
-/* fenêtre de paiement SumUp : récap du panier + formulaire de carte */
+/* feuille de paiement SumUp : montant en tête, détail du panier repliable,
+   formulaire de carte (Payment Widget) dans sa propre carte. Plein écran sur
+   téléphone (glisse du bas), fenêtre centrée sur grand écran. */
 function openPaySheet(r, recap) {
   return new Promise((resolve) => {
+    const n = recap.reduce((s, l) => s + l.quantity, 0);
     const ov = document.createElement("div");
     ov.className = "modal-ov pay-ov";
     ov.innerHTML =
-      '<div class="modal-card pay-sheet" role="dialog" aria-modal="true">' +
-      '<div class="pay-head"><h3>' + esc(t("buy_pay_title")) + "</h3>" +
-      '<button class="iconbtn" id="payClose" aria-label="' + esc(t("cancel")) + '">✕</button></div>' +
-      '<div class="pay-recap">' +
+      '<div class="pay-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("buy_pay_title")) + '">' +
+      '<div class="pay-head">' +
+      '<div><div class="pay-k">' + esc(t("buy_pay_title")) + "</div>" +
+      '<div class="pay-amt">' + esc(r.total) + "</div></div>" +
+      '<button class="iconbtn" id="payClose" aria-label="' + esc(t("cancel")) + '">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+      '<details class="pay-recap"' + (recap.length <= 2 ? " open" : "") + ">" +
+      "<summary><span>" + esc(t("frigo_cart_n", n)) + '</span><span class="pay-more">' + esc(t("buy_details")) + "</span></summary>" +
       recap
         .map(
           (l) =>
-            '<div class="pay-line"><span><b>' + l.quantity + " ×</b> " + esc(l.name) +
-            "</span><span>" + esc(l.total) + "</span></div>",
+            '<div class="pay-line"><span class="q">' + l.quantity + '×</span><span class="nm">' + esc(l.name) +
+            '</span><span class="pr">' + esc(l.total) + "</span></div>",
         )
         .join("") +
-      '<div class="pay-line pay-total"><span>' + esc(t("buy_total")) + "</span><span>" +
-      esc(r.total) + "</span></div></div>" +
-      '<div id="sumupCard"></div>' +
-      '<p class="buy-note">🔒 ' + esc(t("buy_secure")) + "</p></div>";
+      "</details>" +
+      '<div class="pay-widget"><div id="sumupCard"><div class="skeleton">' + esc(t("loading")) + "</div></div></div>" +
+      '<p class="pay-note">' + esc(t("buy_secure")) + "</p></div>";
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     let closed = false;
@@ -171,21 +177,33 @@ function openPaySheet(r, recap) {
       if (closed) return;
       closed = true;
       document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey);
       ov.classList.add("closing");
-      setTimeout(() => ov.remove(), 180);
+      setTimeout(() => ov.remove(), 220);
       try {
         window.SumUpCard && window.SumUpCard.unmount && window.SumUpCard.unmount();
       } catch (_) {}
       resolve(paid);
     };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(false);
+    };
     // fermer sans payer : le checkout expire seul chez SumUp, l'achat reste
     // « en attente » et ne retire rien
     ov.querySelector("#payClose").onclick = () => close(false);
+    ov.addEventListener("click", (e) => {
+      if (e.target === ov) close(false);
+    });
+    document.addEventListener("keydown", onKey);
     document.body.appendChild(ov);
+    $("#sumupCard").innerHTML = "";
     const opts = {
       id: "sumupCard",
       checkoutId: r.checkout_id,
       locale: LANG === "fr" ? "fr-FR" : "en-GB",
+      // le bouton du formulaire affiche le montant (« Payer 2,00 € »)
+      amount: (r.amount_cents / 100).toFixed(2),
+      currency: "EUR",
       onResponse: (type) => {
         // success = SumUp a accepté ; le serveur le revérifie avant de retirer le stock
         if (type === "success") {

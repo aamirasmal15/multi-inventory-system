@@ -252,18 +252,37 @@ textarea{resize:none;min-height:56px}
 .buy-qty button{width:44px;height:40px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:22px;border-radius:var(--radius);cursor:pointer;line-height:1}
 .buy-qty b{font-size:20px;min-width:28px;text-align:center}
 .buy-note{font-size:12px;color:var(--muted);margin:10px 0 0;text-align:center;line-height:1.45}
-/* fenêtre de paiement : feuille ancrée en bas sur mobile, carte centrée au-delà */
+/* feuille de paiement : plein écran sur téléphone (glisse du bas), fenêtre
+   centrée au-delà. Fond gris de l'app, récap et formulaire en cartes blanches. */
 .pay-ov{align-items:flex-end;padding:0}
-.pay-sheet{max-width:540px;max-height:92dvh;overflow:auto;border-radius:16px 16px 0 0;padding:18px 18px calc(env(safe-area-inset-bottom) + 18px)}
-@media (min-width:600px){.pay-ov{align-items:center;padding:20px}.pay-sheet{border-radius:12px}}
-.pay-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.pay-head h3{margin:0}
-.pay-recap{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px}
-.pay-line{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:3px 0}
-.pay-line span:last-child{white-space:nowrap}
-.pay-total{border-top:1px solid var(--border);margin-top:6px;padding-top:8px;font-weight:700;font-size:15px}
-.pay-total span:last-child{color:var(--green)}
-#sumupCard{min-height:120px}
+.pay-sheet{width:100%;max-width:540px;height:100dvh;overflow:auto;background:var(--bg);padding:max(14px,env(safe-area-inset-top)) 16px calc(env(safe-area-inset-bottom) + 18px);animation:paySheetIn .32s var(--ease-spring);overscroll-behavior:contain}
+.modal-ov.pay-ov.closing .pay-sheet{animation:paySheetOut .2s ease forwards}
+@keyframes paySheetIn{from{transform:translateY(100%)}to{transform:none}}
+@keyframes paySheetOut{to{transform:translateY(100%)}}
+@media (min-width:600px){.pay-ov{align-items:center;padding:24px}.pay-sheet{height:auto;max-height:92dvh;border-radius:16px;box-shadow:var(--shadow-md)}}
+.pay-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 2px 14px}
+.pay-k{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.pay-amt{font-size:32px;font-weight:800;letter-spacing:-.02em;color:var(--green);line-height:1.15;margin-top:2px}
+.pay-recap{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);padding:0 14px;margin-bottom:12px}
+.pay-recap summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-weight:600;font-size:14px;cursor:pointer;list-style:none}
+.pay-recap summary::-webkit-details-marker{display:none}
+.pay-more{font-size:12.5px;font-weight:600;color:var(--primary)}
+.pay-more::after{content:" ▾";display:inline-block;transition:transform .15s}
+.pay-recap[open] .pay-more::after{transform:rotate(180deg)}
+.pay-recap[open] summary{border-bottom:1px solid var(--border)}
+.pay-line{display:flex;gap:9px;font-size:14px;padding:8px 0}
+.pay-line+.pay-line{border-top:1px solid var(--border)}
+.pay-line .q{font-weight:700;color:var(--muted);min-width:26px}
+.pay-line .nm{flex:1;min-width:0;word-break:break-word}
+.pay-line .pr{white-space:nowrap;font-weight:600}
+/* carte du formulaire SumUp : toujours claire (le widget n'a pas de thème
+   sombre). Seules ses accroches stables sont retouchées, jamais ses classes
+   générées : marges et fond en double retirés, police de l'app. */
+.pay-widget{background:#fff;color:#212529;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);padding:16px 14px 8px;min-height:180px}
+.pay-widget .skeleton{padding:50px 0}
+#sumupCard .sumup-payment-widget-theme{padding:0!important;background:transparent!important;font-family:inherit!important}
+#sumupCard #card-form{border-radius:0 0 var(--radius) var(--radius)}
+.pay-note{font-size:12px;color:var(--muted);text-align:center;margin:12px 0 0}
 /* reçu : même pastille que l'écran « Stock mis à jour » (.done .ring) */
 .rcpt-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 10px 16px}
 .rcpt-hero .ring{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:var(--green-light);border:1px solid var(--green);color:var(--green);margin-bottom:14px;font-size:30px;font-weight:700}

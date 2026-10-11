@@ -152,6 +152,7 @@ class CheckoutView(PluginView):
             "purchase": purchase.pk,
             "provider": purchase.provider,
             "total": purchase_data(purchase)["total"],
+            "amount_cents": purchase.amount_cents,
             **out,
         })
 
