@@ -307,6 +307,9 @@
       <div class="field">
         <label class="lbl" for="np_name" data-i18n="np_name_lbl">Nom de l'article *</label>
         <input type="text" id="np_name" placeholder="ex. Résistance 10kΩ 1/4W" data-i18n-ph="np_name_ph" />
+        <!-- articles existants au nom proche : lier le code scanné au lieu
+             de créer un doublon (create.js, suggestParts) -->
+        <div class="name-sugg" id="nameSugg" style="display:none"></div>
       </div>
       <div class="field" id="fldImg">
         <label class="lbl" data-i18n="np_img_lbl">Image (facultatif)</label>

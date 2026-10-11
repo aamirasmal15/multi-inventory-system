@@ -86,7 +86,11 @@ async function offerCreate(code, part) {
     $("#createBtnLbl").textContent = t("create_item");
     if (tt) tt.textContent = t("create_title");
   }
+  unpickSuggestion();
   $("#np_name").value = part ? part.name || "" : "";
+  hideSugg();
+  loadParts().catch(() => {}); // catalogue prêt pour les suggestions de nom
+  if ($("#np_name").value.trim()) suggestParts();
   $("#np_desc").value = "";
   $("#np_qty").value = "1";
   $("#np_serial").value = "1";
@@ -106,8 +110,10 @@ async function offerAddStock(part, opts) {
   // rouvre l'écran d'ajout après un refresh (part refetchée, code conservé)
   if (part.pk != null)
     rememberView("addstock", part.pk, { code: PENDING_CODE || "", depleted: depleted });
+  unpickSuggestion();
   STOCK_ONLY_PART = part;
   EXISTING_PART = null;
+  hideSugg();
   NEW_IMG = "";
   NEW_IMG_FILE = null;
   imgDismissed = false;
@@ -712,6 +718,11 @@ function showDuplicate(name) {
 }
 async function linkToExisting() {
   if (!EXISTING_PART) return;
+  if (!PENDING_CODE) {
+    // suggestion choisie sans code scanné : rien à lier, on ouvre sa fiche
+    openPart(EXISTING_PART.pk);
+    return;
+  }
   const b = $("#linkExistingBtn"),
     html = b.innerHTML;
   b.disabled = true;
@@ -727,6 +738,216 @@ async function linkToExisting() {
   hideErr($("#createErr"));
   toast(t("code_linked"), "ok");
   await loadFromPart(EXISTING_PART.pk);
+}
+/* ---- articles existants au nom proche ----
+   Pendant la saisie du nom, le catalogue déjà chargé par la recherche
+   (loadParts) est comparé mot à mot au nom tapé, avec une faute de frappe
+   tolérée par mot (« resistence », « orenge ») et les pluriels : on propose
+   les 3 plus proches. Avec un code scanné, un toucher lie le code à
+   l'article (rien n'est créé) ; sans code, il ouvre sa fiche — de quoi
+   éviter le doublon avant de le créer. */
+let suggTimer = null,
+  suggReqId = 0;
+function hideSugg() {
+  suggReqId++;
+  clearTimeout(suggTimer);
+  const box = $("#nameSugg");
+  if (box) {
+    box.style.display = "none";
+    box.innerHTML = "";
+  }
+}
+function simWords(s) {
+  return norm(s)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 2);
+}
+/* distance d'édition <= 1 (substitution, insertion ou suppression) */
+function editNear(a, b) {
+  if (a === b) return true;
+  const la = a.length,
+    lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0;
+  while (i < la && i < lb && a[i] === b[i]) i++;
+  if (la === lb) return a.slice(i + 1) === b.slice(i + 1);
+  return la > lb ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
+}
+function nameSim(p, qw) {
+  const words = p._w || (p._w = simWords(p.full + " " + p.ipn));
+  let hit = 0;
+  for (const q of qw) {
+    if (words.some((w) => w.startsWith(q))) hit += 1;
+    else if (
+      q.length >= 4 &&
+      words.some((w) => editNear(w, q) || (w.length > q.length && editNear(w.slice(0, q.length), q)))
+    )
+      hit += 0.8;
+    else if (p._n.includes(q)) hit += 0.5; // description, mots-clés
+  }
+  return hit / qw.length;
+}
+async function suggestParts() {
+  const box = $("#nameSugg");
+  if (!box) return;
+  const inp = $("#np_name");
+  const qw = simWords(inp.value);
+  const id = ++suggReqId;
+  // nom retouché après un choix : retour au formulaire de création
+  if (EXISTING_PART && norm(inp.value) !== norm(EXISTING_PART.name)) unpickSuggestion();
+  if (STOCK_ONLY_PART || inp.readOnly || !qw.length || norm(inp.value).length < 3) {
+    box.style.display = "none";
+    return;
+  }
+  let list;
+  try {
+    list = await loadParts();
+  } catch (_) {
+    return; // suggestion de confort : un catalogue injoignable ne bloque rien
+  }
+  if (id !== suggReqId) return;
+  const q = norm(inp.value);
+  const res = list
+    .map((p) => ({ p, s: nameSim(p, qw) }))
+    .filter((x) => x.s >= 0.5)
+    .sort((a, b) => b.s - a.s || scoreP(b.p, q) - scoreP(a.p, q) || a.p.full.length - b.p.full.length)
+    .slice(0, 3);
+  if (!res.length) {
+    box.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = '<div class="ns-title">' + t("sugg_title") + "</div>";
+  res.forEach(({ p }) => {
+    const parent = p.of ? list.find((x) => x.pk === p.of) : null;
+    const sub = [p.ipn ? esc(p.ipn) : "", parent ? t("sr_variant_html", esc(parent.full || parent.name)) : ""]
+      .filter(Boolean)
+      .join(" · ");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sr-item";
+    b.innerHTML =
+      (p.thumb
+        ? '<img class="sr-thumb" src="' + esc(mediaUrl(p.thumb)) + '" data-full="' + esc(mediaUrl(p.img)) + '" alt="" onerror="thumbErr(this,\'sr\')">'
+        : '<span class="sr-box">📦</span>') +
+      '<span style="min-width:0"><span class="sr-name">' +
+      esc(p.full || p.name) +
+      (p.tpl ? '<span class="sr-badge">' + t("tpl_badge") + "</span>" : "") +
+      "</span>" +
+      (sub ? '<span class="sr-sub">' + sub + "</span>" : "") +
+      "</span>";
+    b.onclick = () => pickSuggestion(p);
+    // toucher la ligne = choisir cet article ; « Voir » à côté ouvre un
+    // aperçu par-dessus le formulaire (le code scanné reste en attente)
+    const row = document.createElement("div");
+    row.className = "ns-row";
+    row.appendChild(b);
+    const v = document.createElement("button");
+    v.type = "button";
+    v.className = "ns-view";
+    v.textContent = t("sugg_open");
+    v.onclick = () => previewSuggestion(p);
+    row.appendChild(v);
+    box.appendChild(row);
+  });
+  box.style.display = "";
+}
+/* choisir une suggestion, c'est dire « c'est cet article » : son nom exact
+   remplit le champ et tout le reste du formulaire (image, quantité,
+   emplacement…) s'efface — il ne reste que « Lier le code à … », ou, sans
+   code scanné, « Voir l'article ». Retoucher le nom rend le formulaire. */
+function pickSuggestion(p) {
+  hideSugg();
+  hideErr($("#createErr"));
+  $("#np_name").value = p.name;
+  EXISTING_PART = { pk: p.pk, name: p.name };
+  $("#screen-create .card").classList.add("ns-picked");
+  const b = $("#linkExistingBtn");
+  b.classList.replace("btn-ghost", "btn-primary");
+  b.querySelector(".lx-label").textContent = PENDING_CODE
+    ? t("link_code_to", p.name)
+    : t("sugg_view_item");
+  b.style.display = "flex";
+}
+/* aperçu d'une suggestion en feuille du bas : image, description, stock
+   par emplacement. On ne quitte PAS l'écran de création — ouvrir la fiche
+   (openPart) oublierait le code scanné, qu'on ne pourrait plus lier. */
+function previewSuggestion(p) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov sheet-ov";
+  const img = p.img || p.thumb;
+  ov.innerHTML =
+    '<div class="ps-sheet" role="dialog" aria-modal="true" aria-label="' + esc(p.full || p.name) + '">' +
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ps-head"><div class="ps-name"><div class="t">' + esc(p.full || p.name) + "</div>" +
+    (p.ipn ? '<div class="s">' + esc(p.ipn) + "</div>" : "") +
+    '</div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+    (img
+      ? '<img class="nsp-img" src="' + esc(mediaUrl(img)) + '" alt="' + esc(p.name) + '" onerror="this.remove()">'
+      : "") +
+    '<div class="nsp-desc"></div>' +
+    '<div class="nsp-stock"><div class="ps-empty">' + esc(t("loading")) + "</div></div>" +
+    '<button class="btn btn-primary btn-block" data-pick>' +
+    esc(PENDING_CODE ? t("link_code_to", p.name) : t("sugg_pick_this")) +
+    "</button></div>";
+  lockScroll();
+  const close = () => {
+    unlockScroll();
+    document.removeEventListener("keydown", onKey);
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 220);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-x]").onclick = close;
+  // même geste que toucher la ligne : le formulaire se réduit à « Lier »
+  ov.querySelector("[data-pick]").onclick = () => {
+    close();
+    pickSuggestion(p);
+  };
+  document.body.appendChild(ov);
+  Promise.all([
+    api("/api/part/" + p.pk + "/").catch(() => null),
+    api("/api/stock/?part=" + p.pk + "&location_detail=true&limit=200").catch(() => null),
+  ]).then(([part, st]) => {
+    if (part) {
+      const d = ov.querySelector(".nsp-desc");
+      d.innerHTML = descHtml(part);
+      armDesc(d);
+    }
+    const box = ov.querySelector(".nsp-stock");
+    const items = st ? st.results || st : null;
+    if (!Array.isArray(items)) {
+      box.innerHTML = "";
+      return;
+    }
+    const by = {};
+    items.forEach((s) => {
+      const l = (s.location_detail && (s.location_detail.pathstring || s.location_detail.name)) || t("sugg_no_loc");
+      by[l] = (by[l] || 0) + Number(s.quantity || 0);
+    });
+    const keys = Object.keys(by);
+    box.innerHTML = keys.length
+      ? keys
+          .map((l) => '<div class="nsp-row"><span>' + esc(l) + "</span><b>" + fmt(by[l]) + "</b></div>")
+          .join("")
+      : '<div class="ps-empty">' + esc(t("sugg_no_stock")) + "</div>";
+  });
+}
+function unpickSuggestion() {
+  const card = $("#screen-create .card");
+  if (!card || !card.classList.contains("ns-picked")) return;
+  card.classList.remove("ns-picked");
+  EXISTING_PART = null;
+  const b = $("#linkExistingBtn");
+  b.classList.replace("btn-primary", "btn-ghost");
+  b.style.display = "none";
 }
 async function createArticle() {
   if (STOCK_ONLY_PART) return addStockExisting();
