@@ -112,6 +112,8 @@ function frigoRender() {
   const all = FRIGO.products || [];
   $("#frigoTools").style.display = all.length ? "" : "none";
   $("#frigoSearch").style.display = all.length > 6 ? "" : "none";
+  // en mode Gérer, le scan sert à réapprovisionner (bouton dédié), pas au panier
+  $("#frigoScanBtn").style.display = FRIGO_MODE === "buy" ? "" : "none";
   const list = q ? all.filter((p) => p.name.toLowerCase().includes(q)) : all;
   const box = $("#frigoList");
   if (FRIGO_MODE === "manage") frigoRenderManage(box, list);
