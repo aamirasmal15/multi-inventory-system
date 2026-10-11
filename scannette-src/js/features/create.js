@@ -831,7 +831,20 @@ async function suggestParts() {
       (PENDING_CODE ? t("sugg_link") : t("sugg_open")) +
       "</span>";
     b.onclick = () => pickSuggestion(p, b);
-    box.appendChild(b);
+    // toucher la ligne = lier (le geste voulu) ; avec un code, « Voir » à
+    // côté ouvre la fiche pour vérifier avant, sans rien lier
+    const row = document.createElement("div");
+    row.className = "ns-row";
+    row.appendChild(b);
+    if (PENDING_CODE) {
+      const v = document.createElement("button");
+      v.type = "button";
+      v.className = "ns-view";
+      v.textContent = t("sugg_open");
+      v.onclick = () => openPart(p.pk);
+      row.appendChild(v);
+    }
+    box.appendChild(row);
   });
   box.style.display = "";
 }
