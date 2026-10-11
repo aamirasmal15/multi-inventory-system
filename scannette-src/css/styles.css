@@ -254,12 +254,12 @@ textarea{resize:none;min-height:56px}
 .buy-note{font-size:12px;color:var(--muted);margin:10px 0 0;text-align:center;line-height:1.45}
 /* feuille de paiement : plein écran sur téléphone (glisse du bas), fenêtre
    centrée au-delà. Fond gris de l'app, récap et formulaire en cartes blanches. */
-.pay-ov{align-items:flex-end;padding:0}
+.modal-ov.pay-ov{align-items:flex-end;padding:0}
 .pay-sheet{width:100%;max-width:540px;height:100dvh;overflow:auto;background:var(--bg);padding:max(14px,env(safe-area-inset-top)) 16px calc(env(safe-area-inset-bottom) + 18px);animation:paySheetIn .32s var(--ease-spring);overscroll-behavior:contain}
 .modal-ov.pay-ov.closing .pay-sheet{animation:paySheetOut .2s ease forwards}
 @keyframes paySheetIn{from{transform:translateY(100%)}to{transform:none}}
 @keyframes paySheetOut{to{transform:translateY(100%)}}
-@media (min-width:600px){.pay-ov{align-items:center;padding:24px}.pay-sheet{height:auto;max-height:92dvh;border-radius:16px;box-shadow:var(--shadow-md)}}
+@media (min-width:600px){.modal-ov.pay-ov{align-items:center;padding:24px}.pay-sheet{height:auto;max-height:92dvh;border-radius:16px;box-shadow:var(--shadow-md)}}
 .pay-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 2px 14px}
 .pay-k{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .pay-amt{font-size:32px;font-weight:800;letter-spacing:-.02em;color:var(--green);line-height:1.15;margin-top:2px}
@@ -282,6 +282,10 @@ textarea{resize:none;min-height:56px}
 .pay-widget .skeleton{padding:50px 0}
 #sumupCard .sumup-payment-widget-theme{padding:0!important;background:transparent!important;font-family:inherit!important}
 #sumupCard #card-form{border-radius:0 0 var(--radius) var(--radius)}
+/* titre « Choisissez un moyen de paiement » du widget : doublon de l'en-tête
+   « Paiement ». Garde :not(:has(...)) : si SumUp change sa structure, un bloc
+   contenant un champ ou un bouton n'est jamais masqué. */
+#sumupCard .sumup-payment-widget-theme>div>div>div:first-child:not(:has(iframe,button,input,form,a,img)){display:none}
 .pay-note{font-size:12px;color:var(--muted);text-align:center;margin:12px 0 0}
 /* reçu : même pastille que l'écran « Stock mis à jour » (.done .ring) */
 .rcpt-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 10px 16px}
