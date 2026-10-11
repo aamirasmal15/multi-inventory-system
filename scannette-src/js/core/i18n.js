@@ -324,6 +324,9 @@ const I18N = {
       " » existe déjà dans InvenTree. Pour lui rattacher le code scanné, utilisez le bouton en bas du formulaire.",
     link_code_to: (name) => "Lier le code à « " + name + " »",
     code_linked: "Code lié à l'article existant",
+    sugg_title: "Déjà dans l'inventaire ?",
+    sugg_link: "Lier",
+    sugg_open: "Voir",
     loan_obj_qty: (s) => "Objet à emprunter · " + s,
     nothing_created: "Rien n'a été créé. ",
     half_created:
@@ -770,6 +773,9 @@ const I18N = {
       "” already exists in InvenTree. To attach the scanned code to it, use the button at the bottom of the form.",
     link_code_to: (name) => "Link the code to “" + name + "”",
     code_linked: "Code linked to the existing item",
+    sugg_title: "Already in the inventory?",
+    sugg_link: "Link",
+    sugg_open: "Open",
     loan_obj_qty: (s) => "Loanable item · " + s,
     nothing_created: "Nothing was created. ",
     half_created:

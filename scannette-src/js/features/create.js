@@ -87,6 +87,9 @@ async function offerCreate(code, part) {
     if (tt) tt.textContent = t("create_title");
   }
   $("#np_name").value = part ? part.name || "" : "";
+  hideSugg();
+  loadParts().catch(() => {}); // catalogue prêt pour les suggestions de nom
+  if ($("#np_name").value.trim()) suggestParts();
   $("#np_desc").value = "";
   $("#np_qty").value = "1";
   $("#np_serial").value = "1";
@@ -108,6 +111,7 @@ async function offerAddStock(part, opts) {
     rememberView("addstock", part.pk, { code: PENDING_CODE || "", depleted: depleted });
   STOCK_ONLY_PART = part;
   EXISTING_PART = null;
+  hideSugg();
   NEW_IMG = "";
   NEW_IMG_FILE = null;
   imgDismissed = false;
@@ -727,6 +731,130 @@ async function linkToExisting() {
   hideErr($("#createErr"));
   toast(t("code_linked"), "ok");
   await loadFromPart(EXISTING_PART.pk);
+}
+/* ---- articles existants au nom proche ----
+   Pendant la saisie du nom, le catalogue déjà chargé par la recherche
+   (loadParts) est comparé mot à mot au nom tapé, avec une faute de frappe
+   tolérée par mot (« resistence », « orenge ») et les pluriels : on propose
+   les 3 plus proches. Avec un code scanné, un toucher lie le code à
+   l'article (rien n'est créé) ; sans code, il ouvre sa fiche — de quoi
+   éviter le doublon avant de le créer. */
+let suggTimer = null,
+  suggReqId = 0;
+function hideSugg() {
+  suggReqId++;
+  clearTimeout(suggTimer);
+  const box = $("#nameSugg");
+  if (box) {
+    box.style.display = "none";
+    box.innerHTML = "";
+  }
+}
+function simWords(s) {
+  return norm(s)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 2);
+}
+/* distance d'édition <= 1 (substitution, insertion ou suppression) */
+function editNear(a, b) {
+  if (a === b) return true;
+  const la = a.length,
+    lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0;
+  while (i < la && i < lb && a[i] === b[i]) i++;
+  if (la === lb) return a.slice(i + 1) === b.slice(i + 1);
+  return la > lb ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1);
+}
+function nameSim(p, qw) {
+  const words = p._w || (p._w = simWords(p.full + " " + p.ipn));
+  let hit = 0;
+  for (const q of qw) {
+    if (words.some((w) => w.startsWith(q))) hit += 1;
+    else if (
+      q.length >= 4 &&
+      words.some((w) => editNear(w, q) || (w.length > q.length && editNear(w.slice(0, q.length), q)))
+    )
+      hit += 0.8;
+    else if (p._n.includes(q)) hit += 0.5; // description, mots-clés
+  }
+  return hit / qw.length;
+}
+async function suggestParts() {
+  const box = $("#nameSugg");
+  if (!box) return;
+  const inp = $("#np_name");
+  const qw = simWords(inp.value);
+  const id = ++suggReqId;
+  if (STOCK_ONLY_PART || inp.readOnly || !qw.length || norm(inp.value).length < 3) {
+    box.style.display = "none";
+    return;
+  }
+  let list;
+  try {
+    list = await loadParts();
+  } catch (_) {
+    return; // suggestion de confort : un catalogue injoignable ne bloque rien
+  }
+  if (id !== suggReqId) return;
+  const q = norm(inp.value);
+  const res = list
+    .map((p) => ({ p, s: nameSim(p, qw) }))
+    .filter((x) => x.s >= 0.5)
+    .sort((a, b) => b.s - a.s || scoreP(b.p, q) - scoreP(a.p, q) || a.p.full.length - b.p.full.length)
+    .slice(0, 3);
+  if (!res.length) {
+    box.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = '<div class="ns-title">' + t("sugg_title") + "</div>";
+  res.forEach(({ p }) => {
+    const parent = p.of ? list.find((x) => x.pk === p.of) : null;
+    const sub = [p.ipn ? esc(p.ipn) : "", parent ? t("sr_variant_html", esc(parent.full || parent.name)) : ""]
+      .filter(Boolean)
+      .join(" · ");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sr-item";
+    b.innerHTML =
+      (p.thumb
+        ? '<img class="sr-thumb" src="' + esc(mediaUrl(p.thumb)) + '" data-full="' + esc(mediaUrl(p.img)) + '" alt="" onerror="thumbErr(this,\'sr\')">'
+        : '<span class="sr-box">📦</span>') +
+      '<span style="min-width:0"><span class="sr-name">' +
+      esc(p.full || p.name) +
+      (p.tpl ? '<span class="sr-badge">' + t("tpl_badge") + "</span>" : "") +
+      "</span>" +
+      (sub ? '<span class="sr-sub">' + sub + "</span>" : "") +
+      "</span>" +
+      '<span class="ns-act' + (PENDING_CODE ? "" : " ghost") + '">' +
+      (PENDING_CODE ? t("sugg_link") : t("sugg_open")) +
+      "</span>";
+    b.onclick = () => pickSuggestion(p, b);
+    box.appendChild(b);
+  });
+  box.style.display = "";
+}
+async function pickSuggestion(p, b) {
+  if (!PENDING_CODE) {
+    openPart(p.pk);
+    return;
+  }
+  const act = b.querySelector(".ns-act"),
+    html = act.innerHTML;
+  b.disabled = true;
+  act.innerHTML = '<span class="spin"></span>';
+  const warn = await linkBarcode(p.pk);
+  b.disabled = false;
+  act.innerHTML = html;
+  if (warn) {
+    showErr($("#createErr"), warn);
+    return;
+  }
+  hideSugg();
+  hideErr($("#createErr"));
+  toast(t("code_linked"), "ok");
+  await loadFromPart(p.pk);
 }
 async function createArticle() {
   if (STOCK_ONLY_PART) return addStockExisting();

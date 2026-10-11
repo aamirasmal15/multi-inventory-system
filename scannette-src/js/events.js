@@ -109,6 +109,8 @@ $("#submitBtn")?.addEventListener("click", submitAdjust);
 $("#createBtn")?.addEventListener("click", createArticle);
 $("#linkExistingBtn")?.addEventListener("click", linkToExisting);
 $("#np_name")?.addEventListener("input", () => {
+  clearTimeout(suggTimer);
+  suggTimer = setTimeout(suggestParts, 250);
   if (imgDismissed) return;
   clearTimeout(imgTimer);
   imgTimer = setTimeout(() => suggestImage($("#np_name").value.trim()), 650);
