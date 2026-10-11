@@ -71,6 +71,16 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             "description": "Code du compte marchand qui encaisse (ex. MABCD1234)",
             "default": "",
         },
+        "GOOGLE_PAY_MERCHANT_ID": {
+            "name": "SumUp : Google Pay, identifiant marchand Google",
+            "description": "Console Google Pay & Wallet (pay.google.com/business/console), domaine déclaré en « Gateway ». Vide = pas de bouton Google Pay.",
+            "default": "",
+        },
+        "PAY_DISPLAY_NAME": {
+            "name": "Nom affiché au payeur",
+            "description": "Nom présenté dans Google Pay / Apple Pay (ex. le nom de l'association)",
+            "default": "",
+        },
         "HELLOASSO_ENV": {
             "name": "HelloAsso : environnement",
             "description": "Sandbox = test, aucun vrai paiement. Production = vrais paiements.",

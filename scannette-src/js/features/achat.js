@@ -13,7 +13,7 @@
    vient du serveur, qui le recalcule de toute façon au paiement.
    ========================================================================== */
 
-const ACHAT = { enabled: false, provider: "", test: false };
+const ACHAT = { enabled: false, provider: "", test: false, googlePay: null };
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
 let BUY_OFFER = null;
@@ -27,6 +27,7 @@ async function loadAchatConfig() {
     ACHAT.enabled = !!c.enabled;
     ACHAT.provider = c.provider || "";
     ACHAT.test = !!c.test;
+    ACHAT.googlePay = c.google_pay || null;
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé : pas de bouton
   }
@@ -148,7 +149,7 @@ async function openSumupCard(it, qty, r) {
   // le checkout non payé expire seul chez SumUp ; l'achat reste « en attente »
   $("#buyCancel").onclick = () => renderBuyOffer(it, BUY_OFFER, qty);
   let done = false;
-  window.SumUpCard.mount({
+  const opts = {
     id: "sumupCard",
     checkoutId: r.checkout_id,
     locale: LANG === "fr" ? "fr-FR" : "en-GB",
@@ -161,7 +162,12 @@ async function openSumupCard(it, qty, r) {
         toast(t("buy_refused"), "bad");
       }
     },
-  });
+  };
+  // Google Pay : bouton ajouté seulement si un identifiant marchand Google est
+  // réglé. Apple Pay n'a pas d'option : SumUp l'affiche dans Safari dès que le
+  // domaine est validé dans le profil SumUp (fichier .well-known publié).
+  if (ACHAT.googlePay) opts.googlePay = ACHAT.googlePay;
+  window.SumUpCard.mount(opts);
 }
 
 /* écran de résultat : retour HelloAsso (?achat=<pk>) ou fin du formulaire

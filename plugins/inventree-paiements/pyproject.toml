@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inventree-paiements"
-version = "0.2.0"
+version = "0.2.1"
 description = "Plugin InvenTree : achat d'articles vendables depuis la Scannette (SumUp ou HelloAsso)"
 readme = "README.md"
 license = { file = "LICENSE" }

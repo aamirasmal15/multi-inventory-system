@@ -51,10 +51,16 @@ class ConfigView(PluginView):
 
     def get(self, request):
         provider = self.plugin.provider()
+        gp_id = self.plugin.get_setting("GOOGLE_PAY_MERCHANT_ID") if provider == "sumup" else ""
         return Response({
             "enabled": self.plugin.is_configured(),
             "provider": provider,
             "test": provider == "helloasso" and self.plugin.get_setting("HELLOASSO_ENV") == "sandbox",
+            # option googlePay du widget SumUp (identifiant public, pas un secret)
+            "google_pay": {
+                "merchantId": gp_id,
+                "merchantName": self.plugin.get_setting("PAY_DISPLAY_NAME") or "Scannette",
+            } if gp_id else None,
         })
 
 
