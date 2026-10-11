@@ -284,7 +284,6 @@ $("#backBtnFrigo")?.addEventListener("click", gotoScan);
 $("#frigoMineBtn")?.addEventListener("click", openPurchases);
 $("#backBtnPurch")?.addEventListener("click", openFrigo);
 $("#frigoPayBtn")?.addEventListener("click", frigoPay);
-$("#frigoSearch")?.addEventListener("input", frigoRender);
 document.querySelectorAll("#frigoModeSeg .seg-btn").forEach((b) => {
   b.addEventListener("click", () => {
     if (!b.classList.contains("active")) frigoSetMode(b.dataset.mode);

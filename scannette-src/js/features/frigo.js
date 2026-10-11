@@ -110,10 +110,7 @@ function frigoThumb(p, cls, zoom) {
 
 function frigoRender() {
   if (!FRIGO) return;
-  const q = ($("#frigoSearch").value || "").trim().toLowerCase();
-  const all = FRIGO.products || [];
-  $("#frigoSearch").style.display = all.length > 6 ? "" : "none";
-  const list = q ? all.filter((p) => p.name.toLowerCase().includes(q)) : all;
+  const list = FRIGO.products || [];
   const box = $("#frigoList");
   if (FRIGO_MODE === "manage") frigoRenderManage(box, list);
   else frigoRenderBuy(box, list);
@@ -226,9 +223,7 @@ async function frigoPay() {
    dans une fenêtre dédiée (openPriceSheet), journalisée côté serveur. */
 function frigoRenderManage(box, list) {
   box.className = "frigo-manage";
-  box.innerHTML =
-    '<p class="fr-help">' + esc(t("frigo_help_1")) + "</p>" +
-    '<p class="fr-help">' + esc(t("frigo_help_2")) + "</p>";
+  box.innerHTML = "";
   if (!list.length) {
     box.insertAdjacentHTML("beforeend", '<div class="card"><div class="skeleton">' + esc(t("frigo_empty_manage")) + "</div></div>");
     return;

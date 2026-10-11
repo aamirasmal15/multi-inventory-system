@@ -353,8 +353,6 @@ textarea{resize:none;min-height:56px}
 /* mode Gérer : aide en texte, puis une ligne par produit (gabarit des Lieux,
    .loc-row) : bouton prix (ouvre la fenêtre de prix), stock de chaque article */
 .frigo-manage{display:flex;flex-direction:column;gap:6px}
-.fr-help{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
-.fr-help:last-of-type{margin-bottom:8px}
 .fr-mrow{align-items:flex-start}
 .fr-mrow .t{margin-bottom:8px}
 .fr-pricerow{cursor:pointer;margin-bottom:10px}
