@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inventree-paiements"
-version = "0.2.1"
+version = "0.3.0"
 description = "Plugin InvenTree : achat d'articles vendables depuis la Scannette (SumUp ou HelloAsso)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -23,3 +23,7 @@ PaiementsPlugin = "inventree_paiements.core:PaiementsPlugin"
 
 [tool.setuptools.packages.find]
 include = ["inventree_paiements*"]
+
+# Templates du recu (PDF et e-mail)
+[tool.setuptools.package-data]
+inventree_paiements = ["templates/**/*"]

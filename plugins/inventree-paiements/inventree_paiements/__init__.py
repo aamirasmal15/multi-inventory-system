@@ -1,3 +1,3 @@
 """Plugin InvenTree d'achat d'articles vendables (SumUp ou HelloAsso)."""
 
-PLUGIN_VERSION = "0.2.1"
+PLUGIN_VERSION = "0.3.0"

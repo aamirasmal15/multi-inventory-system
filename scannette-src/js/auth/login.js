@@ -115,7 +115,15 @@ function enterApp() {
   if (buyBack) {
     sessionStorage.removeItem("achat_open");
     history.replaceState(null, "", BASE);
-    openPurchaseResult(buyBack);
+    openReceipt(Number(buyBack), true);
+    return;
+  }
+  // arrivée par le QR du frigo : page d'achat directement
+  if (sessionStorage.getItem("frigo_open")) {
+    sessionStorage.removeItem("frigo_open");
+    document.body.classList.remove("frigo-mode");
+    history.replaceState(null, "", BASE);
+    openFrigo();
     return;
   }
   // lien profond (email → article) : si un objet est en attente, on l'ouvre

@@ -43,6 +43,11 @@
         <div class="spacer"></div>
         <button class="iconbtn" id="themeBtnLogin" title="Thème" data-i18n-title="theme"></button>
       </div>
+      <!-- arrivée par le QR du frigo (/frigo) : bandeau + EirbConnect en premier (styles.css, body.frigo-mode) -->
+      <div class="frigo-login" id="frigoLoginBanner">
+        <div class="fl-emoji">🧊</div>
+        <div><div class="fl-t" data-i18n="frigo_login_title">Le frigo</div><div class="fl-s" data-i18n="frigo_login_sub">Connecte-toi pour choisir tes boissons et payer en quelques secondes.</div></div>
+      </div>
       <h1 class="title" data-i18n="login_title">Se connecter avec InvenTree</h1>
       <div class="err" id="loginErr"></div>
       <div class="card" style="padding:18px">
@@ -103,6 +108,11 @@
       </button>
     </div>
     <div class="err" id="scanErr"></div>
+    <!-- scan pour le panier du frigo (frigo.js) -->
+    <div class="frigo-scan-banner" id="frigoScanBanner" style="display:none">
+      <span>🧊 <span data-i18n="frigo_scan_banner">Scanne un article du frigo pour l'ajouter au panier</span></span>
+      <button class="btn btn-ghost" id="frigoScanBack" data-i18n="frigo_scan_back">Retour au frigo</button>
+    </div>
 
     <div id="modeSearch" style="display:none">
       <div class="card" style="padding:12px 13px;margin-bottom:13px">
@@ -133,6 +143,9 @@
       </div>
     </div>
 
+    <button class="btn btn-ghost btn-block" id="frigoOpenBtn" style="display:none">
+      <span>🧊</span><span data-i18n="frigo_open">Le frigo</span>
+    </button>
     <button class="btn btn-ghost btn-block" id="createNoCodeBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       <span data-i18n="create_nocode">Créer un article sans code</span>
@@ -481,6 +494,48 @@
     <div id="varList"></div>
   </section>
 
+  <!-- FRIGO (frigo.js) : catalogue de l'emplacement frigo, panier, gestion -->
+  <section class="screen" id="screen-frigo">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnFrigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="frigo_crumb">Frigo</span>
+      <div class="spacer"></div>
+      <button class="fr-mine" id="frigoMineBtn" data-i18n="frigo_mine">Mes achats</button>
+    </div>
+    <h1 class="title"><span aria-hidden="true">🧊 </span><span id="frigoTitle">Frigo</span></h1>
+    <div class="seg" id="frigoModeSeg" style="display:none">
+      <button type="button" class="seg-btn active" data-mode="buy"><span data-i18n="frigo_mode_buy">Acheter</span></button>
+      <button type="button" class="seg-btn" data-mode="manage"><span data-i18n="frigo_mode_manage">Gérer</span></button>
+    </div>
+    <div class="fr-tools" id="frigoTools">
+      <input type="text" id="frigoSearch" class="loc-search" placeholder="Rechercher…" data-i18n-ph="frigo_search_ph" autocomplete="off" style="display:none">
+      <button class="btn btn-ghost" id="frigoScanBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></svg>
+        <span data-i18n="frigo_scan">Scanner un article</span>
+      </button>
+    </div>
+    <div id="frigoList" class="frigo-grid"></div>
+    <div class="fr-cartbar" id="frigoCartBar">
+      <div class="fr-cartinfo" id="frigoCartInfo"></div>
+      <button class="btn btn-primary" id="frigoPayBtn"></button>
+    </div>
+  </section>
+
+  <!-- REÇU d'un achat (achat.js) -->
+  <section class="screen" id="screen-receipt">
+    <div id="receiptBody"></div>
+  </section>
+
+  <!-- MES ACHATS (achat.js) -->
+  <section class="screen" id="screen-purchases">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnPurch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="purch_crumb">Mes achats</span>
+    </div>
+    <h1 class="title" data-i18n="purch_title">Mes achats</h1>
+    <div class="card" id="purchasesList"></div>
+  </section>
+
   <footer class="app-footer" data-i18n="footer_sig">Une solution EirSpace conçue par Aamir ASMAL 🚀</footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -527,6 +582,7 @@
 <script src="js/features/item.js?v=__ASSETV__"></script>
 <script src="js/features/loan.js?v=__ASSETV__"></script>
 <script src="js/features/achat.js?v=__ASSETV__"></script>
+<script src="js/features/frigo.js?v=__ASSETV__"></script>
 <script src="js/features/account.js?v=__ASSETV__"></script>
 <script src="js/features/users.js?v=__ASSETV__"></script>
 <script src="js/features/create.js?v=__ASSETV__"></script>

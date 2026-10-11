@@ -100,7 +100,7 @@ function segSync(seg) {
    repartir du scan. sessionStorage : survit au refresh, pas à la fermeture
    de l'onglet. { t, pk?, ...extra } avec t : "item" | "part" | "variants" |
    "loc" | "account" | "create" (extra.code) | "addstock" (extra.code,
-   extra.depleted) | "qr" (extra.name). Le contenu des formulaires, lui, ne survit pas. */
+   extra.depleted) | "qr" (extra.name) | "frigo" | "purchases" | "receipt". Le contenu des formulaires, lui, ne survit pas. */
 function rememberView(type, pk, extra) {
   try {
     const v = Object.assign({ t: type }, extra || {});
@@ -118,7 +118,8 @@ function readView() {
     const v = JSON.parse(sessionStorage.getItem("scan_view") || "null");
     if (!v || !v.t) return null;
     // account, create et users n'ont pas de pk ; tous les autres exigent un entier
-    if (v.t === "account" || v.t === "create" || v.t === "users") return v;
+    if (v.t === "account" || v.t === "create" || v.t === "users" || v.t === "frigo" || v.t === "purchases")
+      return v;
     return /^\d+$/.test(String(v.pk)) ? v : null;
   } catch (_) {
     return null;
@@ -137,6 +138,9 @@ function openView(v) {
   else if (v.t === "create") offerCreate(v.code || "");
   else if (v.t === "addstock") reopenAddStock(v);
   else if (v.t === "qr") showCreatedQR(Number(v.pk), v.name || "");
+  else if (v.t === "frigo") openFrigo();
+  else if (v.t === "purchases") openPurchases();
+  else if (v.t === "receipt") openReceipt(Number(v.pk), false);
   else openDeepLinkItem(v.pk);
 }
 function showErr(el, m) {

@@ -5,6 +5,10 @@ Un article est achetable depuis la Scannette quand son part est coche
 (onglet Tarification > Prix de vente, palier de quantite 1). Le prix est
 TOUJOURS recalcule ici, jamais recu du navigateur.
 
+Le frigo : un emplacement choisi dans les reglages (FRIDGE_LOCATION). La
+Scannette en affiche le catalogue (un produit = un part, stock cumule de ses
+articles ranges dans le frigo et ses sous-emplacements) et y fait un panier.
+
 Deux prestataires, au choix dans les reglages :
 - SumUp : le checkout est cree ici, le formulaire de carte (Payment Widget,
   Apple Pay / Google Pay) s'affiche DANS la Scannette ;
@@ -59,6 +63,17 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             "description": "SumUp : formulaire de carte dans la Scannette. HelloAsso : redirection vers sa page.",
             "choices": [("sumup", "SumUp"), ("helloasso", "HelloAsso")],
             "default": "sumup",
+        },
+        "FRIDGE_LOCATION": {
+            "name": "Emplacement du frigo",
+            "description": "Ses articles vendables forment la page /frigo de la Scannette (sous-emplacements compris)",
+            "model": "stock.stocklocation",
+        },
+        "SEND_RECEIPT": {
+            "name": "Envoyer le reçu par e-mail",
+            "description": "Reçu (PDF joint) envoyé à l'adresse principale de l'acheteur une fois le paiement confirmé",
+            "default": True,
+            "validator": bool,
         },
         "SUMUP_API_KEY": {
             "name": "SumUp : clé API",
@@ -129,9 +144,13 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
 
         return [
             path("config", api.ConfigView.as_view(plugin=self), name="config"),
+            path("fridge", api.FridgeView.as_view(plugin=self), name="fridge"),
             path("item/<int:pk>", api.ItemView.as_view(plugin=self), name="item"),
             path("checkout", api.CheckoutView.as_view(plugin=self), name="checkout"),
+            path("purchases", api.PurchaseListView.as_view(plugin=self), name="purchases"),
             path("purchase/<int:pk>", api.PurchaseView.as_view(plugin=self), name="purchase"),
+            path("purchase/<int:pk>/receipt.pdf", api.ReceiptView.as_view(plugin=self), name="receipt"),
+            path("purchase/<int:pk>/email", api.ReceiptEmailView.as_view(plugin=self), name="receipt-email"),
             path("webhook/<str:provider>", hook_view, name="webhook"),
         ]
 
@@ -161,6 +180,64 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             self.get_setting("ORG_SLUG"),
         )
 
+    # ---- frigo ----
+    def fridge_location(self):
+        """Emplacement du frigo (StockLocation) ou None."""
+        from stock.models import StockLocation
+
+        pk = self.get_setting("FRIDGE_LOCATION")
+        try:
+            return StockLocation.objects.get(pk=int(pk)) if pk else None
+        except (StockLocation.DoesNotExist, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def fridge_items(location, part=None):
+        """Articles de stock disponibles dans le frigo (sous-emplacements compris),
+        les plus anciens d'abord : c'est l'ordre de prelevement."""
+        from django.db.models import F
+
+        from stock.models import StockItem
+
+        qs = StockItem.objects.filter(StockItem.IN_STOCK_FILTER).filter(
+            location__in=location.get_descendants(include_self=True), quantity__gt=0
+        )
+        if part is not None:
+            qs = qs.filter(part=part)
+        return qs.select_related("part").order_by(F("expiry_date").asc(nulls_last=True), "pk")
+
+    def fridge_catalog(self, location):
+        """Produits du frigo, un par part : stock cumule, prix, achetable ou non."""
+        products = {}
+        for it in self.fridge_items(location):
+            part = it.part
+            if part is None or part.trackable:
+                continue  # objets pretes : jamais vendus
+            pr = products.get(part.pk)
+            if pr is None:
+                price = self.unit_price(part) if part.salable and part.active else None
+                pr = products[part.pk] = {
+                    "part": part.pk,
+                    "name": part.full_name,
+                    "description": part.description or "",
+                    "units": part.units or "",
+                    "thumbnail": part.get_thumbnail_url() if part.image else None,
+                    "image": part.get_image_url() if part.image else None,
+                    "unit_price": str(price.quantize(Decimal("0.01"))) if price else None,
+                    "unit_cents": self.cents(price) if price else None,
+                    "buyable": bool(price and price > 0),
+                    "quantity": Decimal(0),
+                    "items": [],
+                }
+            pr["quantity"] += it.quantity
+            pr["items"].append({"pk": it.pk, "quantity": float(it.quantity), "batch": it.batch or ""})
+        out = sorted(products.values(), key=lambda p: (not p["buyable"], p["name"].lower()))
+        for p in out:
+            # vendu a l'unite : une fraction de canette ne s'achete pas
+            p["available"] = int(min(p["quantity"], MAX_QTY)) if p["buyable"] else 0
+            p["quantity"] = float(p["quantity"])
+        return out
+
     # ---- prix ----
     @staticmethod
     def unit_price(part):
@@ -186,6 +263,11 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             p = p.variant_of
         return None
 
+    @staticmethod
+    def cents(price):
+        """Decimal en euros -> entier en centimes (arrondi commercial)."""
+        return int((price * 100).quantize(Decimal("1"), ROUND_HALF_UP))
+
     def offer(self, item):
         """Offre d'achat pour un StockItem : dict, ou None s'il n'est pas achetable."""
         part = item.part
@@ -198,7 +280,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             return None
         return {
             "unit_price": str(price.quantize(Decimal("0.01"))),
-            "unit_cents": int((price * 100).quantize(Decimal("1"), ROUND_HALF_UP)),
+            "unit_cents": self.cents(price),
             "currency": "EUR",
             "max_quantity": int(min(item.quantity, MAX_QTY)),
             "name": part.full_name,
@@ -211,39 +293,96 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
         site = (getattr(django_settings, "SITE_URL", None) or "").rstrip("/")
         return site or request.build_absolute_uri("/").rstrip("/")
 
-    def start_checkout(self, request, item, quantity):
-        """Cree le Purchase puis le checkout chez le prestataire.
+    def build_lines(self, data):
+        """Valide le panier recu de la Scannette ; renvoie (source, location, lignes).
+
+        Deux formes, jamais melangees :
+        - frigo : {"source": "frigo", "lines": [{"part": pk, "quantity": n}, ...]}
+        - fiche : {"lines": [{"stock_item": pk, "quantity": n}]}
+        Chaque ligne = dict(part, stock_item, name, quantity, unit_cents). Prix et
+        disponibilite sont TOUJOURS relus ici. Leve ValueError (message lisible).
+        """
+        from part.models import Part
+        from stock.models import StockItem
+
+        raw = data.get("lines")
+        if not isinstance(raw, list) or not raw or len(raw) > 30:
+            raise ValueError("Panier vide ou invalide.")
+        merged = {}
+        for ln in raw:
+            try:
+                q = int(ln.get("quantity", 1))
+                key = ("part", int(ln["part"])) if ln.get("part") else ("item", int(ln["stock_item"]))
+            except (TypeError, ValueError, KeyError, AttributeError):
+                raise ValueError("Panier invalide.")
+            if q < 1:
+                raise ValueError("Quantité invalide.")
+            merged[key] = merged.get(key, 0) + q
+
+        if data.get("source") == "frigo":
+            location = self.fridge_location()
+            if location is None:
+                raise ValueError("Le frigo n'est pas configuré.")
+            catalog = {p["part"]: p for p in self.fridge_catalog(location)}
+            lines = []
+            for (kind, pk), q in merged.items():
+                p = catalog.get(pk) if kind == "part" else None
+                if p is None or not p["buyable"]:
+                    raise ValueError("Un article du panier n'est plus en vente dans le frigo.")
+                if q > p["available"]:
+                    raise ValueError(f"{p['name']} : il n'en reste que {p['available']}.")
+                lines.append({
+                    "part": Part.objects.get(pk=pk), "stock_item": None, "name": p["name"],
+                    "quantity": q, "unit_cents": p["unit_cents"],
+                })
+            return "frigo", location, lines
+
+        if len(merged) != 1 or next(iter(merged))[0] != "item":
+            raise ValueError("Panier invalide.")
+        (_, pk), q = next(iter(merged.items()))
+        try:
+            item = StockItem.objects.select_related("part").get(pk=pk)
+        except StockItem.DoesNotExist:
+            raise ValueError("Article introuvable.")
+        offer = self.offer(item)
+        if offer is None:
+            raise ValueError("Cet article n'est pas en vente.")
+        if q > offer["max_quantity"]:
+            raise ValueError(f"Quantité possible : de 1 à {offer['max_quantity']}.")
+        return "item", None, [{
+            "part": item.part, "stock_item": item, "name": offer["name"],
+            "quantity": q, "unit_cents": offer["unit_cents"],
+        }]
+
+    def start_checkout(self, request, data):
+        """Cree le Purchase et ses lignes, puis le checkout chez le prestataire.
 
         Renvoie (purchase, dict) : {'checkout_id'} pour SumUp (le widget de la
         Scannette l'execute), {'redirect_url'} pour HelloAsso.
         """
-        from .models import Purchase
+        from .models import Purchase, PurchaseLine
 
-        offer = self.offer(item)
-        if offer is None:
-            raise ValueError("Cet article n'est pas en vente.")
-        if quantity < 1 or quantity > offer["max_quantity"]:
-            raise ValueError(f"Quantité possible : de 1 à {offer['max_quantity']}.")
-
+        source, location, lines = self.build_lines(data)
         provider = self.provider()
-        amount = offer["unit_cents"] * quantity
-        label = (offer["name"] if quantity == 1 else f"{quantity} × {offer['name']}")[:250]
-        purchase = Purchase.objects.create(
-            provider=provider,
-            stock_item=item,
-            item_name=label,
-            quantity=quantity,
-            amount_cents=amount,
-            user=request.user,
-        )
+        with transaction.atomic():
+            purchase = Purchase.objects.create(
+                provider=provider,
+                source=source,
+                location=location,
+                user=request.user,
+                amount_cents=sum(ln["quantity"] * ln["unit_cents"] for ln in lines),
+            )
+            PurchaseLine.objects.bulk_create([PurchaseLine(purchase=purchase, **ln) for ln in lines])
         site = self.site_url(request)
         back = f"{site}/scannette/?achat={purchase.pk}"
+        # ce que voit le prestataire (tableau de bord SumUp, recu HelloAsso)
+        label = ("Frigo · " if source == "frigo" else "") + purchase.summary(240)
         try:
             if provider == "sumup":
                 res = self.sumup().create_checkout(
                     # unique par compte marchand, meme si la base est restauree
                     f"scannette-{purchase.pk}-{uuid.uuid4().hex[:10]}",
-                    amount,
+                    purchase.amount_cents,
                     label,
                     return_url=f"{site}/plugin/paiements/webhook/sumup",
                     redirect_url=back,
@@ -251,7 +390,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
                 purchase.checkout_id = res["id"]
                 out = {"checkout_id": res["id"]}
             else:
-                res = self._helloasso_checkout(request, purchase, item, label, back)
+                res = self._helloasso_checkout(request, purchase, label, back)
                 purchase.checkout_id = str(res["id"])
                 out = {"redirect_url": res["redirectUrl"]}
         except PaymentError as e:
@@ -261,16 +400,17 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
         purchase.save(update_fields=["checkout_id"])
         return purchase, out
 
-    def _helloasso_checkout(self, request, purchase, item, label, back):
+    def _helloasso_checkout(self, request, purchase, label, back):
+        site = self.site_url(request)
         payload = {
             "totalAmount": purchase.amount_cents,
             "initialAmount": purchase.amount_cents,
-            "itemName": label,
-            "backUrl": f"{self.site_url(request)}/scannette/?item={item.pk}",
+            "itemName": label[:250],
+            "backUrl": f"{site}/scannette/" + ("?frigo=1" if purchase.source == "frigo" else ""),
             "errorUrl": back,
             "returnUrl": back,
             "containsDonation": False,
-            "metadata": {"purchase": purchase.pk, "stock_item": item.pk},
+            "metadata": {"purchase": purchase.pk},
         }
         u = request.user
         if self.get_setting("PREFILL_PAYER") and u.first_name and u.last_name and u.email:
@@ -314,7 +454,17 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             p.payment_ref = str(ref)[:64]
             self._remove_stock(p)
             p.save()
+            if self.get_setting("SEND_RECEIPT"):
+                # apres commit : le worker relit un achat deja marque paye
+                transaction.on_commit(lambda: self.queue_receipt(p.pk))
         return p
+
+    @staticmethod
+    def queue_receipt(pk):
+        """Envoi du recu par le worker (repli synchrone gere par InvenTree)."""
+        from InvenTree.tasks import offload_task
+
+        offload_task("inventree_paiements.tasks.send_receipt", pk, group="notification")
 
     def _sumup_paid(self, p):
         """Reference de transaction si SumUp confirme le paiement, sinon None."""
@@ -352,22 +502,33 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             return None
         return order.get("id") or p.checkout_id
 
-    @staticmethod
-    def _remove_stock(p):
-        """Retire la quantite achetee ; consigne une anomalie si impossible."""
-        item = p.stock_item
-        if item is None:
-            p.warning = "Article supprimé avant la confirmation : stock non retiré."
-            return
-        item.refresh_from_db()
-        qty = Decimal(p.quantity)
-        if item.quantity < qty:
-            p.warning = f"Stock insuffisant à la confirmation ({item.quantity} restant pour {qty} payé)."
-            qty = item.quantity
-        if qty > 0:
-            item.take_stock(
-                qty,
-                p.user,
-                notes=f"Achat {p.get_provider_display()} (paiement {p.payment_ref}, achat #{p.pk})",
-            )
-            p.stock_removed = True
+    def _remove_stock(self, p):
+        """Retire le stock de chaque ligne ; consigne les anomalies sans bloquer.
+
+        Le paiement est acquis : un stock insuffisant (inventaire faux, autre
+        achat simultane) ne l'annule pas, il est signale sur le recu et dans
+        l'admin pour qu'un membre du bureau regularise.
+        """
+        notes = f"Achat {p.get_provider_display()} #{p.pk} (paiement {p.payment_ref})"
+        warnings = []
+        for ln in p.lines.all():
+            if ln.stock_item_id:
+                sources = [ln.stock_item] if ln.stock_item else []
+            elif ln.part_id and p.location_id:
+                sources = list(self.fridge_items(p.location, part=ln.part_id))
+            else:
+                sources = []
+            need = Decimal(ln.quantity)
+            for item in sources:
+                if need <= 0:
+                    break
+                item.refresh_from_db()
+                take = min(need, item.quantity)
+                if take > 0 and item.take_stock(take, p.user, notes=notes) is not False:
+                    need -= take
+                    ln.removed += take
+            if need > 0:
+                warnings.append(f"{ln.name} : {need.normalize()} payé(s) sans stock à retirer")
+            ln.save(update_fields=["removed"])
+        p.stock_removed = not warnings
+        p.warning = " ; ".join(warnings)
