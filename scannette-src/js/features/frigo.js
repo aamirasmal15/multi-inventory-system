@@ -412,16 +412,25 @@ function frigoCountRow(p, it) {
    Visible pour un admin dès que l'emplacement choisi est le frigo (ou un de
    ses sous-emplacements). Vide = rien n'est changé. */
 function isFridgeLoc(pk) {
-  if (!ACHAT.fridge || !pk) return false;
-  const byPk = {};
-  (LOCS || []).forEach((l) => (byPk[l.pk] = l));
-  let n = byPk[Number(pk)],
-    guard = 0;
-  while (n && guard++ < 50) {
-    if (n.pk === ACHAT.fridge.location) return true;
-    n = byPk[n.parent];
-  }
-  return Number(pk) === ACHAT.fridge.location;
+  return !!(ACHAT.fridge && pk && (ACHAT.fridge.locations || [ACHAT.fridge.location]).includes(Number(pk)));
+}
+
+/* ---- verrou du frigo côté Scannette (le serveur refuse de toute façon) ----
+   Pour un non-admin : le frigo n'apparaît dans aucune liste d'emplacements, et
+   la fiche d'un article rangé dedans est en lecture seule. */
+async function hideFridgeLocs(list) {
+  await achatReadyPromise;
+  if (ACHAT.admin || !ACHAT.fridge) return list;
+  return (list || []).filter((l) => !isFridgeLoc(l.pk));
+}
+async function applyFridgeLock(it) {
+  const note = $("#fridgeLockNote");
+  if (note) note.style.display = "none";
+  await achatReadyPromise;
+  await pretsReadyPromise; // applyItemMode a fini de régler le bloc quantité
+  if (CURRENT !== it || ACHAT.admin || !isFridgeLoc(it.location)) return;
+  $("#qtyBlock").style.display = "none";
+  if (note) note.style.display = "";
 }
 function syncCreatePrice() {
   const f = $("#fldPrice");

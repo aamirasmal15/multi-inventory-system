@@ -271,7 +271,7 @@ async function fillSelects() {
     }
     if (!LOCS || !LOCS.length) {
       const r = await api("/api/stock/location/?limit=500");
-      LOCS = r.results || r;
+      LOCS = await hideFridgeLocs(r.results || r); // frigo : admins seulement
     }
   } catch (_) {
     CATS = CATS || [];
@@ -293,7 +293,7 @@ async function ensureLocs() {
   if (!LOCS || !LOCS.length) {
     try {
       const r = await api("/api/stock/location/?limit=500");
-      LOCS = r.results || r;
+      LOCS = await hideFridgeLocs(r.results || r); // frigo : admins seulement
     } catch (_) {
       LOCS = LOCS || [];
     }

@@ -74,6 +74,8 @@ function renderItem(it) {
   applyItemMode(it);
   // pastille « Variante de <modèle> », posée en différé (features/variants.js)
   applyVariantPill(it);
+  // article du frigo + non-admin : lecture seule (features/frigo.js)
+  applyFridgeLock(it);
 }
 
 function boxIcon() {

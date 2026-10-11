@@ -78,7 +78,12 @@ class ConfigView(PluginView):
                 "merchantId": gp_id,
                 "merchantName": self.plugin.get_setting("PAY_DISPLAY_NAME") or "Scannette",
             } if gp_id else None,
-            "fridge": {"location": loc.pk, "name": loc.name} if loc else None,
+            # locations : le frigo et ses sous-emplacements (masques aux non-admins)
+            "fridge": {
+                "location": loc.pk,
+                "name": loc.name,
+                "locations": sorted(loc.get_descendants(include_self=True).values_list("pk", flat=True)),
+            } if loc else None,
             "admin": is_admin(request.user),
         })
 

@@ -1,6 +1,7 @@
 """Point d'entree du plugin : classe PaiementsPlugin + logique du frigo.
 
-Le frigo est un emplacement choisi dans les reglages (FRIDGE_LOCATION). Tout
+Le frigo est un emplacement choisi dans les reglages (FRIDGE_LOCATION),
+verrouille : seuls les admins modifient ce qu'il contient (guard.py). Tout
 article range dedans (sous-emplacements compris) est EN VENTE des qu'il a un
 prix : pas de case « Vendable » a cocher a la main (elle est cochee toute
 seule, cf. apps.py, pour qu'InvenTree accepte un prix de vente). Le prix est
@@ -25,9 +26,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from plugin import InvenTreePlugin
-from plugin.mixins import AppMixin, SettingsMixin, UrlsMixin
+from plugin.mixins import AppMixin, SettingsMixin, UrlsMixin, ValidationMixin
 
 from . import PLUGIN_VERSION
+from . import guard
 from .sumup import SumUpClient, SumUpError
 
 logger = logging.getLogger("inventree")
@@ -35,7 +37,7 @@ logger = logging.getLogger("inventree")
 MAX_QTY = 20  # garde-fou par produit : une Scannette n'est pas une caisse de grossiste
 
 
-class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
+class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, InvenTreePlugin):
     """Frigo de l'asso : achat des articles de l'emplacement frigo via SumUp."""
 
     NAME = "Paiements"
@@ -141,6 +143,15 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             path("purchase/<int:pk>/email", api.ReceiptEmailView.as_view(plugin=self), name="receipt-email"),
             path("webhook/sumup", hook_view, name="webhook"),
         ]
+
+    # ---- verrou du frigo (ValidationMixin, cf. guard.py) ----
+    def validate_model_instance(self, instance, deltas=None):
+        """Sauvegarde d'un article / emplacement du frigo : admins seulement."""
+        guard.check_instance(instance)
+
+    def validate_model_deletion(self, instance):
+        """Suppression d'un article / emplacement du frigo : admins seulement."""
+        guard.check_deletion(instance)
 
     # ---- configuration ----
     def is_configured(self):
@@ -416,7 +427,9 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
         if ref is None:
             return purchase  # pas (encore) paye
 
-        with transaction.atomic():
+        # retrait fait par le plugin pour le compte de l'acheteur (membre, ou
+        # webhook anonyme) : passe le verrou du frigo
+        with transaction.atomic(), guard.system_action():
             p = Purchase.objects.select_for_update().get(pk=purchase.pk)
             if p.status == Purchase.STATUS_PAID:
                 return p

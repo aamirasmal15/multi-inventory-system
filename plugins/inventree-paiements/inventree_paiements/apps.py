@@ -1,4 +1,4 @@
-"""AppConfig du plugin (label : inventree_paiements) : modeles + mise en vente automatique.
+"""AppConfig du plugin (label : inventree_paiements) : modeles, mise en vente automatique, verrou des prix.
 
 Ranger un article dans le frigo = le mettre en vente : son part est coche
 « Vendable » des qu'un article de stock arrive dans l'emplacement frigo (ou
@@ -43,10 +43,16 @@ class InventreePaiementsConfig(AppConfig):
 
     def ready(self):
         """Branche le signal (dispatch_uid : une seule fois, meme si l'app est rechargee)."""
-        from django.db.models.signals import post_save
+        from django.db.models.signals import post_save, pre_delete, pre_save
 
+        from part.models import PartSellPriceBreak
         from stock.models import StockItem
+
+        from .guard import check_price
 
         post_save.connect(
             mark_fridge_part_salable, sender=StockItem, dispatch_uid="paiements_fridge_salable"
         )
+        # prix de vente d'un produit du frigo : admins seulement (guard.py)
+        pre_save.connect(check_price, sender=PartSellPriceBreak, dispatch_uid="paiements_fridge_price_save")
+        pre_delete.connect(check_price, sender=PartSellPriceBreak, dispatch_uid="paiements_fridge_price_delete")
