@@ -324,9 +324,6 @@ textarea{resize:none;min-height:56px}
 .fr-mine{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
 .fr-mine:hover{background:var(--surface-2)}
 #screen-frigo .seg{margin-bottom:12px}
-.fr-tools{display:flex;gap:8px;margin-bottom:12px}
-.fr-tools .loc-search{flex:1;margin:0}
-.fr-tools .btn{width:auto;flex:1;padding:10px 12px;font-size:14px}
 .frigo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-bottom:96px}
 .fr-span{grid-column:1/-1}
 .fr-card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden;transition:border-color .15s,box-shadow .15s}
@@ -365,10 +362,6 @@ textarea{resize:none;min-height:56px}
 .fr-batch{font-size:11px;color:var(--muted);margin-bottom:4px}
 .fr-count .fr-open{font-size:22px;color:var(--muted)}
 .pill-warn{color:var(--amber);border-color:var(--amber);background:var(--amber-light)}
-/* écran de scan alimenté par le frigo */
-.frigo-scan-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin-bottom:12px;border:1px solid var(--green);border-left-width:4px;background:var(--green-light);border-radius:var(--radius);font-size:13.5px;font-weight:600}
-.frigo-scan-banner .btn{width:auto;flex:none;padding:7px 11px;font-size:13px}
-#frigoOpenBtn span:first-child{font-size:17px}
 /* connexion arrivée par le QR du frigo : bandeau, EirbConnect d'abord */
 .frigo-login{display:none}
 body.frigo-mode .frigo-login{display:flex;align-items:center;gap:14px;padding:16px;margin:4px 0 16px;border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-sm)}

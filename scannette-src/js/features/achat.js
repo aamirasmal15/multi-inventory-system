@@ -32,9 +32,6 @@ async function loadAchatConfig() {
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé : pas de bouton
   }
-  // raccourci « Frigo » de l'écran de scan
-  const fb = $("#frigoOpenBtn");
-  if (fb) fb.style.display = ACHAT.fridge ? "" : "none";
   achatReadyResolve();
 }
 
@@ -72,9 +69,6 @@ async function applyBuyBlock(it) {
       ? '<div class="buy-qty"><button id="buyMinus" aria-label="−">−</button><b id="buyQty">1</b><button id="buyPlus" aria-label="+">+</button></div>'
       : "") +
     '<button class="btn btn-primary" id="buyBtn"></button>' +
-    (o.in_fridge && ACHAT.fridge
-      ? '<button class="btn btn-ghost btn-block" id="buyFridgeBtn">' + esc(t("buy_open_fridge")) + "</button>"
-      : "") +
     (ACHAT.provider === "helloasso" ? '<p class="buy-note">' + esc(t("buy_note_ha")) + "</p>" : "");
   box.style.display = "";
   const sync = () => {
@@ -97,7 +91,6 @@ async function applyBuyBlock(it) {
       sync();
     }
   };
-  if ($("#buyFridgeBtn")) $("#buyFridgeBtn").onclick = () => openFrigo();
   sync();
 }
 

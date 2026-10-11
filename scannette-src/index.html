@@ -108,11 +108,6 @@
       </button>
     </div>
     <div class="err" id="scanErr"></div>
-    <!-- scan pour le panier du frigo (frigo.js) -->
-    <div class="frigo-scan-banner" id="frigoScanBanner" style="display:none">
-      <span>🧊 <span data-i18n="frigo_scan_banner">Scanne un article du frigo pour l'ajouter au panier</span></span>
-      <button class="btn btn-ghost" id="frigoScanBack" data-i18n="frigo_scan_back">Retour au frigo</button>
-    </div>
 
     <div id="modeSearch" style="display:none">
       <div class="card" style="padding:12px 13px;margin-bottom:13px">
@@ -143,9 +138,6 @@
       </div>
     </div>
 
-    <button class="btn btn-ghost btn-block" id="frigoOpenBtn" style="display:none">
-      <span>🧊</span><span data-i18n="frigo_open">Le frigo</span>
-    </button>
     <button class="btn btn-ghost btn-block" id="createNoCodeBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       <span data-i18n="create_nocode">Créer un article sans code</span>
@@ -507,13 +499,7 @@
       <button type="button" class="seg-btn active" data-mode="buy"><span data-i18n="frigo_mode_buy">Acheter</span></button>
       <button type="button" class="seg-btn" data-mode="manage"><span data-i18n="frigo_mode_manage">Gérer</span></button>
     </div>
-    <div class="fr-tools" id="frigoTools">
-      <input type="text" id="frigoSearch" class="loc-search" placeholder="Rechercher…" data-i18n-ph="frigo_search_ph" autocomplete="off" style="display:none">
-      <button class="btn btn-ghost" id="frigoScanBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></svg>
-        <span data-i18n="frigo_scan">Scanner un article</span>
-      </button>
-    </div>
+    <input type="text" id="frigoSearch" class="loc-search" placeholder="Rechercher…" data-i18n-ph="frigo_search_ph" autocomplete="off" style="display:none">
     <div id="frigoList" class="frigo-grid"></div>
     <div class="fr-cartbar" id="frigoCartBar">
       <div class="fr-cartinfo" id="frigoCartInfo"></div>

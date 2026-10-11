@@ -128,11 +128,7 @@ class ItemView(PluginView):
         except StockItem.DoesNotExist:
             return Response({"detail": "Article introuvable."}, status=status.HTTP_404_NOT_FOUND)
         offer = self.plugin.offer(item) if self.plugin.is_configured() else None
-        loc = self.plugin.fridge_location()
-        in_fridge = bool(
-            loc and item.location_id and item.location.get_ancestors(include_self=True).filter(pk=loc.pk).exists()
-        )
-        return Response({"buyable": offer is not None, "in_fridge": in_fridge, **(offer or {})})
+        return Response({"buyable": offer is not None, **(offer or {})})
 
 
 class CheckoutView(PluginView):

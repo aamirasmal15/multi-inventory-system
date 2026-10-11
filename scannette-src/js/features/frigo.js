@@ -1,14 +1,13 @@
 /* ==========================================================================
    features/frigo.js — Le frigo : catalogue de l'emplacement frigo, panier, paiement, gestion du stock.
 
-   Entrée : QR collé sur la porte -> /frigo -> /scannette/?frigo=1 (redirection
-   du Caddy de l'instance) ; boot.js mémorise la demande, la page de connexion
-   passe en « mode frigo » (features ci-dessous), puis enterApp ouvre le frigo.
-   Aussi : bouton « Frigo » de l'écran de scan, scan du QR de l'emplacement.
+   Seule entrée : QR collé sur la porte -> /frigo -> /scannette/?frigo=1
+   (redirection du Caddy de l'instance) ; boot.js mémorise la demande, la page
+   de connexion passe en « mode frigo » (applyFrigoLogin), puis enterApp
+   ouvre le frigo. Le reste de la Scannette n'y mène pas.
 
    - Acheter : un produit = un part (stock cumulé de ses articles rangés dans
-     le frigo), quantités au panier, barre de paiement en bas ; « Scanner »
-     ajoute au panier l'article dont on scanne le code-barres.
+     le frigo), quantités au panier, barre de paiement en bas.
    - Gérer (admins) : comptage direct de chaque article du frigo, produits
      sans prix signalés (invisibles des membres tant qu'il n'y en a pas).
    Le panier survit au rafraîchissement et à l'aller-retour SSO (sessionStorage) ;
@@ -17,7 +16,6 @@
 
 let FRIGO = null; // dernière réponse de /plugin/paiements/fridge
 let FRIGO_MODE = "buy"; // "buy" | "manage"
-let FRIGO_SCAN = false; // l'écran de scan alimente le panier du frigo
 
 /* ---- panier { partPk: quantité } ---- */
 function frigoCart() {
@@ -63,7 +61,6 @@ function frigoSetQty(pk, q) {
 /* ---- ouverture ---- */
 async function openFrigo() {
   stopCamera();
-  FRIGO_SCAN = false;
   rememberView("frigo");
   show("#screen-frigo");
   await achatReadyPromise;
@@ -111,10 +108,7 @@ function frigoRender() {
   if (!FRIGO) return;
   const q = ($("#frigoSearch").value || "").trim().toLowerCase();
   const all = FRIGO.products || [];
-  $("#frigoTools").style.display = all.length ? "" : "none";
   $("#frigoSearch").style.display = all.length > 6 ? "" : "none";
-  // en mode Gérer, le scan sert à réapprovisionner (bouton dédié), pas au panier
-  $("#frigoScanBtn").style.display = FRIGO_MODE === "buy" ? "" : "none";
   const list = q ? all.filter((p) => p.name.toLowerCase().includes(q)) : all;
   const box = $("#frigoList");
   if (FRIGO_MODE === "manage") frigoRenderManage(box, list);
@@ -270,42 +264,6 @@ function frigoCountRow(p, it) {
     }
   };
   return w;
-}
-
-/* ---- Scanner -> panier ---- */
-function openFrigoScan() {
-  gotoScan();
-  FRIGO_SCAN = true;
-  $("#frigoScanBanner").style.display = "flex";
-}
-async function frigoScanned(code) {
-  let pk = null;
-  try {
-    const r = await resolveBarcode(code);
-    if (r && r.stocklocation && ACHAT.fridge && r.stocklocation.pk === ACHAT.fridge.location) {
-      openFrigo(); // QR du frigo lui-même
-      return;
-    }
-    if (r && r.stockitem && r.stockitem.pk) pk = (await api("/api/stock/" + r.stockitem.pk + "/")).part;
-    else if (r && r.part && r.part.pk) pk = r.part.pk;
-    else if (r && r.supplierpart && r.supplierpart.pk) pk = (await api("/api/company/part/" + r.supplierpart.pk + "/")).part;
-  } catch (e) {
-    toast(e.message, "bad");
-  }
-  await openFrigo();
-  const p = pk != null ? frigoProduct(pk) : null;
-  if (!p || !p.buyable || !p.available) {
-    toast(t("frigo_not_sold"), "bad");
-    return;
-  }
-  const n = frigoCart()[p.part] || 0;
-  if (n >= p.available) {
-    toast(t("frigo_left", p.available), "bad");
-    return;
-  }
-  frigoSetQty(p.part, n + 1);
-  frigoRender();
-  toast(t("frigo_added", p.name), "ok");
 }
 
 /* ---- page de connexion en mode frigo (avant authentification) ---- */

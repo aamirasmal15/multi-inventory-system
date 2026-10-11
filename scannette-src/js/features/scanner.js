@@ -5,10 +5,6 @@
 /* ---- scan ---- */
 let scanLock = false;
 function gotoScan() {
-  // scan « normal » : on quitte le mode panier du frigo (openFrigoScan le
-  // réarme juste après ce gotoScan)
-  FRIGO_SCAN = false;
-  $("#frigoScanBanner").style.display = "none";
   hideErr($("#scanErr"));
   $("#manualInput").value = "";
   if ($("#partSearch")) clearSearch();
@@ -377,12 +373,6 @@ async function processBarcode(raw) {
   const code = (raw || "").trim();
   if (!code) return;
   stopCamera();
-  // scan lancé depuis le frigo : le code alimente le panier (frigo.js)
-  if (FRIGO_SCAN) {
-    FRIGO_SCAN = false;
-    frigoScanned(code);
-    return;
-  }
   // nouveau flux : la flèche retour de la fiche ne doit ramener ni vers la
   // liste d'exemplaires ni vers le modèle d'un scan précédent (loadFromPart
   // les re-pose si besoin)
@@ -406,9 +396,7 @@ async function processBarcode(raw) {
     if (r && r.stockitem && r.stockitem.pk) {
       await loadItem(r.stockitem.pk);
     } else if (r && r.stocklocation && r.stocklocation.pk) {
-      // QR de l'emplacement frigo : la page d'achat plutôt que la liste brute
-      if (ACHAT.fridge && r.stocklocation.pk === ACHAT.fridge.location) await openFrigo();
-      else await loadLocation(r.stocklocation.pk);
+      await loadLocation(r.stocklocation.pk);
     } else if (r && r.part && r.part.pk) {
       await loadFromPart(r.part.pk);
     } else if (r && r.supplierpart && r.supplierpart.pk) {

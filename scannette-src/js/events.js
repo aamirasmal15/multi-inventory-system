@@ -279,12 +279,9 @@ $("#picker")?.addEventListener(
 );
 
 /* ---- frigo et achats (frigo.js, achat.js) ---- */
-$("#frigoOpenBtn")?.addEventListener("click", openFrigo);
 $("#backBtnFrigo")?.addEventListener("click", gotoScan);
 $("#frigoMineBtn")?.addEventListener("click", openPurchases);
 $("#backBtnPurch")?.addEventListener("click", openFrigo);
-$("#frigoScanBtn")?.addEventListener("click", openFrigoScan);
-$("#frigoScanBack")?.addEventListener("click", openFrigo);
 $("#frigoPayBtn")?.addEventListener("click", frigoPay);
 $("#frigoSearch")?.addEventListener("input", frigoRender);
 document.querySelectorAll("#frigoModeSeg .seg-btn").forEach((b) => {
