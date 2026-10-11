@@ -86,6 +86,7 @@ async function offerCreate(code, part) {
     $("#createBtnLbl").textContent = t("create_item");
     if (tt) tt.textContent = t("create_title");
   }
+  unpickSuggestion();
   $("#np_name").value = part ? part.name || "" : "";
   hideSugg();
   loadParts().catch(() => {}); // catalogue prêt pour les suggestions de nom
@@ -109,6 +110,7 @@ async function offerAddStock(part, opts) {
   // rouvre l'écran d'ajout après un refresh (part refetchée, code conservé)
   if (part.pk != null)
     rememberView("addstock", part.pk, { code: PENDING_CODE || "", depleted: depleted });
+  unpickSuggestion();
   STOCK_ONLY_PART = part;
   EXISTING_PART = null;
   hideSugg();
@@ -716,6 +718,11 @@ function showDuplicate(name) {
 }
 async function linkToExisting() {
   if (!EXISTING_PART) return;
+  if (!PENDING_CODE) {
+    // suggestion choisie sans code scanné : rien à lier, on ouvre sa fiche
+    openPart(EXISTING_PART.pk);
+    return;
+  }
   const b = $("#linkExistingBtn"),
     html = b.innerHTML;
   b.disabled = true;
@@ -786,12 +793,8 @@ async function suggestParts() {
   const inp = $("#np_name");
   const qw = simWords(inp.value);
   const id = ++suggReqId;
-  // nom retouché après un choix : l'article proposé à la liaison ne vaut plus
-  if (EXISTING_PART && norm(inp.value) !== norm(EXISTING_PART.name)) {
-    EXISTING_PART = null;
-    $("#linkExistingBtn").style.display = "none";
-    hideErr($("#createErr"));
-  }
+  // nom retouché après un choix : retour au formulaire de création
+  if (EXISTING_PART && norm(inp.value) !== norm(EXISTING_PART.name)) unpickSuggestion();
   if (STOCK_ONLY_PART || inp.readOnly || !qw.length || norm(inp.value).length < 3) {
     box.style.display = "none";
     return;
@@ -852,14 +855,31 @@ async function suggestParts() {
   });
   box.style.display = "";
 }
-/* l'article touché complète le champ Nom avec son nom exact, et on se
-   retrouve comme si on l'avait tapé : « existe déjà », et avec un code
-   scanné le bouton « Lier le code à … » (showDuplicate / linkToExisting) */
+/* choisir une suggestion, c'est dire « c'est cet article » : son nom exact
+   remplit le champ et tout le reste du formulaire (image, quantité,
+   emplacement…) s'efface — il ne reste que « Lier le code à … », ou, sans
+   code scanné, « Voir l'article ». Retoucher le nom rend le formulaire. */
 function pickSuggestion(p) {
   hideSugg();
+  hideErr($("#createErr"));
   $("#np_name").value = p.name;
   EXISTING_PART = { pk: p.pk, name: p.name };
-  showDuplicate(p.name);
+  $("#screen-create .card").classList.add("ns-picked");
+  const b = $("#linkExistingBtn");
+  b.classList.replace("btn-ghost", "btn-primary");
+  b.querySelector(".lx-label").textContent = PENDING_CODE
+    ? t("link_code_to", p.name)
+    : t("sugg_view_item");
+  b.style.display = "flex";
+}
+function unpickSuggestion() {
+  const card = $("#screen-create .card");
+  if (!card || !card.classList.contains("ns-picked")) return;
+  card.classList.remove("ns-picked");
+  EXISTING_PART = null;
+  const b = $("#linkExistingBtn");
+  b.classList.replace("btn-primary", "btn-ghost");
+  b.style.display = "none";
 }
 async function createArticle() {
   if (STOCK_ONLY_PART) return addStockExisting();
