@@ -274,43 +274,74 @@ function armPriceChips(root, input, after) {
   );
 }
 
-/* fenêtre de prix d'un produit : grand champ, montants rapides, retrait de
-   la vente, historique (qui a mis quel prix, quand) */
+/* fenêtre de prix d'un produit : feuille qui glisse du bas, prix au centre
+   avec −/+ 0,10 €, montants rapides sur une ligne, retrait de la vente en
+   lien discret, historique repliable (qui a mis quel prix, quand) */
 function openPriceSheet(p) {
   const own = p.buyable && !p.price_inherited;
+  const now = p.buyable
+    ? p.price_inherited
+      ? t("frigo_now_model", eur(p.unit_price))
+      : t("frigo_now", eur(p.unit_price))
+    : t("frigo_no_price");
   const ov = document.createElement("div");
-  ov.className = "modal-ov";
+  ov.className = "modal-ov sheet-ov";
   ov.innerHTML =
-    '<div class="modal-card price-sheet" role="dialog" aria-modal="true">' +
-    '<div class="ps-head">' + frigoThumb(p, "lthumb", false) +
-    '<div class="ps-name"><div class="t">' + esc(p.name) + '</div><div class="s">' +
-    esc(p.buyable ? (p.price_inherited ? t("frigo_now_model", eur(p.unit_price)) : t("frigo_now", eur(p.unit_price))) : t("frigo_no_price")) +
-    '</div></div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">✕</button></div>' +
-    '<label class="lbl" for="psInput">' + esc(t("frigo_price_new")) + "</label>" +
-    '<div class="price-big"><input id="psInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></div>' +
+    '<div class="ps-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("frigo_price_new")) + '">' +
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ps-head"><div class="ps-name"><div class="t">' + esc(p.name) + '</div><div class="s">' + esc(now) +
+    '</div></div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+    '<div class="ps-amount">' +
+    '<button type="button" class="ps-step" data-d="-10" aria-label="−0,10 €">−</button>' +
+    '<label class="ps-field"><input id="psInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label>' +
+    '<button type="button" class="ps-step" data-d="10" aria-label="+0,10 €">+</button></div>' +
+    '<div class="ps-steplbl">' + esc(t("frigo_price_step")) + "</div>" +
     priceChipsHtml() +
-    (p.price_inherited ? '<p class="field-hint">' + esc(t("frigo_price_inherited")) + "</p>" : "") +
-    '<button class="btn btn-primary btn-block" data-save disabled>' + esc(t("frigo_price_save")) + "</button>" +
-    (own ? '<button class="btn btn-ghost btn-block ps-remove" data-remove>' + esc(t("frigo_price_remove")) + "</button>" : "") +
-    '<div class="ps-hist"><div class="ps-hist-t">' + esc(t("frigo_price_history")) + '</div><div class="ps-hist-l"><div class="skeleton">' +
-    esc(t("loading")) + "</div></div></div></div>";
+    (p.price_inherited ? '<p class="ps-note">' + esc(t("frigo_price_inherited")) + "</p>" : "") +
+    '<button class="btn btn-primary btn-block" data-save disabled></button>' +
+    (own ? '<button type="button" class="ps-remove" data-remove>' + esc(t("frigo_price_remove")) + "</button>" : "") +
+    '<details class="ps-hist"><summary>' + esc(t("frigo_price_history")) + '</summary><div class="ps-hist-l"><div class="ps-empty">' +
+    esc(t("loading")) + "</div></div></details></div>";
   const input = ov.querySelector("#psInput"),
     save = ov.querySelector("[data-save]");
-  const valid = () => /^\d{1,3}([.,]\d{1,2})?$/.test(input.value.trim()) && parseFloat(input.value.replace(",", ".")) > 0;
-  const sync = () => (save.disabled = !valid());
+  const cents = () => {
+    const v = input.value.trim().replace(",", ".");
+    return /^\d{1,3}(\.\d{1,2})?$/.test(v) ? Math.round(parseFloat(v) * 100) : NaN;
+  };
+  const fmtC = (c) => (c / 100).toFixed(2).replace(".", ",");
+  const sync = () => {
+    const c = cents();
+    const ok = c > 0;
+    save.disabled = !ok;
+    save.textContent = ok ? t("frigo_price_save_x", eurCents(c)) : t("frigo_price_save");
+    ov.querySelectorAll(".price-chip").forEach((x) => x.classList.toggle("on", ok && x.dataset.v === fmtC(c)));
+  };
   input.value = own ? String(p.unit_price).replace(".", ",") : "";
   armPriceChips(ov, input, sync);
   input.addEventListener("input", sync);
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && valid()) save.click();
+    if (e.key === "Enter" && !save.disabled) save.click();
+  });
+  ov.querySelectorAll(".ps-step").forEach((b) => {
+    b.onclick = () => {
+      const base = cents() > 0 ? cents() : p.unit_cents || 0;
+      input.value = fmtC(Math.max(10, base + Number(b.dataset.d)));
+      sync();
+    };
   });
   const prevOverflow = document.body.style.overflow;
   document.body.style.overflow = "hidden";
   const close = () => {
     document.body.style.overflow = prevOverflow;
+    document.removeEventListener("keydown", onKey);
     ov.classList.add("closing");
-    setTimeout(() => ov.remove(), 180);
+    setTimeout(() => ov.remove(), 220);
   };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
   ov.addEventListener("click", (e) => {
     if (e.target === ov) close();
   });
@@ -330,32 +361,29 @@ function openPriceSheet(p) {
       toast(e.message, "bad");
     }
   };
-  save.onclick = () => valid() && send(input.value.trim(), save);
+  save.onclick = () => cents() > 0 && send(fmtC(cents()), save);
   const rm = ov.querySelector("[data-remove]");
   if (rm) rm.onclick = () => send("", rm);
   document.body.appendChild(ov);
   sync();
-  setTimeout(() => input.focus(), 200);
-  // historique des prix
+  // historique des prix, chargé à l'ouverture (déplié à la demande)
   api("/plugin/paiements/fridge/price?part=" + p.part)
     .then((h) => {
       const l = ov.querySelector(".ps-hist-l");
       if (!l) return;
-      const cents = (c) => (c == null ? "—" : eurCents(c));
+      ov.querySelector(".ps-hist summary").textContent = t("frigo_price_history") + (h.length ? " (" + h.length + ")" : "");
+      const c = (x) => (x == null ? "—" : eurCents(x));
       l.innerHTML = h.length
         ? h
             .map(
-              (c) =>
-                '<div class="ps-hrow"><span class="pr">' + esc(cents(c.old_cents)) + " → <b>" + esc(cents(c.new_cents)) +
-                "</b></span><span class=\"who\">" + esc(c.user) + " · " + esc(c.date) + "</span></div>",
+              (x) =>
+                '<div class="ps-hrow"><span class="pr">' + esc(c(x.old_cents)) + ' <span class="ar">→</span> <b>' +
+                esc(c(x.new_cents)) + '</b></span><span class="who">' + esc(x.user) + "<br>" + esc(x.date) + "</span></div>",
             )
             .join("")
         : '<div class="ps-empty">' + esc(t("frigo_price_history_empty")) + "</div>";
     })
-    .catch(() => {
-      const l = ov.querySelector(".ps-hist-l");
-      if (l) l.innerHTML = "";
-    });
+    .catch(() => {});
 }
 
 /* stock : une ligne par article de stock rangé dans le frigo, avec le
@@ -374,7 +402,24 @@ function frigoCountRow(p, it) {
     save = w.querySelector(".loc-save");
   const initial = fmt(it.quantity);
   input.value = initial;
-  const refresh = () => save.classList.toggle("on", input.value.trim() !== initial);
+  // dès qu'on touche au stock : « Avant : 6 → 8 (+2) » sous la ligne
+  const diff = document.createElement("div");
+  diff.className = "fr-diff";
+  w.querySelector(".fr-field").after(diff);
+  const refresh = () => {
+    const changed = input.value.trim() !== initial;
+    save.classList.toggle("on", changed);
+    const q = parseFloat(input.value.replace(",", "."));
+    if (!changed || isNaN(q)) {
+      diff.classList.remove("show");
+      return;
+    }
+    const d = q - Number(it.quantity);
+    diff.innerHTML =
+      esc(t("frigo_stock_before")) + " <b>" + esc(initial) + "</b> → <b>" + esc(fmt(q)) + "</b> " +
+      '<span class="' + (d >= 0 ? "up" : "down") + '">(' + (d >= 0 ? "+" : "−") + esc(fmt(Math.abs(d))) + ")</span>";
+    diff.classList.add("show");
+  };
   input.oninput = refresh;
   const step = (d) => {
     const q = parseFloat(input.value.replace(",", ".")) || 0;
@@ -397,7 +442,7 @@ function frigoCountRow(p, it) {
     save.innerHTML = '<span class="spin" style="width:15px;height:15px;border-width:2px"></span>';
     try {
       await api("/api/stock/count/", { method: "POST", body: { items: [{ pk: it.pk, quantity: q }], notes: "Frigo" } });
-      toast(p.name + " : " + fmt(q), "ok");
+      toast(p.name + " : " + initial + " → " + fmt(q), "ok");
       await frigoLoad();
     } catch (e) {
       save.innerHTML = h;
