@@ -423,9 +423,18 @@ EDGE_EFFECTIVE="$EDGE"
 # internes (@mobile {...) sont indentés. Les URL https:// À L'INTÉRIEUR des
 # blocs (redirection des anciens sous-domaines Scannette vers $HOST/scannette/)
 # restent intactes : publiques, servies par l'edge.
+# Ce Caddy ne voyant que du HTTP, la redirection http -> https se fait sur le
+# X-Forwarded-Proto posé par l'edge (cru grâce à trusted_proxies) : sans elle,
+# un lien http:// (autocomplétion, vieux lien) servait le site en clair, et sur
+# mobile l'aiguillage vers la Scannette ratait. Injectée juste après la ligne
+# d'adresse, en tête de bloc ; 308 = méthode et corps conservés (POST compris).
 apply_edge() {
   if [ "${EDGE_EFFECTIVE:-$EDGE}" = "cloudflare-tunnel" ]; then
-    awk '!done && /^[^ \t].*\{[ \t]*$/ { gsub(/[^ ,{]+/, "http://&"); done=1 } { print }'
+    awk '!done && /^[^ \t].*\{[ \t]*$/ { gsub(/[^ ,{]+/, "http://&"); print
+           print "    # EIR-FORCE-HTTPS : visiteur arrivé en http:// à l'"'"'edge -> https"
+           print "    @plainHttp header X-Forwarded-Proto http"
+           print "    redir @plainHttp https://{host}{uri} 308"
+           done=1; next } { print }'
   else
     cat
   fi
