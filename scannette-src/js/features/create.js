@@ -126,19 +126,10 @@ async function offerAddStock(part, opts) {
   const ban = $("#addStockBanner");
   ban.style.display = "flex";
   ban.className = "stock-banner" + (depleted ? "" : " add");
-  const sugg = !!opts.fromSugg; // choisi dans les suggestions de nom
-  const badge = sugg
-    ? '<span class="badge-green">' + t("existing_item_crumb") + "</span>"
-    : depleted
-      ? '<span class="badge-red">' + t("out_of_stock_pill") + "</span>"
-      : '<span class="badge-green">' + t("badge_new_loc") + "</span>";
-  const hint = sugg
-    ? PENDING_CODE
-      ? t("sugg_hint_code")
-      : t("sugg_hint")
-    : depleted
-      ? t("sb_hint_out", esc(PENDING_CODE))
-      : t("sb_hint_add");
+  const badge = depleted
+    ? '<span class="badge-red">' + t("out_of_stock_pill") + "</span>"
+    : '<span class="badge-green">' + t("badge_new_loc") + "</span>";
+  const hint = depleted ? t("sb_hint_out", esc(PENDING_CODE)) : t("sb_hint_add");
   ban.innerHTML =
     (thumb
       ? '<img class="thumb zoomable" src="' +
@@ -159,20 +150,10 @@ async function offerAddStock(part, opts) {
     descHtml(part) +
     '<p class="sb-hint">' +
     hint +
-    "</p>" +
-    (sugg ? '<button type="button" class="sb-undo">' + t("sugg_undo") + "</button>" : "") +
-    "</div>";
+    "</p></div>";
   armDesc(ban);
-  const undo = ban.querySelector(".sb-undo");
-  // retour au formulaire de création, nom tapé et suggestions rétablis
-  if (undo) undo.onclick = () => offerCreate(PENDING_CODE, { name: opts.typed || "" });
   const tt = $("#createTitle");
-  if (tt)
-    tt.textContent = sugg
-      ? t("sugg_add_title")
-      : depleted
-        ? t("add_stock_title")
-        : t("add_elsewhere_title");
+  if (tt) tt.textContent = depleted ? t("add_stock_title") : t("add_elsewhere_title");
   const cc = $("#createCrumb");
   if (cc) cc.textContent = t("existing_item_crumb");
   const lq = $("#lblQty");
@@ -191,13 +172,6 @@ async function offerAddStock(part, opts) {
   $("#np_name").classList.add("ro");
   $("#np_qty").value = "1";
   $("#createBtnLbl").textContent = part.trackable ? t("add_one") : t("add_stock");
-  // code scanné : on peut aussi juste le lier, sans toucher au stock
-  if (sugg && PENDING_CODE) {
-    EXISTING_PART = part;
-    const lb = $("#linkExistingBtn");
-    lb.querySelector(".lx-label").textContent = t("sugg_link_only");
-    lb.style.display = "flex";
-  }
   await fillSelects();
 }
 /* reprise après un rafraîchissement sur l'écran d'ajout de stock : la part
@@ -812,6 +786,12 @@ async function suggestParts() {
   const inp = $("#np_name");
   const qw = simWords(inp.value);
   const id = ++suggReqId;
+  // nom retouché après un choix : l'article proposé à la liaison ne vaut plus
+  if (EXISTING_PART && norm(inp.value) !== norm(EXISTING_PART.name)) {
+    EXISTING_PART = null;
+    $("#linkExistingBtn").style.display = "none";
+    hideErr($("#createErr"));
+  }
   if (STOCK_ONLY_PART || inp.readOnly || !qw.length || norm(inp.value).length < 3) {
     box.style.display = "none";
     return;
@@ -854,11 +834,11 @@ async function suggestParts() {
       (sub ? '<span class="sr-sub">' + sub + "</span>" : "") +
       "</span>" +
       '<span class="ns-act">' +
-      t("sugg_use") +
+      t("sugg_pick") +
       "</span>";
-    b.onclick = () => pickSuggestion(p, b);
-    // toucher la ligne = c'est cet article : le formulaire se complète avec
-    // lui ; « Voir » à côté ouvre seulement sa fiche pour vérifier
+    b.onclick = () => pickSuggestion(p);
+    // toucher la ligne = choisir cet article ; « Voir » à côté ouvre
+    // seulement sa fiche pour vérifier
     const row = document.createElement("div");
     row.className = "ns-row";
     row.appendChild(b);
@@ -872,28 +852,14 @@ async function suggestParts() {
   });
   box.style.display = "";
 }
-/* l'article touché complète le formulaire : on passe en « article
-   existant » (bandeau, nom figé, quantité + emplacement) — à l'envoi le
-   stock est ajouté ET le code scanné lié ; « Lier le code seulement » le
-   lie sans toucher au stock, « Ce n'est pas lui » revient à la création */
-async function pickSuggestion(p, b) {
-  const typed = $("#np_name").value;
-  const act = b.querySelector(".ns-act"),
-    html = act.innerHTML;
-  b.disabled = true;
-  act.innerHTML = '<span class="spin"></span>';
-  let part;
-  try {
-    part = await api("/api/part/" + p.pk + "/");
-  } catch (e) {
-    b.disabled = false;
-    act.innerHTML = html;
-    showErr($("#createErr"), e.message);
-    return;
-  }
+/* l'article touché complète le champ Nom avec son nom exact, et on se
+   retrouve comme si on l'avait tapé : « existe déjà », et avec un code
+   scanné le bouton « Lier le code à … » (showDuplicate / linkToExisting) */
+function pickSuggestion(p) {
   hideSugg();
-  await offerAddStock(part, { depleted: false, fromSugg: true, typed: typed });
-  window.scrollTo(0, 0);
+  $("#np_name").value = p.name;
+  EXISTING_PART = { pk: p.pk, name: p.name };
+  showDuplicate(p.name);
 }
 async function createArticle() {
   if (STOCK_ONLY_PART) return addStockExisting();
