@@ -7,7 +7,7 @@ leverait AlreadyRegistered.
 
 from django.contrib import admin
 
-from .models import Purchase, PurchaseLine
+from .models import PriceChange, Purchase, PurchaseLine
 
 
 class PurchaseLineInline(admin.TabularInline):
@@ -39,3 +39,15 @@ class PurchaseAdmin(admin.ModelAdmin):
 
 if not admin.site.is_registered(Purchase):
     admin.site.register(Purchase, PurchaseAdmin)
+
+
+class PriceChangeAdmin(admin.ModelAdmin):
+    """Journal des prix du frigo, en lecture."""
+
+    list_display = ("date", "part_name", "old_cents", "new_cents", "user")
+    search_fields = ("part_name", "user__username")
+    readonly_fields = ("date", "part", "part_name", "old_cents", "new_cents", "user")
+
+
+if not admin.site.is_registered(PriceChange):
+    admin.site.register(PriceChange, PriceChangeAdmin)

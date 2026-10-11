@@ -108,3 +108,37 @@ class PurchaseLine(models.Model):
     def total_cents(self):
         """Montant de la ligne."""
         return self.quantity * self.unit_cents
+
+
+class PriceChange(models.Model):
+    """Journal des prix du frigo : qui a mis quel prix, quand (mode « Gérer »)."""
+
+    part = models.ForeignKey(
+        "part.Part",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="Article",
+    )
+    # libelle fige : l'article peut etre renomme ou supprime ensuite
+    part_name = models.CharField(max_length=250, verbose_name="Libellé")
+    # None = pas de prix (avant : jamais vendu ; apres : retire de la vente)
+    old_cents = models.PositiveIntegerField(null=True, blank=True, verbose_name="Ancien prix (centimes)")
+    new_cents = models.PositiveIntegerField(null=True, blank=True, verbose_name="Nouveau prix (centimes)")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="Modifié par",
+    )
+    date = models.DateTimeField(auto_now_add=True, verbose_name="Le")
+
+    class Meta:
+        """Plus recents en premier."""
+
+        ordering = ["-date", "-pk"]
+        verbose_name = "Changement de prix"
+        verbose_name_plural = "Changements de prix"

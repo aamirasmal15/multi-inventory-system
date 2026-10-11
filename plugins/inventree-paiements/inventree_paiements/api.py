@@ -101,6 +101,12 @@ class FridgeView(PluginView):
             products = [p for p in products if p["buyable"]]
             for p in products:
                 del p["items"]
+        else:
+            # mode « Gérer » : qui a ajoute chaque article en dernier
+            added = self.plugin.last_additions([i["pk"] for p in products for i in p["items"]], loc)
+            for p in products:
+                for i in p["items"]:
+                    i["added"] = added.get(i["pk"])
         return Response({
             "location": loc.pk,
             "name": loc.name,
@@ -110,11 +116,23 @@ class FridgeView(PluginView):
 
 
 class FridgePriceView(PluginView):
-    """Admins : prix de vente d'un produit du frigo ({"part": pk, "price": "0.70"}).
+    """Admins : prix de vente d'un produit du frigo.
 
-    Prix vide ou nul = retire de la vente. Seuls les produits presents dans
-    le frigo sont modifiables ici.
+    GET ?part=<pk> : historique des changements de prix (journal PriceChange).
+    POST {"part": pk, "price": "0,70"} : nouveau prix ; vide ou nul = retire de
+    la vente. Seuls les produits presents dans le frigo sont modifiables ici.
     """
+
+    def get(self, request):
+        from part.models import Part
+
+        if not is_admin(request.user):
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            part = Part.objects.get(pk=int(request.query_params.get("part")))
+        except (TypeError, ValueError, Part.DoesNotExist):
+            return Response({"detail": "Article introuvable."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.plugin.price_history(part))
 
     def post(self, request):
         from decimal import Decimal, InvalidOperation
@@ -137,7 +155,7 @@ class FridgePriceView(PluginView):
             return Response({"detail": "Prix invalide."}, status=status.HTTP_400_BAD_REQUEST)
         if price is not None and (price < 0 or price > 1000):
             return Response({"detail": "Prix invalide."}, status=status.HTTP_400_BAD_REQUEST)
-        self.plugin.set_price(part, price if price else None)
+        self.plugin.set_price(part, price if price else None, user=request.user)
         return Response({"part": part.pk, "price": str(price) if price else None})
 
 

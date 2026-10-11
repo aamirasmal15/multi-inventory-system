@@ -4,9 +4,13 @@ Le meme contexte alimente l'ecran de la Scannette (via l'API), le PDF
 telechargeable et l'e-mail : un membre du bureau voit partout le meme recu.
 """
 
+import base64
 import logging
+import mimetypes
 
+import requests
 from django.conf import settings
+from django.core.cache import cache
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -51,11 +55,59 @@ def instance_name():
         return ""
 
 
+def plugin_setting(key):
+    """Reglage du plugin paiements ("" si indisponible)."""
+    try:
+        from plugin import registry
+
+        pl = registry.get_plugin("paiements")
+        return (pl.get_setting(key) or "") if pl else ""
+    except Exception:
+        return ""
+
+
+def logo_data_uri():
+    """Logo de l'en-tete du PDF, embarque en data: URI (mis en cache 1 jour).
+
+    Ordre : reglage RECEIPT_LOGO_URL, puis le logo de la Scannette de
+    l'instance (img/<instance>-black.png), puis celui de l'asso principale
+    (img/eirspace-black.png, present sur toutes les Scannettes). Aucun logo
+    joignable -> en-tete sans image (jamais d'echec du recu pour ca).
+    """
+    site = (getattr(settings, "SITE_URL", None) or "").rstrip("/")
+    inst = "".join(c for c in instance_name().lower() if c.isalnum())
+    urls = [plugin_setting("RECEIPT_LOGO_URL").strip()]
+    if site:
+        urls += [f"{site}/scannette/img/{inst}-black.png" if inst else "", f"{site}/scannette/img/eirspace-black.png"]
+    key = "paiements_logo:" + "|".join(urls)
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+    uri = ""
+    for u in filter(None, urls):
+        try:
+            r = requests.get(u, timeout=5)
+            ctype = (r.headers.get("Content-Type") or mimetypes.guess_type(u)[0] or "").split(";")[0]
+            if r.status_code == 200 and ctype.startswith("image/") and len(r.content) < 3_000_000:
+                uri = f"data:{ctype};base64," + base64.b64encode(r.content).decode()
+                break
+        except requests.RequestException:
+            continue
+    cache.set(key, uri, 86400)
+    return uri
+
+
 def receipt_context(p):
     """Tout ce que montre un recu, en valeurs deja formatees."""
     paid = timezone.localtime(p.paid_at or p.created_at)
     return {
         "instance": instance_name(),
+        "asso": plugin_setting("ASSO_NAME") or instance_name(),
+        "asso_address": plugin_setting("ASSO_ADDRESS"),
+        "asso_contact": plugin_setting("ASSO_CONTACT"),
+        "asso_id": plugin_setting("ASSO_ID"),
+        "note": plugin_setting("RECEIPT_NOTE"),
+        "buyer_email": buyer_email(p.user),
         "number": p.pk,
         "paid": p.status == p.STATUS_PAID,
         "date": paid.strftime("%d/%m/%Y"),
@@ -90,7 +142,9 @@ def render_pdf(p):
     """Recu PDF (octets)."""
     from weasyprint import HTML
 
-    html = render_to_string("paiements/receipt_pdf.html", receipt_context(p))
+    ctx = receipt_context(p)
+    ctx["logo"] = logo_data_uri()
+    html = render_to_string("paiements/receipt_pdf.html", ctx)
     return HTML(string=html).write_pdf()
 
 

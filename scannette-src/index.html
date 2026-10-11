@@ -351,6 +351,13 @@
         <label class="lbl" id="lblLoc" data-i18n="np_loc_lbl">Emplacement *</label>
         <button type="button" class="picker-btn" id="np_loc_btn" data-value="">— Choisir —</button>
       </div>
+      <!-- rangé au frigo (admins) : prix de vente posé à la création (frigo.js) -->
+      <div class="field" id="fldPrice" style="display:none">
+        <label class="lbl" for="np_price" data-i18n="np_price_lbl">Prix de vente au frigo</label>
+        <div class="price-big price-md"><input type="text" id="np_price" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></div>
+        <div id="np_price_chips"></div>
+        <p class="field-hint" data-i18n="np_price_hint">Rangé au frigo, l'article est en vente dès qu'il a un prix. Sans prix, il reste invisible des membres.</p>
+      </div>
       <div class="field" id="fldDesc" style="margin-bottom:16px">
         <label class="lbl" for="np_desc" data-i18n="np_desc_lbl">Description (facultatif)</label>
         <textarea id="np_desc" placeholder="facultatif, peut rester vide" data-i18n-ph="np_desc_ph"></textarea>

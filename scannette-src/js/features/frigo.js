@@ -199,16 +199,13 @@ async function frigoPay() {
 
 /* ---- Gérer (admins) : prix et stock de chaque produit, en direct ----
    Ranger un article dans le frigo suffit à le mettre en vente (le plugin
-   coche « Vendable » tout seul) : il ne lui manque qu'un prix, saisi ici. */
+   coche « Vendable » tout seul) : il ne lui manque qu'un prix, saisi ici
+   dans une fenêtre dédiée (openPriceSheet), journalisée côté serveur. */
 function frigoRenderManage(box, list) {
   box.className = "frigo-manage";
   box.innerHTML =
-    '<div class="card fr-help"><div class="fr-help-t">' + esc(t("frigo_help_title")) + "</div>" +
-    "<ul>" +
-    "<li><b>" + esc(t("frigo_help_price_k")) + "</b> " + esc(t("frigo_help_price")) + "</li>" +
-    "<li><b>" + esc(t("frigo_help_stock_k")) + "</b> " + esc(t("frigo_help_stock")) + "</li>" +
-    "<li><b>" + esc(t("frigo_help_add_k")) + "</b> " + esc(t("frigo_help_add")) + "</li>" +
-    "</ul></div>";
+    '<p class="fr-help">' + esc(t("frigo_help_1")) + "</p>" +
+    '<p class="fr-help">' + esc(t("frigo_help_2")) + "</p>";
   if (!list.length) {
     box.insertAdjacentHTML("beforeend", '<div class="card"><div class="skeleton">' + esc(t("frigo_empty_manage")) + "</div></div>");
     return;
@@ -218,89 +215,215 @@ function frigoRenderManage(box, list) {
   list.forEach((p) => {
     const row = document.createElement("div");
     row.className = "loc-row fr-mrow";
-    row.innerHTML =
-      frigoThumb(p, "lthumb") +
-      '<div class="lmain"><div class="t">' + esc(p.name) + "</div>" +
-      (p.buyable ? "" : '<div class="fr-off">' + esc(t("frigo_no_price")) + "</div>") +
-      "</div>";
+    row.innerHTML = frigoThumb(p, "lthumb") + '<div class="lmain"><div class="t">' + esc(p.name) + "</div></div>";
     const main = row.querySelector(".lmain");
-    main.appendChild(frigoPriceRow(p));
+    const pb = document.createElement("button");
+    pb.type = "button";
+    pb.className = "fr-pricebtn" + (p.buyable ? "" : " none");
+    pb.innerHTML = p.buyable
+      ? '<b>' + esc(eur(p.unit_price)) + "</b><span>" + esc(p.price_inherited ? t("frigo_price_model") : t("frigo_price_edit")) + "</span>"
+      : "<b>" + esc(t("frigo_price_add")) + "</b><span>" + esc(t("frigo_no_price")) + "</span>";
+    pb.onclick = () => openPriceSheet(p);
+    main.appendChild(pb);
     (p.items || []).forEach((it) => main.appendChild(frigoCountRow(p, it)));
     card.appendChild(row);
   });
   box.appendChild(card);
 }
 
-/* champ ✓ commun (prix, stock) : le bouton s'allume dès que la valeur change */
-function frigoSaveField(w, initial, onSave) {
+/* montants proposés en un tap (fenêtre de prix, formulaire de création) */
+const PRICE_CHIPS = ["0,50", "0,70", "1,00", "1,50", "2,00"];
+function priceChipsHtml() {
+  return (
+    '<div class="price-chips">' +
+    PRICE_CHIPS.map((c) => '<button type="button" class="price-chip" data-v="' + c + '">' + c + " €</button>").join("") +
+    "</div>"
+  );
+}
+function armPriceChips(root, input, after) {
+  root.querySelectorAll(".price-chip").forEach((b) => {
+    b.onclick = () => {
+      input.value = b.dataset.v;
+      root.querySelectorAll(".price-chip").forEach((x) => x.classList.toggle("on", x === b));
+      if (after) after();
+    };
+  });
+  input.addEventListener("input", () =>
+    root.querySelectorAll(".price-chip").forEach((x) => x.classList.toggle("on", x.dataset.v === input.value.trim())),
+  );
+}
+
+/* fenêtre de prix d'un produit : grand champ, montants rapides, retrait de
+   la vente, historique (qui a mis quel prix, quand) */
+function openPriceSheet(p) {
+  const own = p.buyable && !p.price_inherited;
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML =
+    '<div class="modal-card price-sheet" role="dialog" aria-modal="true">' +
+    '<div class="ps-head">' + frigoThumb(p, "lthumb") +
+    '<div class="ps-name"><div class="t">' + esc(p.name) + '</div><div class="s">' +
+    esc(p.buyable ? (p.price_inherited ? t("frigo_now_model", eur(p.unit_price)) : t("frigo_now", eur(p.unit_price))) : t("frigo_no_price")) +
+    '</div></div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">✕</button></div>' +
+    '<label class="lbl" for="psInput">' + esc(t("frigo_price_new")) + "</label>" +
+    '<div class="price-big"><input id="psInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></div>' +
+    priceChipsHtml() +
+    (p.price_inherited ? '<p class="field-hint">' + esc(t("frigo_price_inherited")) + "</p>" : "") +
+    '<button class="btn btn-primary btn-block" data-save disabled>' + esc(t("frigo_price_save")) + "</button>" +
+    (own ? '<button class="btn btn-ghost btn-block ps-remove" data-remove>' + esc(t("frigo_price_remove")) + "</button>" : "") +
+    '<div class="ps-hist"><div class="ps-hist-t">' + esc(t("frigo_price_history")) + '</div><div class="ps-hist-l"><div class="skeleton">' +
+    esc(t("loading")) + "</div></div></div></div>";
+  const input = ov.querySelector("#psInput"),
+    save = ov.querySelector("[data-save]");
+  const valid = () => /^\d{1,3}([.,]\d{1,2})?$/.test(input.value.trim()) && parseFloat(input.value.replace(",", ".")) > 0;
+  const sync = () => (save.disabled = !valid());
+  input.value = own ? String(p.unit_price).replace(".", ",") : "";
+  armPriceChips(ov, input, sync);
+  input.addEventListener("input", sync);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && valid()) save.click();
+  });
+  const prevOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  const close = () => {
+    document.body.style.overflow = prevOverflow;
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 180);
+  };
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-x]").onclick = close;
+  const send = async (price, btn) => {
+    const h = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span>';
+    try {
+      await api("/plugin/paiements/fridge/price", { method: "POST", body: { part: p.part, price } });
+      toast(price ? t("frigo_price_saved", p.name, eur(price.replace(",", "."))) : t("frigo_price_removed", p.name), "ok");
+      close();
+      frigoLoad();
+    } catch (e) {
+      btn.disabled = false;
+      btn.innerHTML = h;
+      toast(e.message, "bad");
+    }
+  };
+  save.onclick = () => valid() && send(input.value.trim(), save);
+  const rm = ov.querySelector("[data-remove]");
+  if (rm) rm.onclick = () => send("", rm);
+  document.body.appendChild(ov);
+  sync();
+  setTimeout(() => input.focus(), 200);
+  // historique des prix
+  api("/plugin/paiements/fridge/price?part=" + p.part)
+    .then((h) => {
+      const l = ov.querySelector(".ps-hist-l");
+      if (!l) return;
+      const cents = (c) => (c == null ? "—" : eurCents(c));
+      l.innerHTML = h.length
+        ? h
+            .map(
+              (c) =>
+                '<div class="ps-hrow"><span class="pr">' + esc(cents(c.old_cents)) + " → <b>" + esc(cents(c.new_cents)) +
+                "</b></span><span class=\"who\">" + esc(c.user) + " · " + esc(c.date) + "</span></div>",
+            )
+            .join("")
+        : '<div class="ps-empty">' + esc(t("frigo_price_history_empty")) + "</div>";
+    })
+    .catch(() => {
+      const l = ov.querySelector(".ps-hist-l");
+      if (l) l.innerHTML = "";
+    });
+}
+
+/* stock : une ligne par article de stock rangé dans le frigo, avec le
+   dernier ajout (qui, quand) lu dans l'historique InvenTree */
+function frigoCountRow(p, it) {
+  const w = document.createElement("div");
+  w.className = "fr-stock";
+  const label = p.items.length > 1 && it.batch ? t("batch_pill", it.batch) : t("frigo_stock");
+  w.innerHTML =
+    '<div class="fr-field"><span class="fr-lbl">' + esc(label) + "</span>" +
+    '<div class="loc-ctrl"><button class="mini minus" aria-label="−">−</button><input type="text" inputmode="decimal">' +
+    '<button class="mini plus" aria-label="+">+</button></div>' +
+    '<button class="loc-save" aria-label="✓">' + CHECK + "</button></div>" +
+    (it.added ? '<div class="fr-added">' + esc(t("frigo_added_by", it.added.user, it.added.date)) + "</div>" : "");
   const input = w.querySelector("input"),
     save = w.querySelector(".loc-save");
+  const initial = fmt(it.quantity);
+  input.value = initial;
   const refresh = () => save.classList.toggle("on", input.value.trim() !== initial);
   input.oninput = refresh;
+  const step = (d) => {
+    const q = parseFloat(input.value.replace(",", ".")) || 0;
+    input.value = fmt(Math.max(0, q + d));
+    refresh();
+  };
+  w.querySelector(".minus").onclick = () => step(-1);
+  w.querySelector(".plus").onclick = () => step(1);
   input.onkeydown = (e) => {
     if (e.key === "Enter" && save.classList.contains("on")) save.click();
   };
   save.onclick = async () => {
+    const q = parseFloat(input.value.replace(",", "."));
+    if (isNaN(q) || q < 0) {
+      toast(t("qty_invalid"), "bad");
+      return;
+    }
     const h = save.innerHTML;
     save.classList.remove("on");
     save.innerHTML = '<span class="spin" style="width:15px;height:15px;border-width:2px"></span>';
     try {
-      await onSave(input.value.trim());
-      await frigoLoad(); // stock cumulé, prix, disponibilités et panier à jour
+      await api("/api/stock/count/", { method: "POST", body: { items: [{ pk: it.pk, quantity: q }], notes: "Frigo" } });
+      toast(p.name + " : " + fmt(q), "ok");
+      await frigoLoad();
     } catch (e) {
       save.innerHTML = h;
       save.classList.add("on");
       toast(e.status === 403 ? t("perm_stock_change") : e.message, "bad");
     }
   };
-  return { input, refresh };
-}
-
-/* prix de vente : vide = retiré de la vente ; une variante peut hériter du modèle */
-function frigoPriceRow(p) {
-  const w = document.createElement("div");
-  w.className = "fr-field";
-  const own = p.buyable && !p.price_inherited ? String(p.unit_price).replace(".", ",") : "";
-  w.innerHTML =
-    '<span class="fr-lbl">' + esc(t("frigo_price")) + "</span>" +
-    '<div class="fr-price-in"><input type="text" inputmode="decimal" placeholder="' +
-    esc(p.price_inherited ? String(p.unit_price).replace(".", ",") : "0,00") + '"><span>€</span></div>' +
-    '<button class="loc-save" aria-label="✓">' + CHECK + "</button>";
-  const f = frigoSaveField(w, own, async (v) => {
-    await api("/plugin/paiements/fridge/price", { method: "POST", body: { part: p.part, price: v } });
-    toast(v ? t("frigo_price_saved", p.name, eur(v.replace(",", "."))) : t("frigo_price_removed", p.name), "ok");
-  });
-  f.input.value = own;
-  if (p.price_inherited) w.insertAdjacentHTML("beforeend", '<div class="fr-note">' + esc(t("frigo_price_inherited")) + "</div>");
   return w;
 }
 
-/* stock : une ligne par article de stock rangé dans le frigo */
-function frigoCountRow(p, it) {
-  const w = document.createElement("div");
-  w.className = "fr-field";
-  const label = p.items.length > 1 ? (it.batch ? t("batch_pill", it.batch) : t("frigo_stock")) : t("frigo_stock");
-  w.innerHTML =
-    '<span class="fr-lbl">' + esc(label) + "</span>" +
-    '<div class="loc-ctrl"><button class="mini minus" aria-label="−">−</button><input type="text" inputmode="decimal">' +
-    '<button class="mini plus" aria-label="+">+</button></div>' +
-    '<button class="loc-save" aria-label="✓">' + CHECK + "</button>";
-  const initial = fmt(it.quantity);
-  const f = frigoSaveField(w, initial, async (v) => {
-    const q = parseFloat(v.replace(",", "."));
-    if (isNaN(q) || q < 0) throw new Error(t("qty_invalid"));
-    await api("/api/stock/count/", { method: "POST", body: { items: [{ pk: it.pk, quantity: q }], notes: "Frigo" } });
-    toast(p.name + " : " + fmt(q), "ok");
-  });
-  f.input.value = initial;
-  const step = (d) => {
-    const q = parseFloat(f.input.value.replace(",", ".")) || 0;
-    f.input.value = fmt(Math.max(0, q + d));
-    f.refresh();
-  };
-  w.querySelector(".minus").onclick = () => step(-1);
-  w.querySelector(".plus").onclick = () => step(1);
-  return w;
+/* ---- formulaire de création / ajout de stock : prix quand on range au frigo ----
+   Visible pour un admin dès que l'emplacement choisi est le frigo (ou un de
+   ses sous-emplacements). Vide = rien n'est changé. */
+function isFridgeLoc(pk) {
+  if (!ACHAT.fridge || !pk) return false;
+  const byPk = {};
+  (LOCS || []).forEach((l) => (byPk[l.pk] = l));
+  let n = byPk[Number(pk)],
+    guard = 0;
+  while (n && guard++ < 50) {
+    if (n.pk === ACHAT.fridge.location) return true;
+    n = byPk[n.parent];
+  }
+  return Number(pk) === ACHAT.fridge.location;
+}
+function syncCreatePrice() {
+  const f = $("#fldPrice");
+  if (!f) return;
+  const on = ACHAT.admin && isFridgeLoc($("#np_loc_btn").dataset.value);
+  f.style.display = on ? "" : "none";
+  if (!on) $("#np_price").value = "";
+  if (on && !f.dataset.armed) {
+    f.dataset.armed = "1";
+    $("#np_price_chips").innerHTML = priceChipsHtml();
+    armPriceChips($("#np_price_chips"), $("#np_price"));
+  }
+}
+/* après création / ajout : pose le prix saisi (échec signalé, jamais bloquant) */
+async function saveCreatePrice(partPk) {
+  const f = $("#fldPrice");
+  const v = $("#np_price") ? $("#np_price").value.trim() : "";
+  if (!f || f.style.display === "none" || !v) return;
+  try {
+    await api("/plugin/paiements/fridge/price", { method: "POST", body: { part: partPk, price: v } });
+  } catch (e) {
+    toast(t("frigo_price_fail", e.message), "bad");
+  }
 }
 
 /* ---- page de connexion en mode frigo (avant authentification) ---- */

@@ -241,6 +241,7 @@ async function addStockExisting() {
         });
       }
     }
+    await saveCreatePrice(part.pk); // rangé au frigo : prix de vente saisi
     const okMsg = trackable
       ? t("unit_added")
       : target
@@ -285,6 +286,8 @@ function setPick(sel, val, label) {
     b.dataset.value = val || "";
     b.textContent = label;
   }
+  // emplacement = frigo : champ prix de vente (frigo.js)
+  if (sel === "#np_loc_btn") syncCreatePrice();
 }
 async function ensureLocs() {
   if (!LOCS || !LOCS.length) {
@@ -821,6 +824,7 @@ async function createArticle() {
     if (NEW_IMG_FILE || NEW_IMG) {
       await uploadPartImage(part.pk, NEW_IMG_FILE || NEW_IMG);
     }
+    await saveCreatePrice(part.pk); // rangé au frigo : prix de vente saisi
     PARTS = null; // le catalogue a changé -> on rechargera à la prochaine recherche
     const qtyLabel = NEW_TRACKABLE
       ? t("loan_obj_qty", serials)

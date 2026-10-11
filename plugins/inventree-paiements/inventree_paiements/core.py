@@ -76,6 +76,36 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
             "description": "Nom présenté dans Google Pay / Apple Pay (ex. le nom de l'association)",
             "default": "",
         },
+        "ASSO_NAME": {
+            "name": "Reçu : nom de l'association",
+            "description": "En tête du reçu PDF (vide = nom de l'instance InvenTree)",
+            "default": "",
+        },
+        "ASSO_ADDRESS": {
+            "name": "Reçu : adresse",
+            "description": "Adresse postale de l'association, sur une ligne",
+            "default": "",
+        },
+        "ASSO_CONTACT": {
+            "name": "Reçu : contact",
+            "description": "E-mail ou site affiché sur le reçu",
+            "default": "",
+        },
+        "ASSO_ID": {
+            "name": "Reçu : identifiant légal",
+            "description": "Ex. « RNA W332021661 · SIRET 104 205 901 00010 »",
+            "default": "",
+        },
+        "RECEIPT_LOGO_URL": {
+            "name": "Reçu : logo",
+            "description": "Adresse d'une image PNG/JPG/SVG. Vide = logo de la Scannette de l'instance.",
+            "default": "",
+        },
+        "RECEIPT_NOTE": {
+            "name": "Reçu : mention en pied de page",
+            "description": "Ex. « Association loi 1901 » ou une mention fiscale validée par le trésorier",
+            "default": "",
+        },
         "SEND_RECEIPT": {
             "name": "Envoyer le reçu par e-mail",
             "description": "Reçu (PDF joint) envoyé à l'adresse principale de l'acheteur une fois le paiement confirmé",
@@ -209,15 +239,18 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
         """Decimal en euros -> entier en centimes (arrondi commercial)."""
         return int((price * 100).quantize(Decimal("1"), ROUND_HALF_UP))
 
-    @staticmethod
-    def set_price(part, price):
+    def set_price(self, part, price, user=None):
         """Prix de vente unitaire propre au part (palier 1, EUR) ; None = le retirer.
 
-        Coche « Vendable » au passage : InvenTree n'accepte un prix de vente
-        que sur un part vendable.
+        Coche « Vendable » au passage (InvenTree n'accepte un prix de vente
+        que sur un part vendable) et consigne le changement (PriceChange) :
+        ancien prix effectif -> nouveau, par qui.
         """
         from part.models import Part, PartSellPriceBreak
 
+        from .models import PriceChange
+
+        old, _own = self.unit_price(part)
         with transaction.atomic():
             if not part.salable:
                 Part.objects.filter(pk=part.pk).update(salable=True)
@@ -231,6 +264,65 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, InvenTreePlugin):
                 pb.save()
             else:
                 PartSellPriceBreak.objects.create(part=part, quantity=1, price=price, price_currency="EUR")
+            new, _own = self.unit_price(part)
+            if new != old:
+                PriceChange.objects.create(
+                    part=part,
+                    part_name=part.full_name,
+                    old_cents=self.cents(old) if old else None,
+                    new_cents=self.cents(new) if new else None,
+                    user=user,
+                )
+
+    @staticmethod
+    def price_history(part, limit=8):
+        """Derniers changements de prix d'un part : [{date, user, old, new}]."""
+        from django.utils import timezone as tz
+
+        from .models import PriceChange
+
+        out = []
+        for c in PriceChange.objects.filter(part=part).select_related("user")[:limit]:
+            out.append({
+                "date": tz.localtime(c.date).strftime("%d/%m/%Y %H:%M"),
+                "user": (c.user.get_full_name() or c.user.username) if c.user else "—",
+                "old_cents": c.old_cents,
+                "new_cents": c.new_cents,
+            })
+        return out
+
+    @staticmethod
+    def last_additions(items, location):
+        """Dernier ajout de chaque article du frigo : {item_pk: {"user", "date"}}.
+
+        Lu dans l'historique InvenTree (StockItemTracking) : creation, ajout
+        manuel, separation/fusion de lot, ou deplacement VERS le frigo.
+        """
+        from django.utils import timezone as tz
+
+        from stock.models import StockItemTracking
+        from stock.status_codes import StockHistoryCode as C
+
+        fridge = set(location.get_descendants(include_self=True).values_list("pk", flat=True))
+        adds = {C.CREATED.value, C.STOCK_ADD.value, C.SPLIT_FROM_PARENT.value, C.MERGED_STOCK_ITEMS.value,
+                C.RETURNED_TO_STOCK.value, C.RECEIVED_AGAINST_PURCHASE_ORDER.value}
+        out = {}
+        qs = (
+            StockItemTracking.objects.filter(item__in=items)
+            .select_related("user")
+            .order_by("item_id", "-date", "-pk")
+        )
+        for t in qs:
+            if t.item_id in out:
+                continue
+            deltas = t.deltas or {}
+            moved_in = t.tracking_type == C.STOCK_MOVE.value and deltas.get("location") in fridge
+            if t.tracking_type in adds or moved_in:
+                out[t.item_id] = {
+                    "user": (t.user.get_full_name() or t.user.username) if t.user else "—",
+                    "date": tz.localtime(t.date).strftime("%d/%m %H:%M"),
+                }
+        return out
 
     # ---- creation du checkout ----
     @staticmethod
