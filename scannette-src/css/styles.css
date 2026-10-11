@@ -153,6 +153,18 @@ textarea{resize:none;min-height:56px}
 .sr-empty{padding:10px 2px;color:var(--muted);font-size:13px}
 /* création : articles existants au nom proche, sous le champ Nom */
 /* aperçu d'une suggestion (feuille du bas) */
+.modal-ov.nsp-ov{align-items:flex-end;padding:0;touch-action:none}
+.nsp-sheet{width:100%;max-width:540px;max-height:92dvh;overflow:auto;overscroll-behavior:contain;touch-action:pan-y;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:var(--shadow-md);padding:8px 18px calc(env(safe-area-inset-bottom) + 18px);animation:nspIn .3s var(--ease-spring)}
+.modal-ov.nsp-ov.closing .nsp-sheet{animation:nspOut .2s ease forwards}
+@keyframes nspIn{from{transform:translateY(100%)}to{transform:none}}
+@keyframes nspOut{to{transform:translateY(100%)}}
+@media (min-width:600px){.modal-ov.nsp-ov{align-items:center;padding:24px}.nsp-sheet{max-width:420px;border-radius:16px}}
+.nsp-grab{width:38px;height:4px;border-radius:4px;background:var(--border-strong);margin:4px auto 12px}
+.nsp-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
+.nsp-name{flex:1;min-width:0}
+.nsp-name .t{font-weight:700;font-size:16px;line-height:1.3}
+.nsp-name .s{color:var(--muted);font-size:13px;margin-top:3px}
+.nsp-empty{color:var(--muted);font-size:13px;padding:6px 0}
 .nsp-img{display:block;width:100%;max-height:200px;object-fit:contain;border-radius:12px;background:var(--surface-2);margin-bottom:12px}
 .nsp-desc .item-desc{margin:0 0 10px}
 .nsp-stock{margin-bottom:16px}

@@ -874,12 +874,12 @@ function pickSuggestion(p) {
    (openPart) oublierait le code scanné, qu'on ne pourrait plus lier. */
 function previewSuggestion(p) {
   const ov = document.createElement("div");
-  ov.className = "modal-ov sheet-ov";
+  ov.className = "modal-ov nsp-ov";
   const img = p.img || p.thumb;
   ov.innerHTML =
-    '<div class="ps-sheet" role="dialog" aria-modal="true" aria-label="' + esc(p.full || p.name) + '">' +
-    '<div class="ps-grab" aria-hidden="true"></div>' +
-    '<div class="ps-head"><div class="ps-name"><div class="t">' + esc(p.full || p.name) + "</div>" +
+    '<div class="nsp-sheet" role="dialog" aria-modal="true" aria-label="' + esc(p.full || p.name) + '">' +
+    '<div class="nsp-grab" aria-hidden="true"></div>' +
+    '<div class="nsp-head"><div class="nsp-name"><div class="t">' + esc(p.full || p.name) + "</div>" +
     (p.ipn ? '<div class="s">' + esc(p.ipn) + "</div>" : "") +
     '</div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
@@ -887,13 +887,18 @@ function previewSuggestion(p) {
       ? '<img class="nsp-img" src="' + esc(mediaUrl(img)) + '" alt="' + esc(p.name) + '" onerror="this.remove()">'
       : "") +
     '<div class="nsp-desc"></div>' +
-    '<div class="nsp-stock"><div class="ps-empty">' + esc(t("loading")) + "</div></div>" +
+    '<div class="nsp-stock"><div class="nsp-empty">' + esc(t("loading")) + "</div></div>" +
     '<button class="btn btn-primary btn-block" data-pick>' +
     esc(PENDING_CODE ? t("link_code_to", p.name) : t("sugg_pick_this")) +
     "</button></div>";
-  lockScroll();
+  // verrou de défilement du frigo (achat.js) s'il est là, sinon le simple
+  // overflow:hidden — l'aperçu ne doit pas dépendre de l'option frigo
+  const lock = typeof lockScroll === "function";
+  if (lock) lockScroll();
+  else document.body.classList.add("noscroll");
   const close = () => {
-    unlockScroll();
+    if (lock) unlockScroll();
+    else document.body.classList.remove("noscroll");
     document.removeEventListener("keydown", onKey);
     ov.classList.add("closing");
     setTimeout(() => ov.remove(), 220);
@@ -937,7 +942,7 @@ function previewSuggestion(p) {
       ? keys
           .map((l) => '<div class="nsp-row"><span>' + esc(l) + "</span><b>" + fmt(by[l]) + "</b></div>")
           .join("")
-      : '<div class="ps-empty">' + esc(t("sugg_no_stock")) + "</div>";
+      : '<div class="nsp-empty">' + esc(t("sugg_no_stock")) + "</div>";
   });
 }
 function unpickSuggestion() {
