@@ -197,72 +197,109 @@ async function frigoPay() {
   if (paid === false && $("#screen-frigo").classList.contains("active")) frigoLoad();
 }
 
-/* ---- Gérer (admins) : comptage direct, produits sans prix signalés ---- */
+/* ---- Gérer (admins) : prix et stock de chaque produit, en direct ----
+   Ranger un article dans le frigo suffit à le mettre en vente (le plugin
+   coche « Vendable » tout seul) : il ne lui manque qu'un prix, saisi ici. */
 function frigoRenderManage(box, list) {
-  box.className = "card frigo-manage";
+  box.className = "frigo-manage";
   box.innerHTML =
-    '<div class="fr-hint">' + t("frigo_manage_hint_html") + "</div>" +
-    (list.length ? "" : '<div class="skeleton">' + esc(t("frigo_empty_manage")) + "</div>");
+    '<div class="card fr-help"><div class="fr-help-t">' + esc(t("frigo_help_title")) + "</div>" +
+    "<ul>" +
+    "<li><b>" + esc(t("frigo_help_price_k")) + "</b> " + esc(t("frigo_help_price")) + "</li>" +
+    "<li><b>" + esc(t("frigo_help_stock_k")) + "</b> " + esc(t("frigo_help_stock")) + "</li>" +
+    "<li><b>" + esc(t("frigo_help_add_k")) + "</b> " + esc(t("frigo_help_add")) + "</li>" +
+    "</ul></div>";
+  if (!list.length) {
+    box.insertAdjacentHTML("beforeend", '<div class="card"><div class="skeleton">' + esc(t("frigo_empty_manage")) + "</div></div>");
+    return;
+  }
+  const card = document.createElement("div");
+  card.className = "card";
   list.forEach((p) => {
     const row = document.createElement("div");
     row.className = "loc-row fr-mrow";
     row.innerHTML =
       frigoThumb(p, "lthumb") +
       '<div class="lmain"><div class="t">' + esc(p.name) + "</div>" +
-      '<div class="s">' +
-      (p.buyable
-        ? esc(eur(p.unit_price)) + " · " + esc(t("frigo_total_stock", fmt(p.quantity) + (p.units ? " " + p.units : "")))
-        : '<span class="pill pill-warn">' + esc(t("frigo_no_price")) + "</span>") +
-      "</div></div>";
+      (p.buyable ? "" : '<div class="fr-off">' + esc(t("frigo_no_price")) + "</div>") +
+      "</div>";
     const main = row.querySelector(".lmain");
+    main.appendChild(frigoPriceRow(p));
     (p.items || []).forEach((it) => main.appendChild(frigoCountRow(p, it)));
-    box.appendChild(row);
+    card.appendChild(row);
   });
-  const restock = document.createElement("button");
-  restock.className = "btn btn-ghost btn-block";
-  restock.textContent = t("frigo_restock");
-  restock.onclick = () => gotoScan();
-  box.appendChild(restock);
+  box.appendChild(card);
 }
-/* une ligne de comptage par article de stock (mêmes contrôles que les Lieux) */
-function frigoCountRow(p, it) {
-  const w = document.createElement("div");
-  w.className = "fr-count";
-  w.innerHTML =
-    (p.items.length > 1 || it.batch
-      ? '<div class="fr-batch">' + esc(it.batch ? t("batch_pill", it.batch) : t("item_n", it.pk)) + "</div>"
-      : "") +
-    '<div class="loc-ctrl"><button class="mini minus">−</button><input type="text" inputmode="decimal">' +
-    '<button class="mini plus">+</button><button class="loc-save">' + CHECK + "</button>" +
-    '<button class="mini fr-open" title="' + esc(t("frigo_open_item")) + '">›</button></div>';
+
+/* champ ✓ commun (prix, stock) : le bouton s'allume dès que la valeur change */
+function frigoSaveField(w, initial, onSave) {
   const input = w.querySelector("input"),
     save = w.querySelector(".loc-save");
-  const val = () => parseFloat(input.value.replace(",", "."));
-  const refresh = () => save.classList.toggle("on", !isNaN(val()) && val() >= 0 && val() !== Number(it.quantity));
-  input.value = fmt(it.quantity);
-  w.querySelector(".minus").onclick = () => ((input.value = fmt(Math.max(0, (val() || 0) - 1))), refresh());
-  w.querySelector(".plus").onclick = () => ((input.value = fmt((val() || 0) + 1)), refresh());
+  const refresh = () => save.classList.toggle("on", input.value.trim() !== initial);
   input.oninput = refresh;
-  w.querySelector(".fr-open").onclick = () => {
-    CHOOSE_PART = null;
-    loadItem(it.pk);
+  input.onkeydown = (e) => {
+    if (e.key === "Enter" && save.classList.contains("on")) save.click();
   };
   save.onclick = async () => {
-    const v = val();
-    if (isNaN(v) || v < 0) return;
     const h = save.innerHTML;
     save.classList.remove("on");
     save.innerHTML = '<span class="spin" style="width:15px;height:15px;border-width:2px"></span>';
     try {
-      await api("/api/stock/count/", { method: "POST", body: { items: [{ pk: it.pk, quantity: v }], notes: "Frigo" } });
-      toast(p.name + " : " + fmt(v), "ok");
-      await frigoLoad(); // stock cumulé, disponibilités et panier à jour
+      await onSave(input.value.trim());
+      await frigoLoad(); // stock cumulé, prix, disponibilités et panier à jour
     } catch (e) {
       save.innerHTML = h;
       save.classList.add("on");
       toast(e.status === 403 ? t("perm_stock_change") : e.message, "bad");
     }
   };
+  return { input, refresh };
+}
+
+/* prix de vente : vide = retiré de la vente ; une variante peut hériter du modèle */
+function frigoPriceRow(p) {
+  const w = document.createElement("div");
+  w.className = "fr-field";
+  const own = p.buyable && !p.price_inherited ? String(p.unit_price).replace(".", ",") : "";
+  w.innerHTML =
+    '<span class="fr-lbl">' + esc(t("frigo_price")) + "</span>" +
+    '<div class="fr-price-in"><input type="text" inputmode="decimal" placeholder="' +
+    esc(p.price_inherited ? String(p.unit_price).replace(".", ",") : "0,00") + '"><span>€</span></div>' +
+    '<button class="loc-save" aria-label="✓">' + CHECK + "</button>";
+  const f = frigoSaveField(w, own, async (v) => {
+    await api("/plugin/paiements/fridge/price", { method: "POST", body: { part: p.part, price: v } });
+    toast(v ? t("frigo_price_saved", p.name, eur(v.replace(",", "."))) : t("frigo_price_removed", p.name), "ok");
+  });
+  f.input.value = own;
+  if (p.price_inherited) w.insertAdjacentHTML("beforeend", '<div class="fr-note">' + esc(t("frigo_price_inherited")) + "</div>");
+  return w;
+}
+
+/* stock : une ligne par article de stock rangé dans le frigo */
+function frigoCountRow(p, it) {
+  const w = document.createElement("div");
+  w.className = "fr-field";
+  const label = p.items.length > 1 ? (it.batch ? t("batch_pill", it.batch) : t("frigo_stock")) : t("frigo_stock");
+  w.innerHTML =
+    '<span class="fr-lbl">' + esc(label) + "</span>" +
+    '<div class="loc-ctrl"><button class="mini minus" aria-label="−">−</button><input type="text" inputmode="decimal">' +
+    '<button class="mini plus" aria-label="+">+</button></div>' +
+    '<button class="loc-save" aria-label="✓">' + CHECK + "</button>";
+  const initial = fmt(it.quantity);
+  const f = frigoSaveField(w, initial, async (v) => {
+    const q = parseFloat(v.replace(",", "."));
+    if (isNaN(q) || q < 0) throw new Error(t("qty_invalid"));
+    await api("/api/stock/count/", { method: "POST", body: { items: [{ pk: it.pk, quantity: q }], notes: "Frigo" } });
+    toast(p.name + " : " + fmt(q), "ok");
+  });
+  f.input.value = initial;
+  const step = (d) => {
+    const q = parseFloat(f.input.value.replace(",", ".")) || 0;
+    f.input.value = fmt(Math.max(0, q + d));
+    f.refresh();
+  };
+  w.querySelector(".minus").onclick = () => step(-1);
+  w.querySelector(".plus").onclick = () => step(1);
   return w;
 }
 

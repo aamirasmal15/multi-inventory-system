@@ -1,21 +1,18 @@
 /* ==========================================================================
-   features/achat.js — Achats (plugin inventree-paiements) : paiement, reçu, « Mes achats ».
+   features/achat.js — Paiement SumUp du panier du frigo, reçu, « Mes achats » (plugin inventree-paiements).
 
-   Socle commun au frigo (features/frigo.js, panier de plusieurs produits) et
-   à la fiche article (bloc « Acheter » d'un article vendable) :
-   - payCheckout(body) crée le paiement côté serveur (prix recalculés là-bas) ;
-     SumUp : le formulaire de carte (Payment Widget, Apple Pay / Google Pay)
-     s'ouvre dans une fenêtre par-dessus la Scannette ; HelloAsso : redirection
-     vers sa page, retour sur ?achat=<pk> ;
+   - payCheckout(body) crée le paiement côté serveur (prix recalculés là-bas)
+     et ouvre la feuille de paiement : formulaire SumUp (Payment Widget,
+     Apple Pay / Google Pay) dans la Scannette ;
    - openReceipt(pk) affiche le reçu : le serveur vérifie d'abord le paiement
-     auprès du prestataire, retire le stock, envoie le reçu par e-mail ;
-   - plugin absent ou non configuré -> aucun bouton, rien ne change.
+     auprès de SumUp, retire le stock, envoie le reçu par e-mail. Aussi
+     appelé au retour d'une étape 3-D Secure en pleine page (?achat=<pk>) ;
+   - plugin absent ou non configuré -> le frigo l'annonce, rien d'autre ne change.
    ========================================================================== */
 
-const ACHAT = { enabled: false, provider: "", test: false, googlePay: null, fridge: null, admin: false };
+const ACHAT = { enabled: false, googlePay: null, fridge: null, admin: false };
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
-let BUY_OFFER = null;
 
 const SUMUP_SDK = "https://gateway.sumup.com/gateway/ecom/card/v2/sdk.js";
 let sumupSdkPromise = null;
@@ -24,13 +21,11 @@ async function loadAchatConfig() {
   try {
     const c = await api("/plugin/paiements/config");
     ACHAT.enabled = !!c.enabled;
-    ACHAT.provider = c.provider || "";
-    ACHAT.test = !!c.test;
     ACHAT.googlePay = c.google_pay || null;
     ACHAT.fridge = c.fridge || null;
     ACHAT.admin = !!c.admin;
   } catch (_) {
-    ACHAT.enabled = false; // plugin non installé : pas de bouton
+    ACHAT.enabled = false; // plugin non installé
   }
   achatReadyResolve();
 }
@@ -42,62 +37,10 @@ function eurCents(c) {
   return eur((c / 100).toFixed(2));
 }
 
-/* ---- bloc « Acheter » de la fiche article (appelé par renderItem) ---- */
-async function applyBuyBlock(it) {
-  const box = $("#buyBlock");
-  box.style.display = "none";
-  box.innerHTML = "";
-  BUY_OFFER = null;
-  await achatReadyPromise;
-  if (!ACHAT.enabled || CURRENT !== it) return;
-  if (it.part_detail && it.part_detail.trackable) return; // objets prêtés : jamais vendus
-  let o;
-  try {
-    o = await api("/plugin/paiements/item/" + it.pk);
-  } catch (_) {
-    return; // pas d'offre lisible : la fiche reste utilisable sans achat
-  }
-  if (CURRENT !== it || !o.buyable) return;
-  BUY_OFFER = o;
-  prefetchSumup();
-  let q = 1;
-  box.innerHTML =
-    '<div class="buy-top"><span class="buy-title">' + esc(t("buy_title")) + "</span>" +
-    (ACHAT.test ? '<span class="pill">' + esc(t("buy_test")) + "</span>" : "") +
-    '<span class="buy-price">' + esc(eur(o.unit_price)) + "</span></div>" +
-    (o.max_quantity > 1
-      ? '<div class="buy-qty"><button id="buyMinus" aria-label="−">−</button><b id="buyQty">1</b><button id="buyPlus" aria-label="+">+</button></div>'
-      : "") +
-    '<button class="btn btn-primary" id="buyBtn"></button>' +
-    (ACHAT.provider === "helloasso" ? '<p class="buy-note">' + esc(t("buy_note_ha")) + "</p>" : "");
-  box.style.display = "";
-  const sync = () => {
-    if ($("#buyQty")) $("#buyQty").textContent = q;
-    $("#buyBtn").textContent = t("buy_btn", eurCents(o.unit_cents * q));
-  };
-  if ($("#buyMinus")) {
-    $("#buyMinus").onclick = () => ((q = Math.max(1, q - 1)), sync());
-    $("#buyPlus").onclick = () => ((q = Math.min(o.max_quantity, q + 1)), sync());
-  }
-  $("#buyBtn").onclick = async () => {
-    const btn = $("#buyBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spin"></span> ' + t("buy_preparing");
-    await payCheckout({ lines: [{ stock_item: it.pk, quantity: q }] }, [
-      { name: o.name, quantity: q, total: eurCents(o.unit_cents * q) },
-    ]);
-    if (CURRENT === it && $("#buyBtn")) {
-      btn.disabled = false;
-      sync();
-    }
-  };
-  sync();
-}
-
 /* ---- paiement ----
    body : panier pour POST /plugin/paiements/checkout ; recap : lignes à
-   rappeler dans la fenêtre de paiement [{name, quantity, total}].
-   Résout quand la fenêtre se ferme (payé -> le reçu a pris le relais). */
+   rappeler dans la feuille de paiement [{name, quantity, total}].
+   Résout quand la feuille se ferme (payé -> le reçu a pris le relais). */
 async function payCheckout(body, recap) {
   let r;
   try {
@@ -106,19 +49,14 @@ async function payCheckout(body, recap) {
     toast(e.message, "bad");
     return false;
   }
-  if (r.redirect_url) {
-    // HelloAsso : page de paiement externe, retour sur ?achat=<pk>
-    window.location.href = r.redirect_url;
-    return new Promise(() => {}); // la page s'en va
-  }
   // la feuille s'ouvre tout de suite ; le formulaire s'y monte dès que le
   // script SumUp est là (préchargé à l'ouverture du frigo / de la fiche)
   return openPaySheet(r, recap);
 }
 
-/* préchargement silencieux du script SumUp (frigo, fiche d'un article vendable) */
+/* préchargement silencieux du script SumUp à l'ouverture du frigo */
 function prefetchSumup() {
-  if (ACHAT.enabled && ACHAT.provider === "sumup") loadSumupSdk().catch(() => {});
+  if (ACHAT.enabled) loadSumupSdk().catch(() => {});
 }
 
 function loadSumupSdk() {
@@ -208,8 +146,8 @@ function openPaySheet(r, recap) {
         }
       },
     };
-    // Google Pay : bouton ajouté seulement si un identifiant marchand Google est
-    // réglé. Apple Pay n'a pas d'option : SumUp l'affiche dans Safari dès que le
+    // Google Pay : identifiant marchand Google réglé dans le plugin (sinon le
+    // réglage SumUp par défaut). Apple Pay n'a pas d'option : SumUp l'affiche dans Safari dès que le
     // domaine est validé dans le profil SumUp (fichier .well-known publié).
     if (ACHAT.googlePay) opts.googlePay = ACHAT.googlePay;
     loadSumupSdk()
@@ -246,8 +184,7 @@ async function openReceipt(pk, fresh) {
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (p.status === "paid") {
-    // le panier du frigo a été payé : on le vide
-    if (p.source === "frigo") frigoCartClear();
+    frigoCartClear(); // le panier a été payé : on le vide
     if (fresh) toast(t("buy_paid_toast"), "ok");
   }
   renderReceipt(p);
@@ -293,14 +230,11 @@ function renderReceipt(p) {
         '<p class="rcpt-mail" id="rcptMail">' +
         esc(p.receipt_sent_to ? t("rcpt_sent", p.receipt_sent_to) : t("rcpt_sending")) + "</p>"
       : '<button class="btn btn-ghost btn-block" id="rcptRetry">' + esc(t("retry")) + "</button>") +
-    (p.source === "frigo" && ACHAT.fridge
-      ? '<button class="btn btn-ghost btn-block" id="rcptFridge">' + esc(t("rcpt_back_fridge")) + "</button>"
-      : '<button class="btn btn-ghost btn-block" id="rcptScan">' + esc(t("scan_another")) + "</button>");
+    '<button class="btn btn-ghost btn-block" id="rcptFridge">' + esc(t("rcpt_back_fridge")) + "</button>";
   if ($("#rcptPdf")) $("#rcptPdf").onclick = () => downloadReceipt(p.pk, $("#rcptPdf"));
   if ($("#rcptMailBtn")) $("#rcptMailBtn").onclick = () => resendReceipt(p.pk, $("#rcptMailBtn"));
   if ($("#rcptRetry")) $("#rcptRetry").onclick = () => openReceipt(p.pk, true);
-  if ($("#rcptFridge")) $("#rcptFridge").onclick = () => openFrigo();
-  if ($("#rcptScan")) $("#rcptScan").onclick = () => gotoScan();
+  $("#rcptFridge").onclick = () => openFrigo();
 }
 
 /* le PDF est protégé par le token : téléchargement via fetch + blob */

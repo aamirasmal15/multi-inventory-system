@@ -9,7 +9,7 @@
   // (redirection pleine page) ; l'ouverture se fait après connexion (enterApp).
   const dlItem = new URLSearchParams(window.location.search).get("item");
   if (dlItem && /^\d+$/.test(dlItem)) sessionStorage.setItem("prets_open", dlItem);
-  // Retour de paiement (page HelloAsso, ou 3-D Secure SumUp) : ?achat=<pk> (même mémorisation)
+  // Retour d'une étape 3-D Secure SumUp en pleine page : ?achat=<pk> (même mémorisation)
   const dlBuy = new URLSearchParams(window.location.search).get("achat");
   if (dlBuy && /^\d+$/.test(dlBuy)) sessionStorage.setItem("achat_open", dlBuy);
   // QR de la porte du frigo : /frigo -> ?frigo=1 (même mémorisation). La

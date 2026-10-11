@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inventree-paiements"
-version = "0.3.0"
-description = "Plugin InvenTree : achat d'articles vendables depuis la Scannette (SumUp ou HelloAsso)"
+version = "0.4.0"
+description = "Plugin InvenTree : frigo de l'asso, achat des articles de l'emplacement frigo via SumUp depuis la Scannette"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Aamir ASMAL" }]
-keywords = ["inventree", "plugin", "paiement", "sumup", "helloasso"]
+keywords = ["inventree", "plugin", "frigo", "paiement", "sumup"]
 requires-python = ">=3.9"
 classifiers = [
     "Framework :: Django",

@@ -61,7 +61,7 @@ def receipt_context(p):
         "date": paid.strftime("%d/%m/%Y"),
         "time": paid.strftime("%H:%M"),
         "buyer": buyer_name(p.user),
-        "source": "Frigo" if p.source == "frigo" else "Scannette",
+        "source": "Frigo",
         "location": p.location.name if p.location else "",
         "lines": [
             {
@@ -74,7 +74,7 @@ def receipt_context(p):
         ],
         "count": sum(ln.quantity for ln in p.lines.all()),
         "total": euros(p.amount_cents),
-        "provider": p.get_provider_display(),
+        "provider": "SumUp",
         "payment_ref": p.payment_ref,
         "warning": p.warning,
     }

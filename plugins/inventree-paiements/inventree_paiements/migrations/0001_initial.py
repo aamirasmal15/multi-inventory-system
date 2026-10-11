@@ -21,23 +21,6 @@ class Migration(migrations.Migration):
             name="Purchase",
             fields=[
                 ("id", models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                (
-                    "provider",
-                    models.CharField(
-                        choices=[("sumup", "SumUp"), ("helloasso", "HelloAsso")],
-                        max_length=20,
-                        verbose_name="Prestataire",
-                    ),
-                ),
-                (
-                    "source",
-                    models.CharField(
-                        choices=[("frigo", "Frigo"), ("item", "Fiche article")],
-                        default="item",
-                        max_length=10,
-                        verbose_name="Origine",
-                    ),
-                ),
                 ("amount_cents", models.PositiveIntegerField(verbose_name="Montant (centimes)")),
                 (
                     "status",
@@ -48,7 +31,10 @@ class Migration(migrations.Migration):
                         verbose_name="Statut",
                     ),
                 ),
-                ("checkout_id", models.CharField(blank=True, max_length=64, null=True, verbose_name="Checkout")),
+                (
+                    "checkout_id",
+                    models.CharField(blank=True, max_length=64, null=True, unique=True, verbose_name="Checkout SumUp"),
+                ),
                 ("payment_ref", models.CharField(blank=True, max_length=64, verbose_name="Référence du paiement")),
                 ("stock_removed", models.BooleanField(default=False, verbose_name="Stock retiré")),
                 ("warning", models.TextField(blank=True, verbose_name="Anomalie")),
@@ -82,9 +68,6 @@ class Migration(migrations.Migration):
                 "verbose_name": "Achat",
                 "verbose_name_plural": "Achats",
                 "ordering": ["-created_at"],
-                "constraints": [
-                    models.UniqueConstraint(fields=("provider", "checkout_id"), name="paiements_unique_checkout")
-                ],
             },
         ),
         migrations.CreateModel(
@@ -118,17 +101,6 @@ class Migration(migrations.Migration):
                         related_name="lines",
                         to="inventree_paiements.purchase",
                         verbose_name="Achat",
-                    ),
-                ),
-                (
-                    "stock_item",
-                    models.ForeignKey(
-                        blank=True,
-                        null=True,
-                        on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="+",
-                        to="stock.stockitem",
-                        verbose_name="Article de stock",
                     ),
                 ),
             ],

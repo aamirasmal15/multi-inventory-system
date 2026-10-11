@@ -1,4 +1,4 @@
-"""Endpoints du plugin pour la Scannette (+ webhooks SumUp / HelloAsso).
+"""Endpoints du plugin pour la page frigo de la Scannette (+ webhook SumUp).
 
 Les vues heritent de l'authentification DRF configuree par InvenTree
 (token, session, basic) : le token de la Scannette passe tel quel.
@@ -17,13 +17,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .core import PaymentError
+from .sumup import SumUpError
 
 logger = logging.getLogger("inventree")
 
 
 def is_admin(user):
-    """Staff ou superuser : mode « Gérer » du frigo, tous les recus."""
+    """Staff ou superuser : mode « Gérer » du frigo (stocks, prix), tous les recus."""
     return bool(user and (user.is_staff or user.is_superuser))
 
 
@@ -51,7 +51,6 @@ def purchase_data(p):
     return {
         "pk": p.pk,
         "status": p.status,
-        "source": p.source,
         "date": ctx["date"],
         "time": ctx["time"],
         "buyer": ctx["buyer"],
@@ -67,20 +66,13 @@ def purchase_data(p):
 
 
 class ConfigView(PluginView):
-    """La Scannette n'affiche les achats que si enabled est vrai.
-
-    test : paiements fictifs (badge « test »). Pour SumUp, une cle de compte
-    sandbox ne se distingue pas d'une vraie : pas de badge.
-    """
+    """Ce que la Scannette doit savoir avant d'ouvrir le frigo."""
 
     def get(self, request):
-        provider = self.plugin.provider()
-        gp_id = self.plugin.get_setting("GOOGLE_PAY_MERCHANT_ID") if provider == "sumup" else ""
+        gp_id = self.plugin.get_setting("GOOGLE_PAY_MERCHANT_ID")
         loc = self.plugin.fridge_location()
         return Response({
             "enabled": self.plugin.is_configured(),
-            "provider": provider,
-            "test": provider == "helloasso" and self.plugin.get_setting("HELLOASSO_ENV") == "sandbox",
             # option googlePay du widget SumUp (identifiant public, pas un secret)
             "google_pay": {
                 "merchantId": gp_id,
@@ -94,9 +86,9 @@ class ConfigView(PluginView):
 class FridgeView(PluginView):
     """Catalogue du frigo : produits, prix, stock disponible.
 
-    Un membre ne recoit que les produits vendables ; un admin recoit tout
-    (produits sans prix compris, pour les reperer) avec le detail des
-    articles de stock, que le mode « Gérer » corrige en direct.
+    Un membre ne recoit que les produits en vente ; un admin recoit tout
+    (produits sans prix compris) avec le detail des articles de stock, que le
+    mode « Gérer » corrige en direct.
     """
 
     def get(self, request):
@@ -117,39 +109,56 @@ class FridgeView(PluginView):
         })
 
 
-class ItemView(PluginView):
-    """Offre d'achat pour un article de stock ({'buyable': false} sinon)."""
+class FridgePriceView(PluginView):
+    """Admins : prix de vente d'un produit du frigo ({"part": pk, "price": "0.70"}).
 
-    def get(self, request, pk):
-        from stock.models import StockItem
+    Prix vide ou nul = retire de la vente. Seuls les produits presents dans
+    le frigo sont modifiables ici.
+    """
 
+    def post(self, request):
+        from decimal import Decimal, InvalidOperation
+
+        from part.models import Part
+
+        if not is_admin(request.user):
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        loc = self.plugin.fridge_location()
         try:
-            item = StockItem.objects.select_related("part").get(pk=pk)
-        except StockItem.DoesNotExist:
-            return Response({"detail": "Article introuvable."}, status=status.HTTP_404_NOT_FOUND)
-        offer = self.plugin.offer(item) if self.plugin.is_configured() else None
-        return Response({"buyable": offer is not None, **(offer or {})})
+            part = Part.objects.get(pk=int(request.data.get("part")))
+        except (TypeError, ValueError, Part.DoesNotExist):
+            return Response({"detail": "Article introuvable."}, status=status.HTTP_400_BAD_REQUEST)
+        if loc is None or not self.plugin.fridge_items(loc, part=part).exists():
+            return Response({"detail": "Cet article n'est pas dans le frigo."}, status=status.HTTP_400_BAD_REQUEST)
+        raw = str(request.data.get("price") or "").strip().replace(",", ".").replace("€", "").strip()
+        try:
+            price = Decimal(raw).quantize(Decimal("0.01")) if raw else None
+        except InvalidOperation:
+            return Response({"detail": "Prix invalide."}, status=status.HTTP_400_BAD_REQUEST)
+        if price is not None and (price < 0 or price > 1000):
+            return Response({"detail": "Prix invalide."}, status=status.HTTP_400_BAD_REQUEST)
+        self.plugin.set_price(part, price if price else None)
+        return Response({"part": part.pk, "price": str(price) if price else None})
 
 
 class CheckoutView(PluginView):
-    """Cree le paiement : checkout_id (SumUp, widget) ou redirect_url (HelloAsso)."""
+    """Cree le paiement SumUp du panier ; le widget de la Scannette l'execute."""
 
     def post(self, request):
         if not self.plugin.is_configured():
             return Response({"detail": "Paiement non configuré."}, status=503)
         data = request.data if isinstance(request.data, dict) else {}
         try:
-            purchase, out = self.plugin.start_checkout(request, data)
+            purchase, checkout_id = self.plugin.start_checkout(request, data)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except PaymentError as e:
+        except SumUpError as e:
             return Response({"detail": f"Paiement impossible : {e}"}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({
             "purchase": purchase.pk,
-            "provider": purchase.provider,
+            "checkout_id": checkout_id,
             "total": purchase_data(purchase)["total"],
             "amount_cents": purchase.amount_cents,
-            **out,
         })
 
 
@@ -168,16 +177,16 @@ class PurchaseListView(PluginView):
 
 
 class PurchaseView(PluginView):
-    """Etat d'un achat ; verifie le paiement aupres du prestataire s'il est en attente."""
+    """Etat d'un achat ; verifie le paiement aupres de SumUp s'il est en attente."""
 
     def get(self, request, pk):
         p = self.get_purchase(request, pk)
         if p is None:
             return Response({"detail": "Achat introuvable."}, status=status.HTTP_404_NOT_FOUND)
-        if self.plugin.is_configured(p.provider):
+        if self.plugin.is_configured():
             try:
                 p = self.plugin.confirm(p)
-            except PaymentError as e:
+            except SumUpError as e:
                 # verification impossible pour l'instant : l'etat connu reste affiche
                 logger.warning("Paiements : vérification de l'achat #%s impossible : %s", p.pk, e)
         return Response(purchase_data(p))
@@ -223,42 +232,26 @@ class ReceiptEmailView(PluginView):
 
 
 class WebhookView(APIView):
-    """Notification du prestataire (/webhook/sumup ou /webhook/helloasso).
+    """Notification SumUp ({"event_type": "CHECKOUT_STATUS_CHANGED", "id": "<checkout>"}).
 
     Le contenu n'est PAS cru sur parole : il sert seulement a retrouver
     l'achat, dont le paiement est ensuite verifie par relecture du checkout
-    aupres de l'API (confirm). Repond toujours 200 pour que le prestataire ne
-    rejoue pas indefiniment une notification qui ne nous concerne pas.
+    aupres de SumUp (confirm). Repond toujours 200 pour que SumUp ne rejoue
+    pas indefiniment une notification qui ne nous concerne pas.
     """
 
     plugin = None
     permission_classes = [AllowAny]
     authentication_classes = []  # pas de session -> pas de controle CSRF
 
-    def post(self, request, provider):
+    def post(self, request):
         from .models import Purchase
 
         body = request.data if isinstance(request.data, dict) else {}
-        p = None
-        try:
-            if provider == "sumup":
-                # {"event_type": "CHECKOUT_STATUS_CHANGED", "id": "<checkout>"}
-                if body.get("id"):
-                    p = Purchase.objects.filter(provider="sumup", checkout_id=str(body["id"])).first()
-            elif provider == "helloasso":
-                data = body.get("data") if isinstance(body.get("data"), dict) else {}
-                meta = body.get("metadata") or data.get("metadata") or {}
-                if meta.get("purchase"):
-                    p = Purchase.objects.filter(provider="helloasso", pk=int(meta["purchase"])).first()
-                if p is None and data.get("checkoutIntentId"):
-                    p = Purchase.objects.filter(
-                        provider="helloasso", checkout_id=str(int(data["checkoutIntentId"]))
-                    ).first()
-        except (TypeError, ValueError):
-            p = None
-        if p is not None and self.plugin.is_configured(p.provider):
+        p = Purchase.objects.filter(checkout_id=str(body["id"])).first() if body.get("id") else None
+        if p is not None and self.plugin.is_configured():
             try:
                 self.plugin.confirm(p)
-            except PaymentError as e:
+            except SumUpError as e:
                 logger.warning("Paiements : webhook, vérification de l'achat #%s impossible : %s", p.pk, e)
         return Response({"ok": True})
