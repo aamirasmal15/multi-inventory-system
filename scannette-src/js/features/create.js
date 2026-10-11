@@ -837,8 +837,8 @@ async function suggestParts() {
       (sub ? '<span class="sr-sub">' + sub + "</span>" : "") +
       "</span>";
     b.onclick = () => pickSuggestion(p);
-    // toucher la ligne = choisir cet article ; « Voir » à côté ouvre
-    // seulement sa fiche pour vérifier
+    // toucher la ligne = choisir cet article ; « Voir » à côté ouvre un
+    // aperçu par-dessus le formulaire (le code scanné reste en attente)
     const row = document.createElement("div");
     row.className = "ns-row";
     row.appendChild(b);
@@ -846,7 +846,7 @@ async function suggestParts() {
     v.type = "button";
     v.className = "ns-view";
     v.textContent = t("sugg_open");
-    v.onclick = () => openPart(p.pk);
+    v.onclick = () => previewSuggestion(p);
     row.appendChild(v);
     box.appendChild(row);
   });
@@ -868,6 +868,77 @@ function pickSuggestion(p) {
     ? t("link_code_to", p.name)
     : t("sugg_view_item");
   b.style.display = "flex";
+}
+/* aperçu d'une suggestion en feuille du bas : image, description, stock
+   par emplacement. On ne quitte PAS l'écran de création — ouvrir la fiche
+   (openPart) oublierait le code scanné, qu'on ne pourrait plus lier. */
+function previewSuggestion(p) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov sheet-ov";
+  const img = p.img || p.thumb;
+  ov.innerHTML =
+    '<div class="ps-sheet" role="dialog" aria-modal="true" aria-label="' + esc(p.full || p.name) + '">' +
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ps-head"><div class="ps-name"><div class="t">' + esc(p.full || p.name) + "</div>" +
+    (p.ipn ? '<div class="s">' + esc(p.ipn) + "</div>" : "") +
+    '</div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+    (img
+      ? '<img class="nsp-img" src="' + esc(mediaUrl(img)) + '" alt="' + esc(p.name) + '" onerror="this.remove()">'
+      : "") +
+    '<div class="nsp-desc"></div>' +
+    '<div class="nsp-stock"><div class="ps-empty">' + esc(t("loading")) + "</div></div>" +
+    '<button class="btn btn-primary btn-block" data-pick>' +
+    esc(PENDING_CODE ? t("link_code_to", p.name) : t("sugg_pick_this")) +
+    "</button></div>";
+  lockScroll();
+  const close = () => {
+    unlockScroll();
+    document.removeEventListener("keydown", onKey);
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 220);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-x]").onclick = close;
+  // même geste que toucher la ligne : le formulaire se réduit à « Lier »
+  ov.querySelector("[data-pick]").onclick = () => {
+    close();
+    pickSuggestion(p);
+  };
+  document.body.appendChild(ov);
+  Promise.all([
+    api("/api/part/" + p.pk + "/").catch(() => null),
+    api("/api/stock/?part=" + p.pk + "&location_detail=true&limit=200").catch(() => null),
+  ]).then(([part, st]) => {
+    if (part) {
+      const d = ov.querySelector(".nsp-desc");
+      d.innerHTML = descHtml(part);
+      armDesc(d);
+    }
+    const box = ov.querySelector(".nsp-stock");
+    const items = st ? st.results || st : null;
+    if (!Array.isArray(items)) {
+      box.innerHTML = "";
+      return;
+    }
+    const by = {};
+    items.forEach((s) => {
+      const l = (s.location_detail && (s.location_detail.pathstring || s.location_detail.name)) || t("sugg_no_loc");
+      by[l] = (by[l] || 0) + Number(s.quantity || 0);
+    });
+    const keys = Object.keys(by);
+    box.innerHTML = keys.length
+      ? keys
+          .map((l) => '<div class="nsp-row"><span>' + esc(l) + "</span><b>" + fmt(by[l]) + "</b></div>")
+          .join("")
+      : '<div class="ps-empty">' + esc(t("sugg_no_stock")) + "</div>";
+  });
 }
 function unpickSuggestion() {
   const card = $("#screen-create .card");
