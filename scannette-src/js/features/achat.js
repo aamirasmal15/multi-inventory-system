@@ -62,6 +62,7 @@ async function applyBuyBlock(it) {
   }
   if (CURRENT !== it || !o.buyable) return;
   BUY_OFFER = o;
+  prefetchSumup();
   let q = 1;
   box.innerHTML =
     '<div class="buy-top"><span class="buy-title">' + esc(t("buy_title")) + "</span>" +
@@ -117,13 +118,14 @@ async function payCheckout(body, recap) {
     window.location.href = r.redirect_url;
     return new Promise(() => {}); // la page s'en va
   }
-  try {
-    await loadSumupSdk();
-  } catch (e) {
-    toast(e.message, "bad");
-    return false;
-  }
+  // la feuille s'ouvre tout de suite ; le formulaire s'y monte dès que le
+  // script SumUp est là (préchargé à l'ouverture du frigo / de la fiche)
   return openPaySheet(r, recap);
+}
+
+/* préchargement silencieux du script SumUp (frigo, fiche d'un article vendable) */
+function prefetchSumup() {
+  if (ACHAT.enabled && ACHAT.provider === "sumup") loadSumupSdk().catch(() => {});
 }
 
 function loadSumupSdk() {
@@ -196,7 +198,6 @@ function openPaySheet(r, recap) {
     });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(ov);
-    $("#sumupCard").innerHTML = "";
     const opts = {
       id: "sumupCard",
       checkoutId: r.checkout_id,
@@ -218,7 +219,16 @@ function openPaySheet(r, recap) {
     // réglé. Apple Pay n'a pas d'option : SumUp l'affiche dans Safari dès que le
     // domaine est validé dans le profil SumUp (fichier .well-known publié).
     if (ACHAT.googlePay) opts.googlePay = ACHAT.googlePay;
-    window.SumUpCard.mount(opts);
+    loadSumupSdk()
+      .then(() => {
+        if (closed) return;
+        $("#sumupCard").innerHTML = "";
+        window.SumUpCard.mount(opts);
+      })
+      .catch((e) => {
+        toast(e.message, "bad");
+        close(false);
+      });
   });
 }
 

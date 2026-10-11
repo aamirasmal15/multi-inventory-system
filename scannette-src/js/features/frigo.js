@@ -73,6 +73,7 @@ async function openFrigo() {
     return;
   }
   $("#frigoTitle").textContent = ACHAT.fridge.name;
+  prefetchSumup(); // le formulaire de paiement sera prêt au moment de payer
   const seg = $("#frigoModeSeg");
   seg.style.display = ACHAT.admin ? "" : "none";
   if (!ACHAT.admin) FRIGO_MODE = "buy";
