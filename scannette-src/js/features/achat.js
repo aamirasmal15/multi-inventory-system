@@ -27,6 +27,9 @@ async function loadAchatConfig() {
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
   }
+  // raccourci « Le frigo » en bas de l'écran principal
+  const fb = $("#frigoOpenBtn");
+  if (fb) fb.style.display = ACHAT.fridge ? "" : "none";
   achatReadyResolve();
 }
 

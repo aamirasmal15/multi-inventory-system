@@ -420,6 +420,7 @@ const I18N = {
     purch_title: "Mes achats",
     purch_empty: "Aucun achat pour l'instant.",
     /* le frigo (features/frigo.js) */
+    frigo_open: "Le frigo",
     frigo_crumb: "Frigo",
     frigo_mine: "Mes achats",
     frigo_mode_buy: "Acheter",
@@ -861,6 +862,7 @@ const I18N = {
     purch_title: "My purchases",
     purch_empty: "No purchases yet.",
     /* the fridge (features/frigo.js) */
+    frigo_open: "The fridge",
     frigo_crumb: "Fridge",
     frigo_mine: "My purchases",
     frigo_mode_buy: "Buy",

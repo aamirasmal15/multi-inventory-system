@@ -393,6 +393,8 @@ textarea{resize:none;min-height:56px}
 .ps-hrow .pr b{color:var(--green)}
 .ps-hrow .who{color:var(--muted);font-size:12px;text-align:right}
 .ps-empty{color:var(--muted);font-size:13px}
+/* raccourci « Le frigo » de l'écran principal */
+.frigo-open span:first-child{font-size:17px}
 /* fiche d'un article du frigo vue par un non-admin */
 .fridge-lock{margin:0 0 13px;padding:11px 13px;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:var(--radius);background:var(--surface);color:var(--muted);font-size:13.5px}
 /* connexion arrivée par le QR du frigo : bandeau, EirbConnect d'abord */
