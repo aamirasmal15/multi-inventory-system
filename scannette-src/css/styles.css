@@ -243,6 +243,16 @@ textarea{resize:none;min-height:56px}
 .seg-btn svg{width:18px;height:18px}
 .seg-btn.active{color:var(--text)}
 
+/* ---- achat HelloAsso (articles vendables, features/achat.js) ---- */
+.buy{border:1px solid var(--border);border-left:4px solid var(--green);border-radius:var(--radius);padding:13px;margin-bottom:13px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.buy-top{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.buy-title{font-weight:700;font-size:15px}
+.buy-price{margin-left:auto;font-weight:700;font-size:17px;color:var(--green)}
+.buy-qty{display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:11px}
+.buy-qty button{width:44px;height:40px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:22px;border-radius:var(--radius);cursor:pointer;line-height:1}
+.buy-qty b{font-size:20px;min-width:28px;text-align:center}
+.buy-note{font-size:12px;color:var(--muted);margin:8px 0 0;text-align:center}
+
 /* ---- prêts / réservations (objets trackables) ---- */
 .pill-serial{font-family:var(--mono);letter-spacing:.02em}
 

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inventree-helloasso"
+version = "0.1.1"
+description = "Plugin InvenTree : achat d'articles vendables via HelloAsso Checkout depuis la Scannette"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Aamir ASMAL" }]
+keywords = ["inventree", "plugin", "helloasso", "checkout"]
+requires-python = ">=3.9"
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+
+# Entrypoint qui rend le plugin decouvrable par InvenTree
+[project.entry-points."inventree_plugins"]
+HelloAssoPlugin = "inventree_helloasso.core:HelloAssoPlugin"
+
+[tool.setuptools.packages.find]
+include = ["inventree_helloasso*"]

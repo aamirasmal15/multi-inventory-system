@@ -108,6 +108,16 @@ function enterApp() {
   syncUserLang();
   // réglages du plugin prêts (mode de la fiche des objets trackables) — non bloquant
   loadPretsConfig();
+  // plugin HelloAsso (bouton « Acheter » des articles vendables) — non bloquant
+  loadAchatConfig();
+  // retour de la page de paiement HelloAsso : écran de résultat de l'achat
+  const buyBack = sessionStorage.getItem("achat_open");
+  if (buyBack) {
+    sessionStorage.removeItem("achat_open");
+    history.replaceState(null, "", BASE);
+    openPurchaseResult(buyBack);
+    return;
+  }
   // lien profond (email → article) : si un objet est en attente, on l'ouvre
   // directement au lieu de l'écran de scan
   const pending = sessionStorage.getItem("prets_open");
