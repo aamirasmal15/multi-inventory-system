@@ -187,7 +187,9 @@ async function openReceipt(pk, fresh) {
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (p.status === "paid") {
-    frigoCartClear(); // le panier a été payé : on le vide
+    // le panier a été payé : on le vide (pas pour un achat depuis une fiche)
+    if (FRIGO_CART_PAYING) frigoCartClear();
+    FRIGO_CART_PAYING = false;
     if (fresh) toast(t("buy_paid_toast"), "ok");
   }
   renderReceipt(p);

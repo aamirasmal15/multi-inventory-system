@@ -16,6 +16,7 @@
 
 let FRIGO = null; // dernière réponse de /plugin/paiements/fridge
 let FRIGO_MODE = "buy"; // "buy" | "manage"
+let FRIGO_CART_PAYING = false; // le paiement en cours est celui du panier
 
 /* ---- panier { partPk: quantité } ---- */
 function frigoCart() {
@@ -204,6 +205,7 @@ function frigoPaintCart() {
 async function frigoPay() {
   const lines = frigoCartLines();
   if (!lines.length) return;
+  FRIGO_CART_PAYING = true; // le reçu videra le panier (pas un achat depuis une fiche)
   const btn = $("#frigoPayBtn"),
     html = btn.innerHTML;
   btn.disabled = true;
@@ -238,14 +240,21 @@ function frigoRenderManage(box, list) {
     row.className = "loc-row fr-mrow";
     row.innerHTML = frigoThumb(p, "lthumb") + '<div class="lmain"><div class="t">' + esc(p.name) + "</div></div>";
     const main = row.querySelector(".lmain");
-    const pb = document.createElement("button");
-    pb.type = "button";
-    pb.className = "fr-pricebtn" + (p.buyable ? "" : " none");
-    pb.innerHTML = p.buyable
-      ? '<b>' + esc(eur(p.unit_price)) + "</b><span>" + esc(p.price_inherited ? t("frigo_price_model") : t("frigo_price_edit")) + "</span>"
-      : "<b>" + esc(t("frigo_price_add")) + "</b><span>" + esc(t("frigo_no_price")) + "</span>";
-    pb.onclick = () => openPriceSheet(p);
-    main.appendChild(pb);
+    // ligne « Prix » sobre, alignée sur « Stock » : valeur + bouton Modifier
+    const pr = document.createElement("div");
+    pr.className = "fr-field fr-pricerow" + (p.buyable ? "" : " none");
+    pr.innerHTML =
+      '<span class="fr-lbl">' + esc(t("frigo_price")) + "</span>" +
+      '<span class="fr-pval">' +
+      (p.buyable
+        ? "<b>" + esc(eur(p.unit_price)) + "</b>" + (p.price_inherited ? "<small>" + esc(t("frigo_price_model_s")) + "</small>" : "")
+        : "<em>" + esc(t("frigo_no_price_s")) + "</em>") +
+      "</span>" +
+      '<button type="button" class="fr-pedit">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' +
+      esc(p.buyable ? t("frigo_price_edit_s") : t("frigo_price_add_s")) + "</button>";
+    pr.onclick = () => openPriceSheet(p);
+    main.appendChild(pr);
     (p.items || []).forEach((it) => main.appendChild(frigoCountRow(p, it)));
     card.appendChild(row);
   });
@@ -471,13 +480,71 @@ async function hideFridgeLocs(list) {
   return (list || []).filter((l) => !isFridgeLoc(l.pk));
 }
 async function applyFridgeLock(it) {
-  const note = $("#fridgeLockNote");
+  const note = $("#fridgeLockNote"),
+    buy = $("#fridgeBuy");
   if (note) note.style.display = "none";
+  if (buy) {
+    buy.style.display = "none";
+    buy.innerHTML = "";
+  }
   await achatReadyPromise;
   await pretsReadyPromise; // applyItemMode a fini de régler le bloc quantité
-  if (CURRENT !== it || ACHAT.admin || !isFridgeLoc(it.location)) return;
-  $("#qtyBlock").style.display = "none";
-  if (note) note.style.display = "";
+  if (CURRENT !== it || !isFridgeLoc(it.location)) return;
+  // non-admin : pas de section stock (les admins la gardent, sous l'achat)
+  if (!ACHAT.admin) $("#qtyBlock").style.display = "none";
+  // article du frigo scanné : achat direct, pour tout le monde
+  let p = null;
+  if (ACHAT.enabled) {
+    try {
+      const f = await api("/plugin/paiements/fridge");
+      p = (f.products || []).find((x) => x.part === it.part && x.buyable) || null;
+    } catch (_) {}
+  }
+  if (CURRENT !== it) return;
+  if (!p || !p.available) {
+    // pas en vente (pas de prix, épuisé) : simple mention pour un membre
+    if (note && !ACHAT.admin) note.style.display = "";
+    return;
+  }
+  renderFridgeBuy(buy, p);
+  prefetchSumup();
+}
+
+/* bloc « Acheter » de la fiche d'un article du frigo : quantité prise, Payer */
+function renderFridgeBuy(box, p) {
+  let q = 1;
+  box.innerHTML =
+    '<div class="buy-top"><span class="buy-title">🧊 ' + esc(t("frigo_buy_title")) + "</span>" +
+    '<span class="buy-price">' + esc(eur(p.unit_price)) + "</span></div>" +
+    '<div class="buy-qlbl">' + esc(t("frigo_buy_qty")) + "</div>" +
+    '<div class="buy-qty"><button type="button" data-d="-1" aria-label="−">−</button><b></b>' +
+    '<button type="button" data-d="1" aria-label="+">+</button></div>' +
+    '<button class="btn btn-primary" data-pay></button>' +
+    '<div class="buy-left">' + esc(t("frigo_left", p.available)) + "</div>";
+  const pay = box.querySelector("[data-pay]");
+  const sync = () => {
+    box.querySelector(".buy-qty b").textContent = q;
+    box.querySelector('[data-d="-1"]').disabled = q <= 1;
+    box.querySelector('[data-d="1"]').disabled = q >= p.available;
+    pay.textContent = t("buy_btn", eurCents(p.unit_cents * q));
+  };
+  box.querySelectorAll(".buy-qty button").forEach((b) => {
+    b.onclick = () => {
+      q = Math.min(p.available, Math.max(1, q + Number(b.dataset.d)));
+      sync();
+    };
+  });
+  pay.onclick = async () => {
+    pay.disabled = true;
+    pay.innerHTML = '<span class="spin"></span>';
+    await payCheckout({ lines: [{ part: p.part, quantity: q }] }, [
+      { name: p.name, quantity: q, total: eurCents(p.unit_cents * q) },
+    ]);
+    pay.disabled = false;
+    sync();
+  };
+  sync();
+  box.style.display = "";
 }
 function syncCreatePrice() {
   const f = $("#fldPrice");

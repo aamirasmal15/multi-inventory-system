@@ -74,7 +74,8 @@ function renderItem(it) {
   applyItemMode(it);
   // pastille « Variante de <modèle> », posée en différé (features/variants.js)
   applyVariantPill(it);
-  // article du frigo + non-admin : lecture seule (features/frigo.js)
+  // article du frigo : bloc « Acheter » pour tous, section stock pour les
+  // admins seulement (features/frigo.js)
   applyFridgeLock(it);
 }
 

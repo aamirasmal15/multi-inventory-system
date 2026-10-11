@@ -357,12 +357,16 @@ textarea{resize:none;min-height:56px}
 .fr-help:last-of-type{margin-bottom:8px}
 .fr-mrow{align-items:flex-start}
 .fr-mrow .t{margin-bottom:8px}
-.fr-pricebtn{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;border:1px solid var(--green);background:var(--green-light);border-radius:10px;padding:9px 12px;margin-bottom:10px;cursor:pointer;font-family:inherit;color:var(--text)}
-.fr-pricebtn b{font-size:20px;font-weight:800;color:var(--green)}
-.fr-pricebtn span{font-size:12.5px;color:var(--muted);margin-left:auto}
-.fr-pricebtn.none{border-color:var(--amber);background:var(--amber-light)}
-.fr-pricebtn.none b{font-size:15px;color:var(--amber)}
-.fr-pricebtn:active{transform:scale(.99)}
+.fr-pricerow{cursor:pointer;margin-bottom:10px}
+.fr-pval{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px}
+.fr-pval b{font-size:17px;font-weight:700;color:var(--text)}
+.fr-pval small{font-size:11.5px;color:var(--muted)}
+.fr-pval em{font-style:normal;font-size:13.5px;font-weight:600;color:var(--amber)}
+.fr-pedit{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:7px 11px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;flex:none}
+.fr-pedit svg{width:14px;height:14px;color:var(--muted)}
+.fr-pricerow:hover .fr-pedit{background:var(--surface-2)}
+.fr-pricerow.none .fr-pedit{border-color:var(--amber);color:var(--amber)}
+.fr-pricerow.none .fr-pedit svg{color:var(--amber)}
 .fr-stock+.fr-stock{margin-top:10px}
 .fr-field{display:flex;align-items:center;gap:8px}
 .fr-lbl{width:44px;flex:none;font-size:12px;font-weight:600;color:var(--muted)}
@@ -419,6 +423,17 @@ textarea{resize:none;min-height:56px}
 .ps-empty{color:var(--muted);font-size:13px;padding:6px 0}
 /* raccourci « Le frigo » de l'écran principal */
 .frigo-open span:first-child{font-size:17px}
+/* fiche d'un article du frigo : bloc d'achat direct */
+.buy{border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:14px;margin-bottom:14px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.buy-top{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.buy-title{font-weight:700;font-size:16px}
+.buy-price{margin-left:auto;font-weight:800;font-size:20px;color:var(--green)}
+.buy-qlbl{text-align:center;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.buy-qty{display:flex;align-items:center;justify-content:center;gap:22px;margin-bottom:14px}
+.buy-qty button{width:48px;height:48px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:24px;line-height:1;cursor:pointer}
+.buy-qty button:disabled{opacity:.35;cursor:default}
+.buy-qty b{font-size:30px;font-weight:800;min-width:36px;text-align:center}
+.buy-left{text-align:center;font-size:12px;color:var(--muted);margin-top:8px}
 /* fiche d'un article du frigo vue par un non-admin */
 .fridge-lock{margin:0 0 13px;padding:11px 13px;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:var(--radius);background:var(--surface);color:var(--muted);font-size:13.5px}
 /* connexion arrivée par le QR du frigo : bandeau, EirbConnect d'abord */

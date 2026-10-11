@@ -171,7 +171,8 @@
     </div>
     <div id="itemBody">
       <div class="card item-head" id="itemHead"></div>
-      <!-- article du frigo vu par un non-admin : lecture seule (frigo.js) -->
+      <!-- article du frigo : achat direct (tous), section stock admins seulement (frigo.js) -->
+      <div id="fridgeBuy" class="buy" style="display:none"></div>
       <p class="fridge-lock" id="fridgeLockNote" style="display:none" data-i18n="frigo_locked">🧊 Article du frigo : son stock est géré par les admins.</p>
       <!-- comptage de quantité : masqué quand l'article est trackable (mode prêt) -->
       <div id="qtyBlock">
