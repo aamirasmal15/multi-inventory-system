@@ -33,6 +33,24 @@ async function loadAchatConfig() {
   achatReadyResolve();
 }
 
+/* verrou du défilement pendant une feuille (paiement, prix) : overflow:hidden
+   ne suffit pas sur iOS, la page derrière défile quand même. On fige le body
+   à sa position (position:fixed + top négatif) puis on la rend à la fermeture. */
+let SCROLL_LOCK = null;
+function lockScroll() {
+  if (SCROLL_LOCK) return;
+  const y = window.scrollY || 0;
+  const b = document.body.style;
+  SCROLL_LOCK = { y, prev: { position: b.position, top: b.top, left: b.left, right: b.right, width: b.width, overflow: b.overflow } };
+  Object.assign(b, { position: "fixed", top: -y + "px", left: "0", right: "0", width: "100%", overflow: "hidden" });
+}
+function unlockScroll() {
+  if (!SCROLL_LOCK) return;
+  Object.assign(document.body.style, SCROLL_LOCK.prev);
+  window.scrollTo(0, SCROLL_LOCK.y);
+  SCROLL_LOCK = null;
+}
+
 function eur(s) {
   return String(s).replace(".", ",") + " €";
 }
@@ -106,13 +124,12 @@ function openPaySheet(r, recap) {
       "</details>" +
       '<div class="pay-widget"><div id="sumupCard"><div class="skeleton">' + esc(t("loading")) + "</div></div></div>" +
       '<p class="pay-note">' + esc(t("buy_secure")) + "</p></div>";
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    lockScroll();
     let closed = false;
     const close = (paid) => {
       if (closed) return;
       closed = true;
-      document.body.style.overflow = prevOverflow;
+      unlockScroll();
       document.removeEventListener("keydown", onKey);
       ov.classList.add("closing");
       setTimeout(() => ov.remove(), 220);

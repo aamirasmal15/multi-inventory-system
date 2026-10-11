@@ -390,8 +390,10 @@ textarea{resize:none;min-height:56px}
 .price-chip{border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:10px;padding:9px 2px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
 .price-chip.on{border-color:var(--green);background:var(--green-light);color:var(--green)}
 /* fenêtre de prix : feuille du bas (comme le paiement), prix au centre */
+.modal-ov.sheet-ov,.modal-ov.pay-ov{touch-action:none}
+.ps-sheet,.pay-sheet{touch-action:pan-y}
 .modal-ov.sheet-ov{align-items:flex-end;padding:0}
-.ps-sheet{width:100%;max-width:540px;max-height:92dvh;overflow:auto;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:var(--shadow-md);padding:8px 18px calc(env(safe-area-inset-bottom) + 18px);animation:paySheetIn .3s var(--ease-spring)}
+.ps-sheet{width:100%;max-width:540px;max-height:92dvh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:var(--shadow-md);padding:8px 18px calc(env(safe-area-inset-bottom) + 18px);animation:paySheetIn .3s var(--ease-spring)}
 .modal-ov.sheet-ov.closing .ps-sheet{animation:paySheetOut .2s ease forwards}
 @media (min-width:600px){.modal-ov.sheet-ov{align-items:center;padding:24px}.ps-sheet{max-width:420px;border-radius:16px}}
 .ps-grab{width:38px;height:4px;border-radius:4px;background:var(--border-strong);margin:4px auto 12px}

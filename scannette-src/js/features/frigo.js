@@ -341,10 +341,9 @@ function openPriceSheet(p) {
       sync();
     };
   });
-  const prevOverflow = document.body.style.overflow;
-  document.body.style.overflow = "hidden";
+  lockScroll();
   const close = () => {
-    document.body.style.overflow = prevOverflow;
+    unlockScroll();
     document.removeEventListener("keydown", onKey);
     ov.classList.add("closing");
     setTimeout(() => ov.remove(), 220);
