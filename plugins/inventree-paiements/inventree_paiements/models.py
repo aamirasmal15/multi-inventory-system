@@ -1,10 +1,10 @@
-"""Modele Purchase : un achat d'article paye (ou en attente) via HelloAsso.
+"""Modele Purchase : un achat d'article paye (ou en attente) via SumUp ou HelloAsso.
 
-Une ligne est creee AVANT la redirection vers HelloAsso (statut pending) :
-son pk voyage dans les metadata du checkout et dans l'URL de retour, ce qui
-permet de retrouver l'achat aussi bien au retour de l'utilisateur que sur
-reception du webhook. Le stock n'est retire qu'une fois le paiement verifie
-aupres de l'API HelloAsso (jamais sur la seule foi de l'URL de retour).
+Une ligne est creee AVANT le paiement (statut pending) : son pk voyage dans la
+reference du checkout et dans l'URL de retour, ce qui permet de retrouver
+l'achat aussi bien au retour de l'utilisateur que sur reception du webhook.
+Le stock n'est retire qu'une fois le paiement verifie aupres de l'API du
+prestataire (jamais sur la seule foi du navigateur).
 """
 
 from django.conf import settings
@@ -13,6 +13,8 @@ from django.db import models
 
 class Purchase(models.Model):
     """Achat d'une quantite d'un article de stock."""
+
+    PROVIDER_CHOICES = [("sumup", "SumUp"), ("helloasso", "HelloAsso")]
 
     STATUS_PENDING = "pending"
     STATUS_PAID = "paid"
@@ -48,10 +50,11 @@ class Purchase(models.Model):
         default=STATUS_PENDING,
         verbose_name="Statut",
     )
-    checkout_intent_id = models.BigIntegerField(
-        null=True, blank=True, unique=True, verbose_name="Checkout HelloAsso"
-    )
-    order_id = models.BigIntegerField(null=True, blank=True, verbose_name="Commande HelloAsso")
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, verbose_name="Prestataire")
+    # identifiant du checkout chez le prestataire (UUID SumUp, entier HelloAsso)
+    checkout_id = models.CharField(max_length=64, null=True, blank=True, verbose_name="Checkout")
+    # reference du paiement abouti (code transaction SumUp, n° de commande HelloAsso)
+    payment_ref = models.CharField(max_length=64, blank=True, verbose_name="Référence du paiement")
     stock_removed = models.BooleanField(default=False, verbose_name="Stock retiré")
     # anomalie constatee a la confirmation (stock insuffisant, article supprime...)
     warning = models.TextField(blank=True, verbose_name="Anomalie")
@@ -62,8 +65,11 @@ class Purchase(models.Model):
         """Plus recents en premier."""
 
         ordering = ["-created_at"]
-        verbose_name = "Achat HelloAsso"
-        verbose_name_plural = "Achats HelloAsso"
+        verbose_name = "Achat"
+        verbose_name_plural = "Achats"
+        constraints = [
+            models.UniqueConstraint(fields=["provider", "checkout_id"], name="paiements_unique_checkout")
+        ]
 
     def __str__(self):
         """Libelle court pour l'admin Django."""

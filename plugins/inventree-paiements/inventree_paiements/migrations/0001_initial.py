@@ -32,8 +32,16 @@ class Migration(migrations.Migration):
                         verbose_name="Statut",
                     ),
                 ),
-                ("checkout_intent_id", models.BigIntegerField(blank=True, null=True, unique=True, verbose_name="Checkout HelloAsso")),
-                ("order_id", models.BigIntegerField(blank=True, null=True, verbose_name="Commande HelloAsso")),
+                (
+                    "provider",
+                    models.CharField(
+                        choices=[("sumup", "SumUp"), ("helloasso", "HelloAsso")],
+                        max_length=20,
+                        verbose_name="Prestataire",
+                    ),
+                ),
+                ("checkout_id", models.CharField(blank=True, max_length=64, null=True, verbose_name="Checkout")),
+                ("payment_ref", models.CharField(blank=True, max_length=64, verbose_name="Référence du paiement")),
                 ("stock_removed", models.BooleanField(default=False, verbose_name="Stock retiré")),
                 ("warning", models.TextField(blank=True, verbose_name="Anomalie")),
                 ("created_at", models.DateTimeField(auto_now_add=True, verbose_name="Créé le")),
@@ -62,9 +70,12 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Achat HelloAsso",
-                "verbose_name_plural": "Achats HelloAsso",
+                "verbose_name": "Achat",
+                "verbose_name_plural": "Achats",
                 "ordering": ["-created_at"],
+                "constraints": [
+                    models.UniqueConstraint(fields=("provider", "checkout_id"), name="paiements_unique_checkout")
+                ],
             },
         ),
     ]

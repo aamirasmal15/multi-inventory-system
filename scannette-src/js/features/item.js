@@ -74,7 +74,7 @@ function renderItem(it) {
   applyItemMode(it);
   // pastille « Variante de <modèle> », posée en différé (features/variants.js)
   applyVariantPill(it);
-  // article vendable + plugin HelloAsso configuré -> bloc « Acheter » (features/achat.js)
+  // article vendable + plugin paiements configuré -> bloc « Acheter » (features/achat.js)
   applyBuyBlock(it);
 }
 

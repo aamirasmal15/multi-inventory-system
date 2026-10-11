@@ -1,4 +1,4 @@
-"""Endpoints du plugin pour la Scannette (+ webhook HelloAsso).
+"""Endpoints du plugin pour la Scannette (+ webhooks SumUp / HelloAsso).
 
 Les vues heritent de l'authentification DRF configuree par InvenTree
 (token, session, basic) : le token de la Scannette passe tel quel.
@@ -16,7 +16,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .helloasso import HelloAssoError
+from .core import PaymentError
 
 logger = logging.getLogger("inventree")
 
@@ -43,12 +43,18 @@ def purchase_data(p):
 
 
 class ConfigView(PluginView):
-    """La Scannette n'affiche le bouton Acheter que si enabled est vrai."""
+    """La Scannette n'affiche le bouton Acheter que si enabled est vrai.
+
+    test : paiements fictifs (badge « test » dans la Scannette). Pour SumUp,
+    une cle de compte sandbox ne se distingue pas d'une vraie : pas de badge.
+    """
 
     def get(self, request):
+        provider = self.plugin.provider()
         return Response({
             "enabled": self.plugin.is_configured(),
-            "env": self.plugin.get_setting("HELLOASSO_ENV"),
+            "provider": provider,
+            "test": provider == "helloasso" and self.plugin.get_setting("HELLOASSO_ENV") == "sandbox",
         })
 
 
@@ -67,13 +73,13 @@ class ItemView(PluginView):
 
 
 class CheckoutView(PluginView):
-    """Cree le paiement et renvoie l'URL de la page HelloAsso."""
+    """Cree le paiement : checkout_id (SumUp, widget) ou redirect_url (HelloAsso)."""
 
     def post(self, request):
         from stock.models import StockItem
 
         if not self.plugin.is_configured():
-            return Response({"detail": "Paiement HelloAsso non configuré."}, status=503)
+            return Response({"detail": "Paiement non configuré."}, status=503)
         try:
             pk = int(request.data.get("stock_item"))
             qty = int(request.data.get("quantity", 1))
@@ -81,16 +87,16 @@ class CheckoutView(PluginView):
         except (TypeError, ValueError, StockItem.DoesNotExist):
             return Response({"detail": "Article introuvable."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            purchase, url = self.plugin.start_checkout(request, item, qty)
+            purchase, out = self.plugin.start_checkout(request, item, qty)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except HelloAssoError as e:
+        except PaymentError as e:
             return Response({"detail": f"Paiement impossible : {e}"}, status=status.HTTP_502_BAD_GATEWAY)
-        return Response({"purchase": purchase.pk, "redirect_url": url})
+        return Response({"purchase": purchase.pk, "provider": purchase.provider, **out})
 
 
 class PurchaseView(PluginView):
-    """Etat d'un achat ; verifie le paiement aupres de HelloAsso s'il est en attente."""
+    """Etat d'un achat ; verifie le paiement aupres du prestataire s'il est en attente."""
 
     def get(self, request, pk):
         from .models import Purchase
@@ -104,18 +110,18 @@ class PurchaseView(PluginView):
             return Response({"detail": "Achat introuvable."}, status=status.HTTP_404_NOT_FOUND)
         try:
             p = self.plugin.confirm(p)
-        except HelloAssoError as e:
+        except PaymentError as e:
             # verification impossible pour l'instant : l'etat connu reste affiche
-            logger.warning("HelloAsso : vérification de l'achat #%s impossible : %s", p.pk, e)
+            logger.warning("Paiements : vérification de l'achat #%s impossible : %s", p.pk, e)
         return Response(purchase_data(p))
 
 
 class WebhookView(APIView):
-    """Notification HelloAsso (Order / Payment).
+    """Notification du prestataire (/webhook/sumup ou /webhook/helloasso).
 
     Le contenu n'est PAS cru sur parole : il sert seulement a retrouver
     l'achat, dont le paiement est ensuite verifie par relecture du checkout
-    aupres de l'API (confirm). Repond toujours 200 pour que HelloAsso ne
+    aupres de l'API (confirm). Repond toujours 200 pour que le prestataire ne
     rejoue pas indefiniment une notification qui ne nous concerne pas.
     """
 
@@ -123,23 +129,30 @@ class WebhookView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []  # pas de session -> pas de controle CSRF
 
-    def post(self, request):
+    def post(self, request, provider):
         from .models import Purchase
 
         body = request.data if isinstance(request.data, dict) else {}
-        data = body.get("data") if isinstance(body.get("data"), dict) else {}
-        meta = body.get("metadata") or data.get("metadata") or {}
         p = None
         try:
-            if meta.get("purchase"):
-                p = Purchase.objects.filter(pk=int(meta["purchase"])).first()
-            if p is None and data.get("checkoutIntentId"):
-                p = Purchase.objects.filter(checkout_intent_id=int(data["checkoutIntentId"])).first()
+            if provider == "sumup":
+                # {"event_type": "CHECKOUT_STATUS_CHANGED", "id": "<checkout>"}
+                if body.get("id"):
+                    p = Purchase.objects.filter(provider="sumup", checkout_id=str(body["id"])).first()
+            elif provider == "helloasso":
+                data = body.get("data") if isinstance(body.get("data"), dict) else {}
+                meta = body.get("metadata") or data.get("metadata") or {}
+                if meta.get("purchase"):
+                    p = Purchase.objects.filter(provider="helloasso", pk=int(meta["purchase"])).first()
+                if p is None and data.get("checkoutIntentId"):
+                    p = Purchase.objects.filter(
+                        provider="helloasso", checkout_id=str(int(data["checkoutIntentId"]))
+                    ).first()
         except (TypeError, ValueError):
             p = None
-        if p is not None and self.plugin.is_configured():
+        if p is not None and self.plugin.is_configured(p.provider):
             try:
                 self.plugin.confirm(p)
-            except HelloAssoError as e:
-                logger.warning("HelloAsso : webhook, vérification de l'achat #%s impossible : %s", p.pk, e)
+            except PaymentError as e:
+                logger.warning("Paiements : webhook, vérification de l'achat #%s impossible : %s", p.pk, e)
         return Response({"ok": True})

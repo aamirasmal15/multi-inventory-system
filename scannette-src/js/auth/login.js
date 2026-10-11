@@ -108,9 +108,9 @@ function enterApp() {
   syncUserLang();
   // réglages du plugin prêts (mode de la fiche des objets trackables) — non bloquant
   loadPretsConfig();
-  // plugin HelloAsso (bouton « Acheter » des articles vendables) — non bloquant
+  // plugin paiements (bouton « Acheter » des articles vendables) — non bloquant
   loadAchatConfig();
-  // retour de la page de paiement HelloAsso : écran de résultat de l'achat
+  // retour de paiement (HelloAsso, 3-D Secure SumUp) : écran de résultat de l'achat
   const buyBack = sessionStorage.getItem("achat_open");
   if (buyBack) {
     sessionStorage.removeItem("achat_open");
