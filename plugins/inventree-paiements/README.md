@@ -22,7 +22,8 @@ trackables (prêts) ne sont jamais vendus.
   compte marchand *sandbox* (paramètres développeur SumUp) donne des paiements
   de test.
 - **Google Pay** (facultatif) : identifiant marchand Google ; **nom affiché**.
-- **Reçu par e-mail** (activé par défaut).
+- **Reçu par e-mail** automatique (désactivé par défaut : l'acheteur peut
+  toujours se l'envoyer depuis son reçu).
 
 Apple Pay : déclarer le domaine `inventaire-<asso>.eirspace.fr` dans le profil
 SumUp et publier le fichier fourni sous

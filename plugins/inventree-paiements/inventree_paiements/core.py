@@ -110,8 +110,8 @@ class PaiementsPlugin(AppMixin, SettingsMixin, UrlsMixin, ValidationMixin, Inven
         },
         "SEND_RECEIPT": {
             "name": "Envoyer le reçu par e-mail",
-            "description": "Reçu (PDF joint) envoyé à l'adresse principale de l'acheteur une fois le paiement confirmé",
-            "default": True,
+            "description": "Reçu (PDF joint) envoyé automatiquement à l'adresse principale de l'acheteur une fois le paiement confirmé. Désactivé : l'acheteur peut le demander depuis son reçu.",
+            "default": False,
             "validator": bool,
         },
     }

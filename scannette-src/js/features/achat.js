@@ -189,7 +189,7 @@ async function openReceipt(pk, fresh) {
   }
   renderReceipt(p);
   // reçu e-mail envoyé en tâche de fond : on rafraîchit la mention une fois
-  if (p.status === "paid" && !p.receipt_sent_to)
+  if (p.status === "paid" && p.receipt_auto && !p.receipt_sent_to)
     setTimeout(async () => {
       try {
         const q = await api("/plugin/paiements/purchase/" + pk);
@@ -226,9 +226,10 @@ function renderReceipt(p) {
     "</div>" +
     (paid
       ? '<button class="btn btn-primary btn-block" id="rcptPdf">' + esc(t("rcpt_download")) + "</button>" +
-        '<button class="btn btn-ghost btn-block" id="rcptMailBtn">' + esc(t("rcpt_resend")) + "</button>" +
+        '<button class="btn btn-ghost btn-block" id="rcptMailBtn">' +
+        esc(p.receipt_sent_to ? t("rcpt_resend") : t("rcpt_send")) + "</button>" +
         '<p class="rcpt-mail" id="rcptMail">' +
-        esc(p.receipt_sent_to ? t("rcpt_sent", p.receipt_sent_to) : t("rcpt_sending")) + "</p>"
+        esc(p.receipt_sent_to ? t("rcpt_sent", p.receipt_sent_to) : p.receipt_auto ? t("rcpt_sending") : "") + "</p>"
       : '<button class="btn btn-ghost btn-block" id="rcptRetry">' + esc(t("retry")) + "</button>") +
     '<button class="btn btn-ghost btn-block" id="rcptFridge">' + esc(t("rcpt_back_fridge")) + "</button>";
   if ($("#rcptPdf")) $("#rcptPdf").onclick = () => downloadReceipt(p.pk, $("#rcptPdf"));

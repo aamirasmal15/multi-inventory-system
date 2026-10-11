@@ -62,7 +62,15 @@ def purchase_data(p):
         "stock_removed": p.stock_removed,
         "warning": p.warning,
         "receipt_sent_to": p.receipt_sent_to,
+        # envoi automatique du recu active ? sinon, bouton « Recevoir par e-mail »
+        "receipt_auto": bool(_plugin_setting("SEND_RECEIPT")),
     }
+
+
+def _plugin_setting(key):
+    from .receipt import plugin_setting
+
+    return plugin_setting(key)
 
 
 class ConfigView(PluginView):
