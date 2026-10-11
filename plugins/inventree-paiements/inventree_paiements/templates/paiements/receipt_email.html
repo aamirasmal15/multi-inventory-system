@@ -1,0 +1,58 @@
+{% comment %}
+Recu d'achat par e-mail, meme direction artistique que les e-mails du plugin
+Prets / E-mails : page grise, carte blanche a lisere d'accent (vert = paye),
+pastille, sous-tableau de details, pied « Une solution EirSpace ».
+HTML d'e-mail : tables et styles inline uniquement, aucune image distante.
+Contexte : receipt_context (receipt.py).
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f5;margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:28px 14px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:540px;">
+
+        <tr>
+          <td style="padding:0 4px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <span style="font-size:16px;font-weight:700;color:#212529;vertical-align:middle;">{{ instance }}</span>
+            <span style="font-size:12.5px;color:#868e96;vertical-align:middle;">&nbsp;&middot;&nbsp;{{ source }}</span>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="background:#ffffff;border:1px solid #dee2e6;border-left:4px solid #2f9e44;border-radius:10px;padding:22px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+            <div style="display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#2f9e44;background:#ebfbee;border-radius:999px;padding:4px 12px;">Achat payé &middot; n&deg;&nbsp;{{ number }}</div>
+
+            <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#212529;">Merci pour ton achat, {{ buyer }}&nbsp;!</p>
+            <p style="margin:6px 0 16px;font-size:14px;line-height:1.6;color:#495057;">Le {{ date }} à {{ time }}. Le reçu PDF est joint à cet e-mail.</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:8px;">
+              {% for ln in lines %}
+              <tr>
+                <td style="padding:{% if forloop.first %}12px{% else %}5px{% endif %} 16px 5px;font-size:13.5px;color:#212529;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"><b>{{ ln.quantity }}&nbsp;&times;</b>&nbsp;{{ ln.name }}</td>
+                <td align="right" style="padding:{% if forloop.first %}12px{% else %}5px{% endif %} 16px 5px;font-size:13.5px;color:#212529;white-space:nowrap;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">{{ ln.total }}</td>
+              </tr>
+              {% endfor %}
+              <tr>
+                <td style="padding:10px 16px 12px;border-top:1px solid #dee2e6;font-size:14px;font-weight:700;color:#212529;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Total payé</td>
+                <td align="right" style="padding:10px 16px 12px;border-top:1px solid #dee2e6;font-size:15px;font-weight:700;color:#2f9e44;white-space:nowrap;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">{{ total }}</td>
+              </tr>
+            </table>
+
+            <p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#868e96;">Paiement {{ provider }}{% if payment_ref %} &middot; réf. {{ payment_ref }}{% endif %}</p>
+            {% if warning %}
+            <p style="margin:10px 0 0;font-size:13px;line-height:1.6;color:#e8590c;">&#9888; {{ warning }}. Un membre du bureau va régulariser.</p>
+            {% endif %}
+
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px 6px 0;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <p style="margin:0;font-size:11.5px;color:#868e96;opacity:.85;">Une solution EirSpace conçue par Aamir ASMAL &#128640;</p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>

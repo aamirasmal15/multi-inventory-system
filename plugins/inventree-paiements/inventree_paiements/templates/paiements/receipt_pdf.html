@@ -1,0 +1,117 @@
+{% comment %}
+Recu d'achat du frigo en PDF (weasyprint), format A4, mise en page de facture :
+emetteur (logo, association, coordonnees) / bloc « Reçu », acheteur, tableau
+des articles, total, mention du paiement SumUp, pied de page. Contexte :
+receipt_context + logo (data: URI, receipt.py). Couleur d'accent : le vert de
+la Scannette (achat paye).
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Reçu n° {{ number }} · {{ asso }}</title>
+<style>
+  @page {
+    size: A4; margin: 18mm 17mm 22mm;
+    @bottom-center { content: element(foot); }
+    @bottom-right { content: "Page " counter(page) "/" counter(pages); font-family: "DejaVu Sans", sans-serif; font-size: 7.5pt; color: #adb5bd; }
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", Helvetica, Arial, sans-serif; color: #212529; font-size: 9.5pt; line-height: 1.45; margin: 0; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12mm; }
+  .issuer { display: flex; gap: 5mm; align-items: center; }
+  .logo { height: 21mm; max-width: 42mm; object-fit: contain; }
+  .asso { font-size: 15pt; font-weight: bold; letter-spacing: .02em; }
+  .issuer .l { color: #495057; font-size: 8.5pt; line-height: 1.5; }
+  .doc { text-align: right; }
+  .doc h1 { margin: 0; font-size: 22pt; letter-spacing: .08em; color: #212529; }
+  .doc .no { font-size: 11pt; font-weight: bold; margin-top: 1mm; }
+  .doc .l { color: #495057; font-size: 8.5pt; }
+  .badge { display: inline-block; margin-top: 2.5mm; padding: 1mm 3.5mm; border-radius: 99pt; font-size: 7.5pt; font-weight: bold; letter-spacing: .06em; text-transform: uppercase; color: #2f9e44; background: #ebfbee; border: 0.6pt solid #2f9e44; }
+  .badge.pending { color: #e8590c; background: #fff4e6; border-color: #e8590c; }
+  .rule { height: 1.2mm; background: #2f9e44; border-radius: 1mm; margin: 7mm 0 7mm; }
+  .parties { display: flex; gap: 8mm; margin-bottom: 8mm; }
+  .box { flex: 1; border: 0.6pt solid #dee2e6; border-radius: 2.5mm; padding: 4mm 5mm; }
+  .box .k { font-size: 7.5pt; font-weight: bold; letter-spacing: .07em; text-transform: uppercase; color: #868e96; margin-bottom: 1.5mm; }
+  .box .v { font-size: 10.5pt; font-weight: bold; }
+  .box .s { color: #495057; font-size: 8.5pt; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 7.5pt; letter-spacing: .07em; text-transform: uppercase; color: #fff; background: #212529; padding: 2.6mm 3mm; }
+  thead th:first-child { border-radius: 1.5mm 0 0 1.5mm; }
+  thead th:last-child { border-radius: 0 1.5mm 1.5mm 0; }
+  tbody td { padding: 2.8mm 3mm; border-bottom: 0.6pt solid #e9ecef; vertical-align: top; }
+  tbody tr:nth-child(even) td { background: #f8f9fa; }
+  .r { text-align: right; white-space: nowrap; }
+  .c { text-align: center; }
+  .totals { margin-left: auto; width: 72mm; margin-top: 5mm; }
+  .totals .row { display: flex; justify-content: space-between; padding: 1.6mm 3mm; color: #495057; }
+  .totals .grand { margin-top: 1.5mm; padding: 3.2mm 3mm; border-radius: 2mm; background: #ebfbee; color: #212529; font-weight: bold; font-size: 12pt; }
+  .totals .grand span:last-child { color: #2f9e44; }
+  .pay { margin-top: 8mm; padding: 3.5mm 5mm; border-left: 1.2mm solid #2f9e44; background: #f8f9fa; border-radius: 0 2mm 2mm 0; font-size: 8.8pt; color: #495057; }
+  .pay b { color: #212529; }
+  .warn { margin-top: 4mm; padding: 3mm 5mm; border-radius: 2mm; background: #fff4e6; color: #e8590c; font-size: 8.8pt; }
+  .end { margin-top: 10mm; color: #868e96; font-size: 8pt; }
+  .end .note { margin-top: 1.5mm; }
+  .foot { position: running(foot); font-size: 7.5pt; color: #868e96; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="foot">{{ asso }}{% if asso_address %} · {{ asso_address }}{% endif %}{% if asso_contact %} · {{ asso_contact }}{% endif %}</div>
+  <div class="top">
+    <div class="issuer">
+      {% if logo %}<img class="logo" src="{{ logo }}" alt="">{% endif %}
+      <div>
+        <div class="asso">{{ asso }}</div>
+        {% if asso_address %}<div class="l">{{ asso_address }}</div>{% endif %}
+        {% if asso_contact %}<div class="l">{{ asso_contact }}</div>{% endif %}
+        {% if asso_id %}<div class="l">{{ asso_id }}</div>{% endif %}
+      </div>
+    </div>
+    <div class="doc">
+      <h1>REÇU</h1>
+      <div class="no">N° {{ number }}</div>
+      <div class="l">{{ date }} à {{ time }}</div>
+      <span class="badge{% if not paid %} pending{% endif %}">{% if paid %}Payé{% else %}Paiement non confirmé{% endif %}</span>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="parties">
+    <div class="box">
+      <div class="k">Acheteur</div>
+      <div class="v">{{ buyer }}</div>
+      {% if buyer_email %}<div class="s">{{ buyer_email }}</div>{% endif %}
+    </div>
+    <div class="box">
+      <div class="k">Objet</div>
+      <div class="v">Achat au {{ source|lower }}{% if location and location != source %} · {{ location }}{% endif %}</div>
+      <div class="s">{{ count }} article{{ count|pluralize }}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>Désignation</th><th class="c">Qté</th><th class="r">Prix unitaire</th><th class="r">Montant</th></tr></thead>
+    <tbody>
+      {% for ln in lines %}
+      <tr><td>{{ ln.name }}</td><td class="c">{{ ln.quantity }}</td><td class="r">{{ ln.unit }}</td><td class="r">{{ ln.total }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div class="row"><span>Sous-total</span><span>{{ total }}</span></div>
+    <div class="row grand"><span>Total payé</span><span>{{ total }}</span></div>
+  </div>
+
+  <div class="pay">
+    {% if paid %}Payé par carte via <b>{{ provider }}</b> le {{ date }} à {{ time }}{% if payment_ref %} · Référence de transaction <b>{{ payment_ref }}</b>{% endif %}.{% else %}Ce paiement n'a pas été confirmé par {{ provider }}.{% endif %}
+  </div>
+  {% if warning %}<div class="warn">⚠ {{ warning }}. Un membre du bureau va régulariser.</div>{% endif %}
+
+  <div class="end">
+    Merci pour ton achat ! Conserve ce reçu : il peut être présenté à un membre du bureau.
+    {% if note %}<div class="note">{{ note }}</div>{% endif %}
+  </div>
+</body>
+</html>

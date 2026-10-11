@@ -43,6 +43,11 @@
         <div class="spacer"></div>
         <button class="iconbtn" id="themeBtnLogin" title="Thème" data-i18n-title="theme"></button>
       </div>
+      <!-- arrivée par le QR du frigo (/frigo) : bandeau + EirbConnect en premier (styles.css, body.frigo-mode) -->
+      <div class="frigo-login" id="frigoLoginBanner">
+        <div class="fl-emoji">🧊</div>
+        <div><div class="fl-t" data-i18n="frigo_login_title">Le frigo</div><div class="fl-s" data-i18n="frigo_login_sub">Connecte-toi pour choisir tes boissons et payer en quelques secondes.</div></div>
+      </div>
       <h1 class="title" data-i18n="login_title">Se connecter avec InvenTree</h1>
       <div class="err" id="loginErr"></div>
       <div class="card" style="padding:18px">
@@ -137,6 +142,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       <span data-i18n="create_nocode">Créer un article sans code</span>
     </button>
+    <!-- raccourci vers la page frigo (visible si le plugin paiements a un frigo) -->
+    <button class="btn btn-ghost btn-block frigo-open" id="frigoOpenBtn" style="display:none">
+      <span aria-hidden="true">🧊</span><span data-i18n="frigo_open">Le frigo</span>
+    </button>
   </section>
 
   <!-- QR généré (création sans code) -->
@@ -162,6 +171,9 @@
     </div>
     <div id="itemBody">
       <div class="card item-head" id="itemHead"></div>
+      <!-- article du frigo : achat direct (tous), section stock admins seulement (frigo.js) -->
+      <div id="fridgeBuy" class="buy" style="display:none"></div>
+      <p class="fridge-lock" id="fridgeLockNote" style="display:none" data-i18n="frigo_locked">🧊 Article du frigo : son stock est géré par les admins.</p>
       <!-- comptage de quantité : masqué quand l'article est trackable (mode prêt) -->
       <div id="qtyBlock">
         <div class="qty-label">Quantité en stock</div>
@@ -346,6 +358,13 @@
         <label class="lbl" id="lblLoc" data-i18n="np_loc_lbl">Emplacement *</label>
         <button type="button" class="picker-btn" id="np_loc_btn" data-value="">— Choisir —</button>
       </div>
+      <!-- rangé au frigo (admins) : prix de vente posé à la création (frigo.js) -->
+      <div class="field" id="fldPrice" style="display:none">
+        <label class="lbl" for="np_price" data-i18n="np_price_lbl">Prix de vente au frigo</label>
+        <div class="price-big price-md"><input type="text" id="np_price" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></div>
+        <div id="np_price_chips"></div>
+        <p class="field-hint" data-i18n="np_price_hint">Rangé au frigo, l'article est en vente dès qu'il a un prix. Sans prix, il reste invisible des membres.</p>
+      </div>
       <div class="field" id="fldDesc" style="margin-bottom:16px">
         <label class="lbl" for="np_desc" data-i18n="np_desc_lbl">Description (facultatif)</label>
         <textarea id="np_desc" placeholder="facultatif, peut rester vide" data-i18n-ph="np_desc_ph"></textarea>
@@ -479,6 +498,41 @@
     <div id="varList"></div>
   </section>
 
+  <!-- FRIGO (frigo.js) : catalogue de l'emplacement frigo, panier, gestion -->
+  <section class="screen" id="screen-frigo">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnFrigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="frigo_crumb">Frigo</span>
+      <div class="spacer"></div>
+      <button class="fr-mine" id="frigoMineBtn" data-i18n="frigo_mine">Mes achats</button>
+    </div>
+    <h1 class="title"><span aria-hidden="true">🧊 </span><span id="frigoTitle">Frigo</span></h1>
+    <div class="seg" id="frigoModeSeg" style="display:none">
+      <button type="button" class="seg-btn active" data-mode="buy"><span data-i18n="frigo_mode_buy">Acheter</span></button>
+      <button type="button" class="seg-btn" data-mode="manage"><span data-i18n="frigo_mode_manage">Gérer</span></button>
+    </div>
+    <div id="frigoList" class="frigo-grid"></div>
+    <div class="fr-cartbar" id="frigoCartBar">
+      <div class="fr-cartinfo" id="frigoCartInfo"></div>
+      <button class="btn btn-primary" id="frigoPayBtn"></button>
+    </div>
+  </section>
+
+  <!-- REÇU d'un achat (achat.js) -->
+  <section class="screen" id="screen-receipt">
+    <div id="receiptBody"></div>
+  </section>
+
+  <!-- MES ACHATS (achat.js) -->
+  <section class="screen" id="screen-purchases">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnPurch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="purch_crumb">Mes achats</span>
+    </div>
+    <h1 class="title" data-i18n="purch_title">Mes achats</h1>
+    <div class="card" id="purchasesList"></div>
+  </section>
+
   <footer class="app-footer" data-i18n="footer_sig">Une solution EirSpace conçue par Aamir ASMAL 🚀</footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -524,6 +578,8 @@
 <script src="js/features/location.js?v=__ASSETV__"></script>
 <script src="js/features/item.js?v=__ASSETV__"></script>
 <script src="js/features/loan.js?v=__ASSETV__"></script>
+<script src="js/features/achat.js?v=__ASSETV__"></script>
+<script src="js/features/frigo.js?v=__ASSETV__"></script>
 <script src="js/features/account.js?v=__ASSETV__"></script>
 <script src="js/features/users.js?v=__ASSETV__"></script>
 <script src="js/features/create.js?v=__ASSETV__"></script>

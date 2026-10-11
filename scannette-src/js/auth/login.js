@@ -89,6 +89,12 @@ function logout(silent) {
   delCookie("eir_token");
   delCookie("eir_user");
   forgetView(); // pas de réouverture d'écran après une déconnexion
+  // frigo : panier et catalogue de l'utilisateur précédent effacés (appareil partagé)
+  try {
+    sessionStorage.removeItem("frigo_cart");
+    sessionStorage.removeItem("frigo_cart_purchase");
+  } catch (_) {}
+  FRIGO = null;
   $("#topbar").style.display = "none";
   $("#pass").value = "";
   show("#screen-login");
@@ -108,6 +114,24 @@ function enterApp() {
   syncUserLang();
   // réglages du plugin prêts (mode de la fiche des objets trackables) — non bloquant
   loadPretsConfig();
+  // plugin paiements (page frigo) — non bloquant
+  loadAchatConfig();
+  // retour d'une étape 3-D Secure SumUp : reçu de l'achat
+  const buyBack = sessionStorage.getItem("achat_open");
+  if (buyBack) {
+    sessionStorage.removeItem("achat_open");
+    history.replaceState(null, "", BASE);
+    openReceipt(Number(buyBack), true);
+    return;
+  }
+  // arrivée par le QR du frigo : page d'achat directement
+  if (sessionStorage.getItem("frigo_open")) {
+    sessionStorage.removeItem("frigo_open");
+    document.body.classList.remove("frigo-mode");
+    history.replaceState(null, "", BASE);
+    openFrigo();
+    return;
+  }
   // lien profond (email → article) : si un objet est en attente, on l'ouvre
   // directement au lieu de l'écran de scan
   const pending = sessionStorage.getItem("prets_open");

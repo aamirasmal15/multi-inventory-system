@@ -243,6 +243,214 @@ textarea{resize:none;min-height:56px}
 .seg-btn svg{width:18px;height:18px}
 .seg-btn.active{color:var(--text)}
 
+/* ---- frigo : feuille de paiement, reçu, « Mes achats » (features/achat.js) ---- */
+/* feuille de paiement : plein écran sur téléphone (glisse du bas), fenêtre
+   centrée au-delà. Fond gris de l'app, récap et formulaire en cartes blanches. */
+.modal-ov.pay-ov{align-items:flex-end;padding:0}
+.pay-sheet{width:100%;max-width:540px;height:100dvh;overflow:auto;background:var(--bg);padding:max(14px,env(safe-area-inset-top)) 16px calc(env(safe-area-inset-bottom) + 18px);animation:paySheetIn .32s var(--ease-spring);overscroll-behavior:contain}
+.modal-ov.pay-ov.closing .pay-sheet{animation:paySheetOut .2s ease forwards}
+@keyframes paySheetIn{from{transform:translateY(100%)}to{transform:none}}
+@keyframes paySheetOut{to{transform:translateY(100%)}}
+@media (min-width:600px){.modal-ov.pay-ov{align-items:center;padding:24px}.pay-sheet{height:auto;max-height:92dvh;border-radius:16px;box-shadow:var(--shadow-md)}}
+.pay-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:4px 2px 14px}
+.pay-k{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.pay-amt{font-size:32px;font-weight:800;letter-spacing:-.02em;color:var(--green);line-height:1.15;margin-top:2px}
+.pay-recap{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);padding:0 14px;margin-bottom:12px}
+.pay-recap summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-weight:600;font-size:14px;cursor:pointer;list-style:none}
+.pay-recap summary::-webkit-details-marker{display:none}
+.pay-more{font-size:12.5px;font-weight:600;color:var(--primary)}
+.pay-more::after{content:" ▾";display:inline-block;transition:transform .15s}
+.pay-recap[open] .pay-more::after{transform:rotate(180deg)}
+.pay-recap[open] summary{border-bottom:1px solid var(--border)}
+.pay-line{display:flex;gap:9px;font-size:14px;padding:8px 0}
+.pay-line+.pay-line{border-top:1px solid var(--border)}
+.pay-line .q{font-weight:700;color:var(--muted);min-width:26px}
+.pay-line .nm{flex:1;min-width:0;word-break:break-word}
+.pay-line .pr{white-space:nowrap;font-weight:600}
+/* carte du formulaire SumUp : toujours claire (le widget n'a pas de thème
+   sombre). Seules ses accroches stables sont retouchées, jamais ses classes
+   générées : marges et fond en double retirés, police de l'app. */
+.pay-widget{background:#fff;color:#212529;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);padding:16px 14px 8px;min-height:180px}
+.pay-widget .skeleton{padding:50px 0}
+#sumupCard .sumup-payment-widget-theme{padding:0!important;background:transparent!important;font-family:inherit!important}
+#sumupCard #card-form{border-radius:0 0 var(--radius) var(--radius)}
+/* titre « Choisissez un moyen de paiement » du widget : doublon de l'en-tête
+   « Paiement ». Garde :not(:has(...)) : si SumUp change sa structure, un bloc
+   contenant un champ ou un bouton n'est jamais masqué. */
+#sumupCard .sumup-payment-widget-theme>div>div>div:first-child:not(:has(iframe,button,input,form,a,img)){display:none}
+.pay-note{font-size:12px;color:var(--muted);text-align:center;margin:12px 0 0}
+/* reçu : même pastille que l'écran « Stock mis à jour » (.done .ring) */
+.rcpt-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 10px 16px}
+.rcpt-hero .ring{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:var(--green-light);border:1px solid var(--green);color:var(--green);margin-bottom:14px;font-size:30px;font-weight:700}
+.rcpt-hero .ring svg{width:38px;height:38px;animation:pop .4s cubic-bezier(.2,1.3,.4,1)}
+.rcpt-hero.wait .ring{background:var(--amber-light);border-color:var(--amber);color:var(--amber)}
+.rcpt-hero h2{font-size:20px;margin:0 0 4px}
+.rcpt-hero p{color:var(--muted);font-size:13.5px;margin:0;max-width:340px;line-height:1.45}
+.rcpt{padding:16px;margin-bottom:14px;border-top:4px solid var(--green)}
+.rcpt-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.rcpt-no{font-weight:800;font-size:22px;letter-spacing:-.01em}
+.rcpt-meta{color:var(--muted);font-size:13px;margin-top:2px}
+.rcpt-badge{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:4px 10px;white-space:nowrap}
+.rcpt-badge.ok{color:var(--green);background:var(--green-light)}
+.rcpt-badge.wait{color:var(--amber);background:var(--amber-light)}
+.rcpt-lines{border-top:1px dashed var(--border-strong);border-bottom:1px dashed var(--border-strong);padding:8px 0}
+.rcpt-line{display:flex;gap:9px;font-size:14.5px;padding:5px 0}
+.rcpt-line .q{font-weight:700;min-width:28px;color:var(--muted)}
+.rcpt-line .n{flex:1;min-width:0;word-break:break-word}
+.rcpt-line .p{white-space:nowrap;font-weight:600}
+.rcpt-total{display:flex;justify-content:space-between;font-weight:800;font-size:18px;padding:11px 0 2px}
+.rcpt-total span:last-child{color:var(--green)}
+.rcpt-pay{color:var(--muted);font-size:12px;margin-top:4px}
+.rcpt-warn{margin-top:10px;padding:9px 11px;border-radius:var(--radius);background:var(--amber-light);color:var(--amber);font-size:13px}
+.rcpt-mail{color:var(--muted);font-size:12.5px;text-align:center;margin:8px 0 2px}
+/* « Mes achats » */
+.purch-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;border-top:1px solid var(--border);padding:12px 14px;color:var(--text);font-family:inherit;cursor:pointer}
+.purch-row:first-child{border-top:none}
+.purch-row:hover{background:var(--surface-2)}
+.purch-row .pm{flex:1;min-width:0}
+.purch-row .t{font-weight:600;font-size:14px}
+.purch-row .s{color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.purch-row .pt{font-weight:700;color:var(--green);white-space:nowrap}
+
+/* ---- le frigo (features/frigo.js) ---- */
+.fr-mine{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.fr-mine:hover{background:var(--surface-2)}
+#screen-frigo .seg{margin-bottom:12px}
+.frigo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-bottom:96px}
+.fr-span{grid-column:1/-1}
+.fr-card{position:relative;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;transition:border-color .15s,box-shadow .15s,transform .1s}
+.fr-card:active{transform:scale(.985)}
+.fr-card.out{cursor:default}
+.fr-card:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* coche « dans le panier » : coin supérieur droit, pop à l'ajout */
+.fr-check{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.18);transform:scale(0);transition:transform .2s cubic-bezier(.2,1.3,.4,1);z-index:1}
+.fr-check svg{width:16px;height:16px}
+.fr-card.in .fr-check{transform:scale(1)}
+.fr-hint-add{display:block;text-align:center;border:1px dashed var(--green);color:var(--green);border-radius:var(--radius);padding:8px;font-weight:700;font-size:13.5px}
+.fr-card.out .fr-hint-add{border-color:var(--border);color:var(--muted)}
+.fr-card.in{border-color:var(--green);box-shadow:0 0 0 1px var(--green),var(--shadow-sm)}
+.fr-card.out{opacity:.55}
+.fr-img{width:100%;aspect-ratio:4/3;object-fit:contain;background:var(--surface-2);border-bottom:1px solid var(--border);display:block;padding:8px}
+.fr-ph{display:grid;place-items:center;color:var(--muted-2)}
+.fr-ph svg{width:34px;height:34px}
+.fr-body{display:flex;flex-direction:column;gap:6px;padding:10px 10px 11px;flex:1}
+.fr-name{font-weight:600;font-size:13.5px;line-height:1.3;word-break:break-word;flex:1}
+.fr-meta{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
+.fr-price{font-weight:800;font-size:16px;color:var(--green)}
+.fr-left{font-size:11px;color:var(--muted)}
+.fr-step{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.fr-step b{font-size:17px;min-width:24px;text-align:center}
+.fr-step .mini,.fr-count .mini{width:36px;height:36px;flex:none;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:7px;font-size:20px;line-height:1;cursor:pointer}
+.fr-step .mini:active{transform:scale(.94)}
+.fr-step .mini[disabled]{opacity:.4;cursor:default}
+/* barre du panier : collée en bas, au-dessus du contenu */
+.fr-cartbar{position:fixed;left:50%;bottom:0;transform:translate(-50%,120%);width:100%;max-width:540px;display:flex;align-items:center;gap:12px;padding:12px clamp(13px,4vw,18px) calc(env(safe-area-inset-bottom) + 12px);background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -8px 24px -12px rgba(0,0,0,.25);visibility:hidden;transition:transform .25s var(--ease-spring),visibility 0s .25s;z-index:120}
+.fr-cartbar.show{transform:translate(-50%,0);visibility:visible;transition:transform .25s var(--ease-spring)}
+.fr-cartinfo{flex:1;min-width:0;display:flex;flex-direction:column}
+.fr-cartinfo b{font-size:14px}
+.fr-cartinfo span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fr-cartbar .btn{width:auto;flex:none;padding:12px 18px}
+/* mode Gérer : aide en texte, puis une ligne par produit (gabarit des Lieux,
+   .loc-row) : bouton prix (ouvre la fenêtre de prix), stock de chaque article */
+.frigo-manage{display:flex;flex-direction:column;gap:6px}
+.fr-mrow{align-items:flex-start}
+.fr-mrow .t{margin-bottom:8px}
+.fr-pricerow{cursor:pointer;margin-bottom:10px}
+.fr-pval{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;line-height:1.2}
+.fr-pval b{font-size:17px;font-weight:700;color:var(--text);white-space:nowrap}
+.fr-pval small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fr-pval em{font-style:normal;font-size:13.5px;font-weight:600;color:var(--amber)}
+.fr-pedit{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:7px 11px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;flex:none}
+.fr-pedit svg{width:14px;height:14px;color:var(--muted)}
+.fr-pricerow:hover .fr-pedit{background:var(--surface-2)}
+.fr-pricerow.none .fr-pedit{border-color:var(--amber);color:var(--amber)}
+.fr-pricerow.none .fr-pedit svg{color:var(--amber)}
+.fr-stock+.fr-stock{margin-top:10px}
+.fr-field{display:flex;align-items:center;gap:8px}
+.fr-lbl{width:44px;flex:none;font-size:12px;font-weight:600;color:var(--muted)}
+.fr-field .loc-ctrl{flex:1;min-width:0}
+.fr-field .loc-save{opacity:.25;pointer-events:none;background:var(--surface);color:var(--muted);border-color:var(--border-strong)}
+.fr-field .loc-save.on{opacity:1;pointer-events:auto;background:var(--green);color:#fff;border-color:var(--green)}
+.fr-added{font-size:11.5px;color:var(--muted);margin:5px 0 0 52px}
+.fr-diff{display:none;font-size:12.5px;color:var(--muted);margin:6px 0 0 52px}
+.fr-diff.show{display:block}
+.fr-diff b{color:var(--text)}
+.fr-diff .up{color:var(--green);font-weight:700}
+.fr-diff .down{color:var(--red);font-weight:700}
+/* saisie d'un prix : grand champ + montants rapides (fenêtre de prix, création) */
+.price-big{display:flex;align-items:center;gap:6px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface);padding:4px 16px;margin-bottom:10px}
+.price-big:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light)}
+.price-big input{border:none;box-shadow:none!important;background:transparent;font-size:34px;font-weight:800;color:var(--green);padding:6px 0;min-width:0;flex:1;text-align:right;letter-spacing:-.01em}
+.price-big span{font-size:26px;font-weight:700;color:var(--muted)}
+.price-big.price-md input{font-size:24px}
+.price-big.price-md span{font-size:19px}
+.price-chips{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:14px}
+.price-chip{border:1px solid var(--border-strong);background:var(--surface);color:var(--text);border-radius:10px;padding:9px 2px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
+.price-chip.on{border-color:var(--green);background:var(--green-light);color:var(--green)}
+/* fenêtre de prix : feuille du bas (comme le paiement), prix au centre */
+.modal-ov.sheet-ov,.modal-ov.pay-ov{touch-action:none}
+.ps-sheet,.pay-sheet{touch-action:pan-y}
+.modal-ov.sheet-ov{align-items:flex-end;padding:0}
+.ps-sheet{width:100%;max-width:540px;max-height:92dvh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:var(--shadow-md);padding:8px 18px calc(env(safe-area-inset-bottom) + 18px);animation:paySheetIn .3s var(--ease-spring)}
+.modal-ov.sheet-ov.closing .ps-sheet{animation:paySheetOut .2s ease forwards}
+@media (min-width:600px){.modal-ov.sheet-ov{align-items:center;padding:24px}.ps-sheet{max-width:420px;border-radius:16px}}
+.ps-grab{width:38px;height:4px;border-radius:4px;background:var(--border-strong);margin:4px auto 12px}
+.ps-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px}
+.ps-name{flex:1;min-width:0}
+.ps-name .t{font-weight:700;font-size:16px;line-height:1.3}
+.ps-name .s{color:var(--muted);font-size:13px;margin-top:3px}
+.ps-amount{display:flex;align-items:center;justify-content:center;gap:14px}
+.ps-step{width:48px;height:48px;flex:none;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:24px;line-height:1;cursor:pointer}
+.ps-step:active{transform:scale(.94)}
+.ps-field{display:flex;align-items:baseline;justify-content:center;gap:4px;min-width:0;flex:1;max-width:220px;border-bottom:2px solid var(--border);padding:2px 0 4px;cursor:text}
+.ps-field:focus-within{border-bottom-color:var(--green)}
+.ps-field input{border:none;box-shadow:none!important;background:transparent;font-size:44px;font-weight:800;color:var(--green);text-align:center;padding:0;width:4.3ch;max-width:100%;min-width:0;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ps-field span{font-size:30px;font-weight:700;color:var(--muted)}
+.ps-steplbl{text-align:center;font-size:11.5px;color:var(--muted);margin:6px 0 16px}
+.ps-note{color:var(--muted);font-size:12.5px;line-height:1.45;margin:-4px 0 12px;text-align:center}
+.ps-remove{display:block;margin:12px auto 0;border:none;background:none;color:var(--red);font-weight:600;font-size:13.5px;font-family:inherit;cursor:pointer;padding:6px 10px}
+.ps-hist{margin-top:14px;border-top:1px solid var(--border);padding-top:10px}
+.ps-hist summary{cursor:pointer;list-style:none;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:4px 0}
+.ps-hist summary::-webkit-details-marker{display:none}
+.ps-hist summary::after{content:" ▾"}
+.ps-hist[open] summary::after{content:" ▴"}
+.ps-hist-l{margin-top:6px}
+.ps-hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;padding:8px 0;border-top:1px solid var(--border)}
+.ps-hrow:first-child{border-top:none}
+.ps-hrow .ar{color:var(--muted)}
+.ps-hrow .pr b{color:var(--green)}
+.ps-hrow .who{color:var(--muted);font-size:11.5px;text-align:right;line-height:1.35}
+.ps-empty{color:var(--muted);font-size:13px;padding:6px 0}
+/* raccourci « Le frigo » de l'écran principal */
+.frigo-open span:first-child{font-size:17px}
+/* fiche d'un article du frigo : bloc d'achat direct */
+.buy{border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;padding:14px;margin-bottom:14px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.buy-top{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.buy-title{font-weight:700;font-size:16px}
+.buy-price{margin-left:auto;font-weight:800;font-size:20px;color:var(--green)}
+.buy-qlbl{text-align:center;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.buy-qty{display:flex;align-items:center;justify-content:center;gap:22px;margin-bottom:14px}
+.buy-qty button{width:48px;height:48px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:24px;line-height:1;cursor:pointer}
+.buy-qty button:disabled{opacity:.35;cursor:default}
+.buy-qty b{font-size:30px;font-weight:800;min-width:36px;text-align:center}
+.buy-left{text-align:center;font-size:12px;color:var(--muted);margin-top:8px}
+/* fiche d'un article du frigo vue par un non-admin */
+.fridge-lock{margin:0 0 13px;padding:11px 13px;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:var(--radius);background:var(--surface);color:var(--muted);font-size:13.5px}
+/* connexion arrivée par le QR du frigo : bandeau, EirbConnect d'abord */
+.frigo-login{display:none}
+body.frigo-mode .frigo-login{display:flex;align-items:center;gap:14px;padding:16px;margin:4px 0 16px;border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.fl-emoji{font-size:34px;line-height:1}
+.fl-t{font-weight:800;font-size:19px}
+.fl-s{color:var(--muted);font-size:13.5px;line-height:1.45;margin-top:2px}
+body.frigo-mode #screen-login .title{display:none}
+body.frigo-mode .login-wrap{display:flex;flex-direction:column}
+body.frigo-mode .login-wrap>.login-top{order:0}
+body.frigo-mode .login-wrap>.frigo-login{order:1}
+body.frigo-mode .login-wrap>.err{order:2}
+body.frigo-mode .login-wrap>#eirbConnectBtn{order:3;margin-top:0}
+body.frigo-mode .login-wrap>.login-or{order:4}
+body.frigo-mode .login-wrap>.card{order:5}
+
 /* ---- prêts / réservations (objets trackables) ---- */
 .pill-serial{font-family:var(--mono);letter-spacing:.02em}
 
