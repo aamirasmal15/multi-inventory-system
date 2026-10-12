@@ -84,9 +84,13 @@ async function tresoWallets() {
   paint();
 }
 
-/* feuille d'un membre : solde, correction, derniers mouvements */
+/* correction manuelle d'un solde (crédit / débit avec note) : coupée pour
+   l'instant, le Tap to Pay crédite les recharges tout seul. true = de retour
+   (le serveur, lui, l'accepte toujours : POST /wallet/admin, admins). */
+const TRESO_ADJUST = false;
+
+/* feuille d'un membre : solde, Tap to Pay, (correction), derniers mouvements */
 function openWalletAdminSheet(m) {
-  let sign = 1;
   const ov = document.createElement("div");
   ov.className = "modal-ov sheet-ov";
   ov.innerHTML =
@@ -96,14 +100,69 @@ function openWalletAdminSheet(m) {
     " · " + esc(t("wal_balance_lbl")) + ' <b data-bal>' + esc(eurCents(m.balance_cents)) + "</b></div></div>" +
     '<button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
-    '<div class="seg treso-sign"><button type="button" class="seg-btn active" data-s="1">' + esc(t("treso_credit")) +
-    '</button><button type="button" class="seg-btn" data-s="-1">' + esc(t("treso_debit")) + "</button></div>" +
-    '<div class="ps-amount"><label class="ps-field"><input id="taInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
-    '<div class="field treso-note"><input type="text" id="taNote" maxlength="200" placeholder="' + esc(t("treso_note_ph")) + '"></div>' +
-    '<button class="btn btn-primary btn-block" data-go disabled></button>' +
+    (TRESO_ADJUST
+      ? '<div class="seg treso-sign"><button type="button" class="seg-btn active" data-s="1">' + esc(t("treso_credit")) +
+        '</button><button type="button" class="seg-btn" data-s="-1">' + esc(t("treso_debit")) + "</button></div>" +
+        '<div class="ps-amount"><label class="ps-field"><input id="taInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
+        '<div class="field treso-note"><input type="text" id="taNote" maxlength="200" placeholder="' + esc(t("treso_note_ph")) + '"></div>' +
+        '<button class="btn btn-primary btn-block" data-go disabled></button>'
+      : "") +
     (ACHAT.canTap ? '<button type="button" class="btn btn-ghost btn-block tap-open" data-tap>📲 ' + esc(t("tap_title")) + "</button>" : "") +
     '<details class="ps-hist" open><summary>' + esc(t("treso_moves")) + '</summary><div class="ps-hist-l"><div class="ps-empty">' +
     esc(t("loading")) + "</div></div></details></div>";
+  lockScroll();
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    unlockScroll();
+    document.removeEventListener("keydown", onKey);
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 220);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-x]").onclick = close;
+  const tap = ov.querySelector("[data-tap]");
+  if (tap)
+    tap.onclick = () => {
+      close();
+      openTapSheet(m);
+    };
+  const loadMoves = async () => {
+    try {
+      const w = await api("/plugin/paiements/wallet/admin?user=" + m.user);
+      ov.querySelector("[data-bal]").textContent = eurCents(w.balance_cents);
+      const l = ov.querySelector(".ps-hist-l");
+      l.innerHTML = w.entries.length
+        ? w.entries
+            .map(
+              (e) =>
+                '<div class="ps-hrow"><span class="pr">' + esc(e.label || t("treso_kind_" + e.kind)) +
+                (e.by ? '<br><small class="who">' + esc(t("treso_by", e.by)) + "</small>" : "") +
+                '</span><span class="who"><b class="' + (e.amount_cents > 0 ? "plus" : "minus") + '">' +
+                (e.amount_cents > 0 ? "+" : "−") + esc(eurCents(Math.abs(e.amount_cents))) + "</b><br>" + esc(e.date) + "</span></div>",
+            )
+            .join("")
+        : '<div class="ps-empty">' + esc(t("treso_no_moves")) + "</div>";
+    } catch (e) {
+      ov.querySelector(".ps-hist-l").innerHTML = '<div class="ps-empty">' + esc(e.message) + "</div>";
+    }
+  };
+  document.body.appendChild(ov);
+  if (TRESO_ADJUST) armAdjustForm(ov, m, loadMoves);
+  loadMoves();
+}
+
+/* formulaire de correction de la fiche membre (TRESO_ADJUST) : crédit / débit,
+   note obligatoire, journalisé avec l'auteur, jamais sous zéro (serveur) */
+function armAdjustForm(ov, m, reload) {
+  let sign = 1;
   const input = ov.querySelector("#taInput"),
     note = ov.querySelector("#taNote"),
     go = ov.querySelector("[data-go]"),
@@ -128,50 +187,6 @@ function openWalletAdminSheet(m) {
   });
   input.addEventListener("input", sync);
   note.addEventListener("input", sync);
-  const tap = ov.querySelector("[data-tap]");
-  if (tap)
-    tap.onclick = () => {
-      close();
-      openTapSheet(m);
-    };
-  lockScroll();
-  let closed = false;
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    unlockScroll();
-    document.removeEventListener("keydown", onKey);
-    ov.classList.add("closing");
-    setTimeout(() => ov.remove(), 220);
-  };
-  const onKey = (e) => {
-    if (e.key === "Escape") close();
-  };
-  document.addEventListener("keydown", onKey);
-  ov.addEventListener("click", (e) => {
-    if (e.target === ov) close();
-  });
-  ov.querySelector("[data-x]").onclick = close;
-  const loadMoves = async () => {
-    try {
-      const w = await api("/plugin/paiements/wallet/admin?user=" + m.user);
-      ov.querySelector("[data-bal]").textContent = eurCents(w.balance_cents);
-      const l = ov.querySelector(".ps-hist-l");
-      l.innerHTML = w.entries.length
-        ? w.entries
-            .map(
-              (e) =>
-                '<div class="ps-hrow"><span class="pr">' + esc(e.label || t("treso_kind_" + e.kind)) +
-                (e.by ? '<br><small class="who">' + esc(t("treso_by", e.by)) + "</small>" : "") +
-                '</span><span class="who"><b class="' + (e.amount_cents > 0 ? "plus" : "minus") + '">' +
-                (e.amount_cents > 0 ? "+" : "−") + esc(eurCents(Math.abs(e.amount_cents))) + "</b><br>" + esc(e.date) + "</span></div>",
-            )
-            .join("")
-        : '<div class="ps-empty">' + esc(t("treso_no_moves")) + "</div>";
-    } catch (e) {
-      ov.querySelector(".ps-hist-l").innerHTML = '<div class="ps-empty">' + esc(e.message) + "</div>";
-    }
-  };
   go.onclick = async () => {
     const c = cents();
     const h = go.innerHTML;
@@ -188,7 +203,7 @@ function openWalletAdminSheet(m) {
       note.value = "";
       go.innerHTML = h;
       sync();
-      loadMoves();
+      reload();
       if (TRESO_TAB === "wallets" && $("#screen-treso").classList.contains("active")) tresoWallets();
     } catch (e) {
       go.disabled = false;
@@ -196,10 +211,8 @@ function openWalletAdminSheet(m) {
       toast(e.message, "bad");
     }
   };
-  document.body.appendChild(ov);
   segSync(seg);
   sync();
-  loadMoves();
 }
 
 /* ---- onglet Achats ---- */
