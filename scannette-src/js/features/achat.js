@@ -449,7 +449,7 @@ function renderReceipt(p) {
       '<div class="ring">' + CHECK + "</div>" +
       '<div class="rp-k">' + esc(topup ? t("rcpt_proof_topup") : t("rcpt_proof_paid")) + "</div>" +
       '<div class="rp-amt">' + esc(p.total) + "</div>" +
-      '<div class="rp-when">' + esc(rcptDay(p)) + " · " + esc(p.time) + "</div>" +
+      '<div class="rp-when">' + esc(p.date) + " · " + esc(p.time) + "</div>" +
       '<div class="rp-live"><span class="dot"></span><span id="rcptAgo">' + esc(rcptAgo(p)) + "</span></div>" +
       '<div class="rp-who">' + esc(p.buyer) + "</div>" +
       '<p class="rp-note">' + esc(okText) + "</p></div>"
@@ -506,16 +506,6 @@ function renderReceipt(p) {
 }
 
 let RCPT_TICK = null;
-/* « Aujourd'hui » / « Hier » / date du paiement */
-function rcptDay(p) {
-  if (!p.paid_at) return p.date;
-  const d = new Date(p.paid_at),
-    now = new Date();
-  const same = (a, b) => a.toDateString() === b.toDateString();
-  if (same(d, now)) return t("rcpt_today");
-  if (same(d, new Date(now.getTime() - 864e5))) return t("rcpt_yesterday");
-  return p.date;
-}
 /* « payé à l'instant » / « il y a 3 min » / « il y a 2 h » / « le 12/10/2026 » */
 function rcptAgo(p) {
   if (!p.paid_at) return t("rcpt_paid");
