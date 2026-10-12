@@ -134,7 +134,7 @@ async function fridgeBuy(lines, recap, cents, opts) {
 
 /* feuille « Mon portefeuille » : solde, montants rapides, montant libre,
    recharge par carte. need : ce qui manque pour le panier (centimes). */
-const TOPUP_CHIPS = [200, 500, 1000, 2000];
+const TOPUP_CHIPS = [100, 200, 500, 1000, 2000];
 function openWalletSheet(need) {
   need = need || 0;
   const min = ACHAT.topupMin,

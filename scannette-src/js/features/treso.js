@@ -443,7 +443,7 @@ function openTapSheet(member) {
         })
         .catch((e) => (list.innerHTML = '<div class="skeleton">' + esc(e.message) + "</div>"));
   };
-  input.value = fmtC(500);
+  input.value = fmtC(TOPUP_CHIPS[0]);
   armPriceChips(ov, input, sync);
   input.addEventListener("input", sync);
   lockScroll();
