@@ -424,7 +424,7 @@ function renderReceipt(p) {
   const box = $("#receiptBody");
   // payé : bandeau vert (le vert suffit à dire « c'est bon ») avec montant, date,
   // heure et « payé il y a … » qui vit — une capture d'écran, elle, ne bouge pas.
-  // Au bout de 15 min, reçu « ancien » : gris et figé, toujours consultable,
+  // Au bout de 10 min, reçu « ancien » : gris et figé, toujours consultable,
   // mais il ne peut plus passer pour un paiement qui vient d'être fait.
   const old = paid && rcptOld(p);
   const head = paid
@@ -489,7 +489,7 @@ function renderReceipt(p) {
   if ($("#rcptMailBtn")) $("#rcptMailBtn").onclick = () => resendReceipt(p.pk, $("#rcptMailBtn"));
   if ($("#rcptRetry")) $("#rcptRetry").onclick = () => openReceipt(p.pk, true);
   $("#rcptFridge").onclick = () => openFrigo();
-  // « il y a … » rafraîchi tant que ce reçu est affiché ; passé 15 min, il bascule en « ancien »
+  // « il y a … » rafraîchi tant que ce reçu est affiché ; passé 10 min, il bascule en « ancien »
   clearInterval(RCPT_TICK);
   if (paid && p.paid_at && !old)
     RCPT_TICK = setInterval(() => {
@@ -500,7 +500,7 @@ function renderReceipt(p) {
     }, 15000);
 }
 
-const RCPT_FRESH_MS = 15 * 60e3; // durée de vie d'un reçu « frais » (15 min)
+const RCPT_FRESH_MS = 10 * 60e3; // durée de vie d'un reçu « frais » (10 min)
 function rcptOld(p) {
   return !!p.paid_at && Date.now() - new Date(p.paid_at).getTime() > RCPT_FRESH_MS;
 }

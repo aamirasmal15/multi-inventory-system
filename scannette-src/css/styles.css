@@ -339,7 +339,7 @@ textarea{resize:none;min-height:56px}
 @keyframes rpPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.5)}}
 @media (prefers-reduced-motion:reduce){.ro-live .dot{animation:none}}
 .ro-who{margin-left:auto;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-/* plus de 15 min : gris et figé (toujours consultable) */
+/* plus de 10 min : gris et figé (toujours consultable) */
 .rcpt-ok.old{background:var(--surface-2);color:var(--muted);border:1px dashed var(--border-strong);box-shadow:none}
 .rcpt-ok.old .ro-ic{background:var(--surface);border:1px solid var(--border-strong)}
 .rcpt-ok.old .ro-live{border-top-color:var(--border)}
