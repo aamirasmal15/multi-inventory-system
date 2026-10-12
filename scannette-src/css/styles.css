@@ -314,6 +314,7 @@ textarea{resize:none;min-height:56px}
 .rcpt-hero .ring{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:var(--green-light);border:1px solid var(--green);color:var(--green);margin-bottom:14px;font-size:30px;font-weight:700}
 .rcpt-hero .ring svg{width:38px;height:38px;animation:pop .4s cubic-bezier(.2,1.3,.4,1)}
 .rcpt-hero.wait .ring{background:var(--amber-light);border-color:var(--amber);color:var(--amber)}
+.rcpt-hero.bad .ring{background:var(--red-light);border-color:var(--red);color:var(--red)}
 .rcpt-hero h2{font-size:20px;margin:0 0 4px}
 .rcpt-hero p{color:var(--muted);font-size:13.5px;margin:0;max-width:340px;line-height:1.45}
 .rcpt{padding:16px;margin-bottom:14px;border-top:4px solid var(--green)}
@@ -323,6 +324,7 @@ textarea{resize:none;min-height:56px}
 .rcpt-badge{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:4px 10px;white-space:nowrap}
 .rcpt-badge.ok{color:var(--green);background:var(--green-light)}
 .rcpt-badge.wait{color:var(--amber);background:var(--amber-light)}
+.rcpt-badge.bad{color:var(--red);background:var(--red-light)}
 .rcpt-lines{border-top:1px dashed var(--border-strong);border-bottom:1px dashed var(--border-strong);padding:8px 0}
 .rcpt-line{display:flex;gap:9px;font-size:14.5px;padding:5px 0}
 .rcpt-line .q{font-weight:700;min-width:28px;color:var(--muted)}

@@ -51,6 +51,9 @@ def purchase_data(p):
     return {
         "pk": p.pk,
         "status": p.status,
+        # SumUp a refuse le paiement (banque, carte, compte marchand) : rien n'est debite.
+        # Non stocke : le meme checkout peut encore aboutir sur un nouvel essai.
+        "failed": p.status != "paid" and getattr(p, "sumup_status", None) in ("FAILED", "EXPIRED"),
         "date": ctx["date"],
         "time": ctx["time"],
         "buyer": ctx["buyer"],

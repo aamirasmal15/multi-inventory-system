@@ -205,7 +205,7 @@ async function openReceipt(pk, fresh) {
       gotoScan();
       return;
     }
-    if (p.status === "paid") break;
+    if (p.status === "paid" || p.failed) break;
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (p.status === "paid") {
@@ -226,17 +226,19 @@ async function openReceipt(pk, fresh) {
 
 function renderReceipt(p) {
   const paid = p.status === "paid";
+  const st = paid ? "ok" : p.failed ? "bad" : "wait";
   const box = $("#receiptBody");
   box.innerHTML =
-    '<div class="rcpt-hero ' + (paid ? "ok" : "wait") + '">' +
-    '<div class="ring">' + (paid ? CHECK : "…") + "</div>" +
-    "<h2>" + esc(paid ? t("rcpt_thanks") : t("buy_unpaid")) + "</h2>" +
-    "<p>" + esc(paid ? t("rcpt_show") : t("buy_unpaid_warn")) + "</p></div>" +
+    '<div class="rcpt-hero ' + st + '">' +
+    '<div class="ring">' + (paid ? CHECK : p.failed ? "✕" : "…") + "</div>" +
+    "<h2>" + esc(paid ? t("rcpt_thanks") : p.failed ? t("buy_failed") : t("buy_unpaid")) + "</h2>" +
+    "<p>" + esc(paid ? t("rcpt_show") : p.failed ? t("buy_failed_warn") : t("buy_unpaid_warn")) + "</p></div>" +
     '<div class="card rcpt">' +
     '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t("rcpt_no", p.pk)) + "</div>" +
     '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
     '<div class="rcpt-meta">' + esc(p.buyer) + "</div></div>" +
-    '<span class="rcpt-badge ' + (paid ? "ok" : "wait") + '">' + esc(paid ? t("rcpt_paid") : t("rcpt_pending")) + "</span></div>" +
+    '<span class="rcpt-badge ' + st + '">' +
+    esc(paid ? t("rcpt_paid") : p.failed ? t("rcpt_failed") : t("rcpt_pending")) + "</span></div>" +
     '<div class="rcpt-lines">' +
     p.lines
       .map(
@@ -256,7 +258,9 @@ function renderReceipt(p) {
         esc(p.receipt_sent_to ? t("rcpt_resend") : t("rcpt_send")) + "</button>" +
         '<p class="rcpt-mail" id="rcptMail">' +
         esc(p.receipt_sent_to ? t("rcpt_sent", p.receipt_sent_to) : p.receipt_auto ? t("rcpt_sending") : "") + "</p>"
-      : '<button class="btn btn-ghost btn-block" id="rcptRetry">' + esc(t("retry")) + "</button>") +
+      : p.failed
+        ? ""
+        : '<button class="btn btn-ghost btn-block" id="rcptRetry">' + esc(t("retry")) + "</button>") +
     '<button class="btn btn-ghost btn-block" id="rcptFridge">' + esc(t("rcpt_back_fridge")) + "</button>";
   if ($("#rcptPdf")) $("#rcptPdf").onclick = () => downloadReceipt(p.pk, $("#rcptPdf"));
   if ($("#rcptMailBtn")) $("#rcptMailBtn").onclick = () => resendReceipt(p.pk, $("#rcptMailBtn"));

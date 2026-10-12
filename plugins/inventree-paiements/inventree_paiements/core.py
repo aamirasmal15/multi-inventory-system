@@ -469,6 +469,8 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
     def _sumup_paid(self, p):
         """Reference de transaction si SumUp confirme le paiement, sinon None."""
         data = self.sumup().get_checkout(p.checkout_id) or {}
+        # statut SumUp brut, pour que l'ecran de recu distingue « refuse » de « en attente »
+        p.sumup_status = data.get("status")
         if data.get("status") != "PAID":
             return None
         try:
