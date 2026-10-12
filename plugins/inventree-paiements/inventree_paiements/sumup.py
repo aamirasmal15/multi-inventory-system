@@ -63,6 +63,22 @@ class SumUpClient:
             "redirect_url": redirect_url,
         })
 
+    def find_transaction(self, foreign_id):
+        """Transaction encaissee par l'appli SumUp (Tap to Pay) d'apres notre reference, ou None.
+
+        GET /v2.1/merchants/<code>/transactions?foreign_transaction_id=... ;
+        404 = pas (encore) de transaction pour cette reference.
+        """
+        try:
+            return self._call(
+                "GET",
+                f"/v2.1/merchants/{self.merchant_code}/transactions?foreign_transaction_id={requests.utils.quote(foreign_id)}",
+            )
+        except SumUpError as e:
+            if e.status == 404:
+                return None
+            raise
+
     def get_checkout(self, checkout_id):
         """GET /checkouts/<id> -> status PENDING / PAID / FAILED / EXPIRED."""
         return self._call("GET", f"/v0.1/checkouts/{checkout_id}")

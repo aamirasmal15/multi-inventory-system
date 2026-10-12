@@ -25,6 +25,7 @@ const ACHAT = {
   topupMin: 100,
   topupMax: 99999,
   provider: "sumup", // "sumup" : formulaire dans la Scannette ; "helloasso" : page HelloAsso
+  canTap: false, // encaisser des recharges en Tap to Pay (bureau, treso.js)
 };
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
@@ -44,6 +45,7 @@ async function loadAchatConfig() {
     ACHAT.topupMin = c.topup_min_cents || 100;
     ACHAT.topupMax = c.topup_max_cents || 99999;
     ACHAT.provider = c.provider || "sumup";
+    ACHAT.canTap = !!c.can_tap;
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
   }
@@ -160,6 +162,8 @@ function openWalletSheet(need) {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
     (need > 0 ? '<p class="wal-need">' + esc(t("wal_missing", eurCents(need))) + "</p>" : "") +
     form +
+    // bureau : encaisser la recharge d'un membre sur ce téléphone (Tap to Pay)
+    (ACHAT.canTap ? '<button type="button" class="btn btn-ghost btn-block tap-open" data-tap>📲 ' + esc(t("tap_title")) + "</button>" : "") +
     "</div>";
   lockScroll();
   let closed = false;
@@ -179,6 +183,12 @@ function openWalletSheet(need) {
     if (e.target === ov) close();
   });
   ov.querySelector("[data-x]").onclick = close;
+  const tap = ov.querySelector("[data-tap]");
+  if (tap)
+    tap.onclick = () => {
+      close();
+      openTapSheet(null);
+    };
   document.body.appendChild(ov);
   if (ACHAT.card) armTopupForm(ov, close, fmtC(pre), min, max);
   // solde à jour (une recharge a pu aboutir ailleurs)
@@ -454,7 +464,8 @@ function renderReceipt(p) {
       .join("") +
     "</div>" +
     '<div class="rcpt-total"><span>' + esc(t("buy_total")) + "</span><span>" + esc(p.total) + "</span></div>" +
-    '<div class="rcpt-pay">' + esc(p.method === "wallet" ? t("wal_name") : p.provider) + (p.payment_ref ? " · " + esc(p.payment_ref) : "") + "</div>" +
+    '<div class="rcpt-pay">' +
+    esc(p.method === "wallet" ? t("wal_name") : p.channel === "tap" ? t("tap_rcpt", p.collected_by) : p.provider) + (p.payment_ref ? " · " + esc(p.payment_ref) : "") + "</div>" +
     (p.warning ? '<div class="rcpt-warn">⚠ ' + esc(p.warning) + "</div>" : "") +
     "</div>" +
     (paid

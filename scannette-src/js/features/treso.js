@@ -101,6 +101,7 @@ function openWalletAdminSheet(m) {
     '<div class="ps-amount"><label class="ps-field"><input id="taInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
     '<div class="field treso-note"><input type="text" id="taNote" maxlength="200" placeholder="' + esc(t("treso_note_ph")) + '"></div>' +
     '<button class="btn btn-primary btn-block" data-go disabled></button>' +
+    (ACHAT.canTap ? '<button type="button" class="btn btn-ghost btn-block tap-open" data-tap>📲 ' + esc(t("tap_title")) + "</button>" : "") +
     '<details class="ps-hist" open><summary>' + esc(t("treso_moves")) + '</summary><div class="ps-hist-l"><div class="ps-empty">' +
     esc(t("loading")) + "</div></div></details></div>";
   const input = ov.querySelector("#taInput"),
@@ -127,6 +128,12 @@ function openWalletAdminSheet(m) {
   });
   input.addEventListener("input", sync);
   note.addEventListener("input", sync);
+  const tap = ov.querySelector("[data-tap]");
+  if (tap)
+    tap.onclick = () => {
+      close();
+      openTapSheet(m);
+    };
   lockScroll();
   let closed = false;
   const close = () => {
@@ -303,4 +310,144 @@ async function tresoCsv(btn) {
     btn.disabled = false;
     btn.innerHTML = html;
   }
+}
+
+/* ---- Tap to Pay : un membre du bureau encaisse la recharge d'un membre ----
+   Sur le téléphone du bureau (appli SumUp connectée au compte de l'asso,
+   Tap to Pay activé) : membre + montant -> POST /tap/start -> lien
+   sumupmerchant:// qui ouvre l'appli SumUp ; le membre pose sa carte ou son
+   téléphone ; l'appli revient sur ?achat=<pk> et le reçu relit la transaction
+   chez SumUp (par notre référence) avant de créditer le portefeuille. */
+let TAP_MEMBERS = null;
+function openTapSheet(member) {
+  let picked = member || null;
+  const fmtC = (c) => (c / 100).toFixed(2).replace(".", ",");
+  const ov = document.createElement("div");
+  ov.className = "modal-ov sheet-ov";
+  ov.innerHTML =
+    '<div class="ps-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("tap_title")) + '">' +
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ps-head"><div class="ps-name"><div class="t">📲 ' + esc(t("tap_title")) + '</div><div class="s">' +
+    esc(t("tap_sub")) + "</div></div>" +
+    '<button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+    '<div class="ps-steplbl wal-k">' + esc(t("tap_who")) + "</div>" +
+    '<div class="tap-who"></div>' +
+    '<div class="ps-steplbl wal-k">' + esc(t("tap_how")) + "</div>" +
+    '<div class="price-chips wal-chips">' +
+    TOPUP_CHIPS.map((c) => '<button type="button" class="price-chip" data-v="' + fmtC(c) + '">' + c / 100 + " €</button>").join("") +
+    "</div>" +
+    '<div class="ps-amount"><label class="ps-field"><input id="tapInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
+    '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(ACHAT.topupMin))) + "</div>" +
+    '<button class="btn btn-primary btn-block" data-go disabled></button>' +
+    '<p class="ps-note wal-note" data-help>' + esc(t("tap_help")) + "</p></div>";
+  const who = ov.querySelector(".tap-who"),
+    input = ov.querySelector("#tapInput"),
+    go = ov.querySelector("[data-go]");
+  const cents = () => {
+    const v = input.value.trim().replace(",", ".");
+    return /^\d{1,3}(\.\d{1,2})?$/.test(v) ? Math.round(parseFloat(v) * 100) : NaN;
+  };
+  const sync = () => {
+    input.style.width = Math.max(4, (input.value || input.placeholder).length) + 0.3 + "ch";
+    const c = cents();
+    const ok = picked && c >= ACHAT.topupMin && c <= ACHAT.topupMax;
+    go.disabled = !ok;
+    go.textContent = c >= ACHAT.topupMin ? t("tap_go", eurCents(c)) : t("tap_go_empty");
+  };
+  // choix du membre : recherche dans la liste du bureau, ou membre imposé (fiche Trésorerie)
+  const paintWho = () => {
+    if (picked) {
+      who.innerHTML =
+        '<div class="tap-picked"><span><b>' + esc(picked.name) + "</b> @" + esc(picked.username) + "</span>" +
+        (member ? "" : '<button type="button" class="fr-alt" data-change>' + esc(t("tap_change")) + "</button>") + "</div>";
+      const ch = who.querySelector("[data-change]");
+      if (ch)
+        ch.onclick = () => {
+          picked = null;
+          paintWho();
+          sync();
+        };
+      return;
+    }
+    who.innerHTML =
+      '<input type="text" class="treso-search" placeholder="' + esc(t("treso_search")) + '" autocomplete="off">' +
+      '<div class="card tap-list"><div class="skeleton">' + esc(t("loading")) + "</div></div>";
+    const q = who.querySelector("input"),
+      list = who.querySelector(".tap-list");
+    const paintList = () => {
+      if (!TAP_MEMBERS) return;
+      const s = q.value.trim().toLowerCase();
+      const rows = TAP_MEMBERS.filter((m) => !s || (m.name + " " + m.username).toLowerCase().includes(s)).slice(0, 6);
+      list.innerHTML = rows.length ? "" : '<div class="skeleton">' + esc(t("treso_none")) + "</div>";
+      rows.forEach((m) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "purch-row";
+        b.innerHTML = '<div class="pm"><div class="t">' + esc(m.name) + '</div><div class="s">@' + esc(m.username) + "</div></div>";
+        b.onclick = () => {
+          picked = m;
+          paintWho();
+          sync();
+        };
+        list.appendChild(b);
+      });
+    };
+    q.addEventListener("input", paintList);
+    if (TAP_MEMBERS) paintList();
+    else
+      api("/plugin/paiements/tap/members")
+        .then((l) => {
+          TAP_MEMBERS = l;
+          paintList();
+        })
+        .catch((e) => (list.innerHTML = '<div class="skeleton">' + esc(e.message) + "</div>"));
+  };
+  input.value = fmtC(500);
+  armPriceChips(ov, input, sync);
+  input.addEventListener("input", sync);
+  lockScroll();
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    unlockScroll();
+    document.removeEventListener("keydown", onKey);
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 220);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-x]").onclick = close;
+  go.onclick = async () => {
+    const h = go.innerHTML;
+    go.disabled = true;
+    go.innerHTML = '<span class="spin"></span>';
+    let r;
+    try {
+      r = await api("/plugin/paiements/tap/start", { method: "POST", body: { user: picked.user, amount_cents: cents() } });
+    } catch (e) {
+      go.disabled = false;
+      go.innerHTML = h;
+      toast(e.message, "bad");
+      return;
+    }
+    // l'appli SumUp prend la main ; si rien ne s'ouvre (appli absente), on le dit
+    window.location.href = r.url;
+    setTimeout(() => {
+      if (closed || document.hidden) return;
+      go.disabled = false;
+      go.innerHTML = h;
+      ov.querySelector("[data-help]").textContent = t("tap_noapp");
+    }, 2500);
+  };
+  document.body.appendChild(ov);
+  ov.querySelectorAll(".price-chip").forEach((x) => x.classList.toggle("on", x.dataset.v === input.value));
+  paintWho();
+  sync();
 }

@@ -29,6 +29,8 @@ class PurchaseAdmin(admin.ModelAdmin):
         "kind",
         "method",
         "provider",
+        "channel",
+        "collected_by",
         "amount_cents",
         "status",
         "stock_removed",
@@ -38,7 +40,7 @@ class PurchaseAdmin(admin.ModelAdmin):
     search_fields = ("user__username", "payment_ref", "checkout_id", "lines__name")
     # trace comptable : rien de ce qui touche au paiement ne se modifie a la main
     readonly_fields = (
-        "user", "location", "amount_cents", "kind", "method", "provider", "status", "checkout_id", "payment_ref",
+        "user", "location", "amount_cents", "kind", "method", "provider", "channel", "collected_by", "status", "checkout_id", "payment_ref",
         "stock_removed", "warning", "receipt_sent_to", "created_at", "paid_at",
     )
     inlines = [PurchaseLineInline]

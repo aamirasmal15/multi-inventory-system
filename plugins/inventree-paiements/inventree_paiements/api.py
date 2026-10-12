@@ -34,11 +34,13 @@ class PluginView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_purchase(self, request, pk):
-        """Achat de l'utilisateur (ou n'importe lequel pour un admin), sinon None."""
+        """Achat de l'utilisateur, ou qu'il a encaisse (Tap to Pay), ou n'importe lequel pour un admin ; sinon None."""
         from .models import Purchase
 
         p = Purchase.objects.filter(pk=pk).select_related("user", "location").first()
-        if p is None or (p.user_id != request.user.pk and not is_admin(request.user)):
+        if p is None:
+            return None
+        if p.user_id != request.user.pk and p.collected_by_id != request.user.pk and not is_admin(request.user):
             return None
         return p
 
@@ -53,6 +55,8 @@ def purchase_data(p):
         "status": p.status,
         "kind": p.kind,
         "method": p.method,
+        "channel": p.channel,
+        "collected_by": (p.collected_by.get_full_name() or p.collected_by.username) if p.collected_by_id else "",
         # SumUp a refuse le paiement (banque, carte, compte marchand) : rien n'est debite.
         # Non stocke : le meme checkout peut encore aboutir sur un nouvel essai.
         "failed": p.status != "paid" and getattr(p, "sumup_status", None) in ("FAILED", "EXPIRED"),
@@ -102,6 +106,8 @@ class ConfigView(PluginView):
                 "locations": sorted(loc.get_descendants(include_self=True).values_list("pk", flat=True)),
             } if loc else None,
             "admin": is_admin(request.user),
+            # encaisser des recharges en Tap to Pay (admins, groupe du bureau)
+            "can_tap": self.plugin.tap_ready() and self.plugin.can_collect(request.user),
             # sous ce montant, SumUp refuse la carte : portefeuille obligatoire
             "min_card_cents": self.plugin.min_card_cents(),
             "topup_min_cents": TOPUP_MIN_CENTS,
@@ -287,8 +293,11 @@ class TresoExportView(PluginView):
                 buyer_name(p.user),
                 p.user.username if p.user else "",
                 "Recharge" if topup else "Achat",
-                "Portefeuille" if p.method == p.METHOD_WALLET else f"Carte ({p.get_provider_display()})",
-                "Recharge du portefeuille" if topup else p.summary(500),
+                "Portefeuille" if p.method == p.METHOD_WALLET
+                else "Tap to Pay (SumUp)" if p.channel == p.CHANNEL_TAP
+                else f"Carte ({p.get_provider_display()})",
+                ("Recharge du portefeuille" + (f", encaissée par {buyer_name(p.collected_by)}" if p.collected_by_id else ""))
+                if topup else p.summary(500),
                 eur(p.amount_cents),
                 p.payment_ref,
                 p.warning,
@@ -534,3 +543,47 @@ class WalletAdminView(PluginView):
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"user": user.pk, "balance_cents": w.balance_cents})
+
+
+class TapMembersView(PluginView):
+    """Bureau : membres actifs a qui encaisser une recharge (nom, identifiant ; pas de solde)."""
+
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+
+        from .receipt import buyer_name
+
+        if not self.plugin.can_collect(request.user):
+            return Response({"detail": "Réservé au bureau."}, status=status.HTTP_403_FORBIDDEN)
+        rows = [
+            {"user": u.pk, "username": u.username, "name": buyer_name(u)}
+            for u in get_user_model().objects.filter(is_active=True)
+        ]
+        rows.sort(key=lambda r: r["name"].lower())
+        return Response(rows)
+
+
+class TapStartView(PluginView):
+    """Bureau : recharge d'un membre en Tap to Pay ({"user": pk, "amount_cents": 500}).
+
+    Renvoie le lien sumupmerchant:// qui ouvre l'appli SumUp ; au retour
+    (?achat=<pk>), le recu relit la transaction chez SumUp et credite le portefeuille.
+    """
+
+    def post(self, request):
+        from django.contrib.auth import get_user_model
+
+        if not self.plugin.can_collect(request.user):
+            return Response({"detail": "Réservé au bureau."}, status=status.HTTP_403_FORBIDDEN)
+        if not self.plugin.tap_ready():
+            return Response({"detail": "Tap to Pay non configuré (clé affiliate SumUp)."}, status=503)
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            member = get_user_model().objects.get(pk=int(data.get("user")), is_active=True)
+        except (TypeError, ValueError, get_user_model().DoesNotExist):
+            return Response({"detail": "Membre introuvable."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            p, url = self.plugin.start_tap(request, member, data.get("amount_cents"))
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"purchase": p.pk, "url": url, "total": purchase_data(p)["total"]})

@@ -166,6 +166,22 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             "description": "Ex. « Association loi 1901 » ou une mention fiscale validée par le trésorier",
             "default": "",
         },
+        "SUMUP_AFFILIATE_KEY": {
+            "name": "Tap to Pay : clé affiliate SumUp",
+            "description": "me.sumup.com > Développeurs > Affiliate keys. Active l'encaissement des recharges par l'appli SumUp (Tap to Pay).",
+            "default": "",
+            "protected": True,
+        },
+        "SUMUP_APP_ID": {
+            "name": "Tap to Pay : identifiant d'application",
+            "description": "Application ID associé à la clé affiliate (facultatif selon SumUp)",
+            "default": "",
+        },
+        "BUREAU_GROUP": {
+            "name": "Tap to Pay : groupe du bureau",
+            "description": "Nom du groupe InvenTree dont les membres peuvent encaisser des recharges en Tap to Pay (les admins le peuvent toujours). Vide = admins seulement.",
+            "default": "",
+        },
         "SEND_RECEIPT": {
             "name": "Envoyer le reçu par e-mail",
             "description": "Reçu (PDF joint) envoyé automatiquement à l'adresse principale de l'acheteur une fois le paiement confirmé. Désactivé : l'acheteur peut le demander depuis son reçu.",
@@ -211,6 +227,8 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             path("wallet/pay", api.WalletPayView.as_view(plugin=self), name="wallet-pay"),
             path("wallet/admin", api.WalletAdminView.as_view(plugin=self), name="wallet-admin"),
             path("treso/export.csv", api.TresoExportView.as_view(plugin=self), name="treso-export"),
+            path("tap/members", api.TapMembersView.as_view(plugin=self), name="tap-members"),
+            path("tap/start", api.TapStartView.as_view(plugin=self), name="tap-start"),
             path("purchase/<int:pk>", api.PurchaseView.as_view(plugin=self), name="purchase"),
             path("purchase/<int:pk>/receipt.pdf", api.ReceiptView.as_view(plugin=self), name="receipt"),
             path("purchase/<int:pk>/email", api.ReceiptEmailView.as_view(plugin=self), name="receipt-email"),
@@ -244,6 +262,66 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
     def min_card_cents(self):
         """Montant minimal d'un paiement par carte avec le prestataire choisi."""
         return MIN_CARD_CENTS_BY_PROVIDER.get(self.provider(), MIN_CARD_CENTS)
+
+    def can_collect(self, user):
+        """Peut encaisser une recharge en Tap to Pay : admin, ou membre du groupe du bureau."""
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_staff or user.is_superuser:
+            return True
+        group = (self.get_setting("BUREAU_GROUP") or "").strip()
+        return bool(group) and user.groups.filter(name=group).exists()
+
+    def tap_ready(self):
+        """Tap to Pay utilisable : compte SumUp et cle affiliate renseignes."""
+        return self.is_configured("sumup") and bool(self.get_setting("SUMUP_AFFILIATE_KEY"))
+
+    def start_tap(self, request, member, amount_cents):
+        """Recharge encaissee par un membre du bureau : Purchase en attente + lien vers l'appli SumUp.
+
+        La reference (foreign-tx-id) est gardee dans checkout_id : le paiement
+        est ensuite retrouve et verifie chez SumUp par cette reference, jamais
+        cru sur la seule foi du retour de l'appli.
+        """
+        from urllib.parse import urlencode
+
+        from .models import Purchase
+
+        try:
+            amount = int(amount_cents)
+        except (TypeError, ValueError):
+            raise ValueError("Montant invalide.")
+        if not TOPUP_MIN_CENTS <= amount <= TOPUP_MAX_CENTS:
+            raise ValueError(f"Recharge de {euros(TOPUP_MIN_CENTS)} minimum.")
+        p = Purchase.objects.create(
+            location=None,
+            user=member,
+            amount_cents=amount,
+            kind=Purchase.KIND_TOPUP,
+            provider="sumup",
+            channel=Purchase.CHANNEL_TAP,
+            collected_by=request.user,
+        )
+        p.checkout_id = f"scannette-tap-{p.pk}-{uuid.uuid4().hex[:10]}"
+        p.save(update_fields=["checkout_id"])
+        back = f"{self.site_url(request)}/scannette/?achat={p.pk}"
+        name = (member.get_full_name() or member.username)[:60]
+        params = {
+            "affiliate-key": self.get_setting("SUMUP_AFFILIATE_KEY"),
+            # « total » (appli recente) et « amount » (anciennes versions, iOS)
+            "total": f"{amount / 100:.2f}",
+            "amount": f"{amount / 100:.2f}",
+            "currency": "EUR",
+            "title": f"Recharge portefeuille · {name}",
+            "foreign-tx-id": p.checkout_id,
+            # Android : callback ; iOS : callbacksuccess / callbackfail
+            "callback": back,
+            "callbacksuccess": back,
+            "callbackfail": back,
+        }
+        if self.get_setting("SUMUP_APP_ID"):
+            params["app-id"] = self.get_setting("SUMUP_APP_ID")
+        return p, "sumupmerchant://pay/1.0?" + urlencode(params)
 
     def helloasso(self):
         """Client HelloAsso de l'association configuree."""
@@ -597,7 +675,12 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
         if purchase.status == Purchase.STATUS_PAID or not purchase.checkout_id:
             return purchase
-        ref = self._helloasso_paid(purchase) if purchase.provider == "helloasso" else self._sumup_paid(purchase)
+        if purchase.channel == Purchase.CHANNEL_TAP:
+            ref = self._tap_paid(purchase)
+        elif purchase.provider == "helloasso":
+            ref = self._helloasso_paid(purchase)
+        else:
+            ref = self._sumup_paid(purchase)
         if ref is None:
             return purchase  # pas (encore) paye
 
@@ -611,7 +694,11 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             p.paid_at = timezone.now()
             p.payment_ref = str(ref)[:64]
             if p.kind == Purchase.KIND_TOPUP:
-                self._wallet_move(p.user, p.amount_cents, "topup", purchase=p)
+                note = ""
+                if p.channel == Purchase.CHANNEL_TAP and p.collected_by:
+                    by = p.collected_by.get_full_name() or p.collected_by.username
+                    note = f"Recharge Tap to Pay, encaissée par {by}"
+                self._wallet_move(p.user, p.amount_cents, "topup", purchase=p, note=note)
                 p.stock_removed = True  # rien a retirer
             else:
                 self._remove_stock(p)
@@ -748,6 +835,28 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             return None
         tx = data.get("transactions") or []
         return data.get("transaction_code") or (tx[0].get("transaction_code") if tx else "") or p.checkout_id
+
+    def _tap_paid(self, p):
+        """Code de transaction si l'appli SumUp a encaisse la recharge (Tap to Pay), sinon None.
+
+        Retrouvee par notre reference (foreign_transaction_id) ; statut,
+        montant et devise verifies.
+        """
+        data = self.sumup().find_transaction(p.checkout_id)
+        if isinstance(data, list):
+            data = data[0] if data else None
+        if not data or data.get("status") != "SUCCESSFUL":
+            return None
+        try:
+            amount = Decimal(str(data.get("amount"))) * 100
+        except (ArithmeticError, ValueError, TypeError):
+            amount = Decimal(-1)
+        if not amount.is_finite() or int(amount.quantize(Decimal("1"), ROUND_HALF_UP)) != p.amount_cents or (
+            data.get("currency") != "EUR"
+        ):
+            logger.error("SumUp : transaction Tap to Pay incohérente avec l'achat #%s : %s", p.pk, data)
+            return None
+        return data.get("transaction_code") or p.checkout_id
 
     def _helloasso_paid(self, p):
         """N° de commande si HelloAsso confirme le paiement, sinon None.

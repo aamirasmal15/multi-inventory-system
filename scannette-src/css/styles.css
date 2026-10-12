@@ -423,6 +423,13 @@ textarea{resize:none;min-height:56px}
 .treso-note{margin:14px 0}
 .ps-hrow b.plus{color:var(--green)}
 .ps-hrow b.minus{color:var(--red)}
+/* Tap to Pay (treso.js) */
+.tap-open{margin-top:10px}
+.tap-who{margin-bottom:14px}
+.tap-list{margin-top:-4px}
+.tap-picked{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px}
+.tap-picked span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.tap-picked b{color:var(--text)}
 /* mode Gérer : aide en texte, puis une ligne par produit (gabarit des Lieux,
    .loc-row) : bouton prix (ouvre la fenêtre de prix), stock de chaque article */
 .frigo-manage{display:flex;flex-direction:column;gap:6px}
