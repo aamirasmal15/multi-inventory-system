@@ -457,7 +457,7 @@ const I18N = {
     tap_change: "Changer",
     tap_go: (m) => "Encaisser " + m + " avec SumUp",
     tap_go_empty: "Choisis le membre et le montant",
-    tap_help: "L'appli SumUp s'ouvre avec le montant : le membre pose sa carte ou son téléphone. Son portefeuille est crédité au retour, après vérification auprès de SumUp.",
+    tap_help: "L'appli SumUp s'ouvrira si tu l'as installée sur ce téléphone.",
     tap_noapp: "L'appli SumUp ne s'est pas ouverte ? Installe-la sur ce téléphone, connecte-toi au compte de l'asso et active Tap to Pay.",
     tap_rcpt: (n) => "Tap to Pay (SumUp)" + (n ? " · encaissé par " + n : ""),
     /* trésorerie (features/treso.js) */
@@ -986,7 +986,7 @@ const I18N = {
     tap_change: "Change",
     tap_go: (m) => "Collect " + m + " with SumUp",
     tap_go_empty: "Pick the member and the amount",
-    tap_help: "The SumUp app opens with the amount: the member taps their card or phone. Their wallet is credited on return, once SumUp confirms.",
+    tap_help: "The SumUp app will open if it is installed on this phone.",
     tap_noapp: "The SumUp app did not open? Install it on this phone, log in to the association's account and enable Tap to Pay.",
     tap_rcpt: (n) => "Tap to Pay (SumUp)" + (n ? " · collected by " + n : ""),
     /* treasury (features/treso.js) */
