@@ -22,7 +22,7 @@ trackables (prêts) ne sont jamais vendus.
 SumUp refuse tout paiement par carte sous 1 €, or une canette coûte moins.
 Chaque membre a donc un portefeuille :
 
-- **recharge** par carte, de 1 à 50 € (2, 5, 10, 20 € proposés), créditée une
+- **recharge** par carte, 1 € minimum, sans plafond (2, 5, 10, 20 € proposés), créditée une
   fois le paiement confirmé par le prestataire ;
 - **achat** : le panier est déduit du solde, à n'importe quel prix, sans
   carte ; débit et retrait du stock dans la même transaction ;

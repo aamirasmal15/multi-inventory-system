@@ -48,7 +48,9 @@ MIN_CARD_CENTS = 100  # SumUp refuse (FAILED) tout paiement par carte sous 1 €
 MIN_CARD_CENTS_BY_PROVIDER = {"sumup": MIN_CARD_CENTS, "helloasso": 1}
 TOPUP_MIN_CENTS = 100  # recharge minimale, quel que soit le prestataire
 PaymentError = (SumUpError, HelloAssoError)
-TOPUP_MAX_CENTS = 5000  # recharge maximale en une fois
+# pas de plafond de recharge : seulement un garde-fou contre une faute de
+# frappe (le champ de la Scannette accepte au plus 999,99 €)
+TOPUP_MAX_CENTS = 99999
 
 
 def euros(cents):

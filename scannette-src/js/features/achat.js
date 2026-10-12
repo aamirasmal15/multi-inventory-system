@@ -23,7 +23,7 @@ const ACHAT = {
   wallet: 0,
   minCard: 100,
   topupMin: 100,
-  topupMax: 5000,
+  topupMax: 99999,
   provider: "sumup", // "sumup" : formulaire dans la Scannette ; "helloasso" : page HelloAsso
 };
 let achatReadyResolve = null;
@@ -42,7 +42,7 @@ async function loadAchatConfig() {
     ACHAT.admin = !!c.admin;
     ACHAT.minCard = c.min_card_cents || 100;
     ACHAT.topupMin = c.topup_min_cents || 100;
-    ACHAT.topupMax = c.topup_max_cents || 5000;
+    ACHAT.topupMax = c.topup_max_cents || 99999;
     ACHAT.provider = c.provider || "sumup";
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
@@ -145,7 +145,7 @@ function openWalletSheet(need) {
       TOPUP_CHIPS.map((c) => '<button type="button" class="price-chip" data-v="' + fmtC(c) + '">' + c / 100 + " €</button>").join("") +
       "</div>" +
       '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
-      '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min), eurCents(max))) + "</div>" +
+      '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min))) + "</div>" +
       '<button class="btn btn-primary btn-block" data-go disabled></button>' +
       '<p class="ps-note wal-note">' + esc(t("wal_explain", ACHAT.provider === "helloasso" ? "HelloAsso" : "SumUp")) + "</p>"
     : '<p class="ps-note wal-note">' + esc(t("wal_nocard")) + "</p>";
