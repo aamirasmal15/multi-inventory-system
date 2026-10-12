@@ -60,17 +60,11 @@ async function tresoWallets() {
   if (TRESO_TAB !== "wallets") return;
   TRESO_MEMBERS = d.members;
   box.innerHTML =
-    // Tap to Pay bien en vue ; pas encore configuré : le bouton explique quoi faire
-    (ACHAT.canTap || ACHAT.tapSetup
-      ? '<button type="button" class="btn btn-primary btn-block treso-tap" id="tresoTapBtn">📲 ' + esc(t("tap_title")) + "</button>"
-      : "") +
     '<div class="wal-card"><div class="wal-l"><div class="wal-k">👛 ' + esc(t("treso_total_k")) + "</div>" +
     '<div class="wal-amt">' + esc(eurCents(d.total_cents)) + "</div>" +
     '<div class="treso-sub">' + esc(t("treso_total_n", d.count)) + "</div></div></div>" +
     '<input type="text" id="tresoSearch" class="treso-search" placeholder="' + esc(t("treso_search")) + '" autocomplete="off">' +
     '<div class="card" id="tresoList"></div>';
-  const tb = $("#tresoTapBtn");
-  if (tb) tb.onclick = () => (ACHAT.canTap ? openTapSheet(null) : openTapSetup());
   const list = $("#tresoList");
   const paint = () => {
     const q = $("#tresoSearch").value.trim().toLowerCase();
@@ -206,40 +200,6 @@ function openWalletAdminSheet(m) {
   segSync(seg);
   sync();
   loadMoves();
-}
-
-/* Tap to Pay pas encore configuré (admins) : ce qu'il faut faire, en 3 étapes */
-function openTapSetup() {
-  const ov = document.createElement("div");
-  ov.className = "modal-ov sheet-ov";
-  ov.innerHTML =
-    '<div class="ps-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("tap_title")) + '">' +
-    '<div class="ps-grab" aria-hidden="true"></div>' +
-    '<div class="ps-head"><div class="ps-name"><div class="t">📲 ' + esc(t("tap_title")) + '</div><div class="s">' +
-    esc(t("tap_setup_sub")) + "</div></div>" +
-    '<button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
-    '<ol class="tap-steps"><li>' + esc(t("tap_setup_1")) + "</li><li>" + esc(t("tap_setup_2")) + "</li><li>" +
-    esc(t("tap_setup_3")) + "</li></ol></div>";
-  lockScroll();
-  let closed = false;
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    unlockScroll();
-    document.removeEventListener("keydown", onKey);
-    ov.classList.add("closing");
-    setTimeout(() => ov.remove(), 220);
-  };
-  const onKey = (e) => {
-    if (e.key === "Escape") close();
-  };
-  document.addEventListener("keydown", onKey);
-  ov.addEventListener("click", (e) => {
-    if (e.target === ov) close();
-  });
-  ov.querySelector("[data-x]").onclick = close;
-  document.body.appendChild(ov);
 }
 
 /* ---- onglet Achats ---- */

@@ -454,8 +454,6 @@ textarea{resize:none;min-height:56px}
 .ps-hrow b.minus{color:var(--red)}
 /* Tap to Pay (treso.js) */
 .tap-open{margin-top:10px}
-.treso-tap{margin-bottom:12px}
-.tap-steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.45}
 .tap-who{margin-bottom:14px}
 .tap-list{margin-top:-4px}
 .tap-picked{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px}

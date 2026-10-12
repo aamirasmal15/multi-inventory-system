@@ -461,10 +461,6 @@ const I18N = {
     tap_help: "L'appli SumUp s'ouvre avec le montant : le membre pose sa carte ou son téléphone. Son portefeuille est crédité au retour, après vérification auprès de SumUp.",
     tap_noapp: "L'appli SumUp ne s'est pas ouverte ? Installe-la sur ce téléphone, connecte-toi au compte de l'asso et active Tap to Pay.",
     tap_rcpt: (n) => "Tap to Pay (SumUp)" + (n ? " · encaissé par " + n : ""),
-    tap_setup_sub: "Pas encore activé : 3 étapes, une seule fois",
-    tap_setup_1: "Sur me.sumup.com → Développeurs → Affiliate keys, crée une clé.",
-    tap_setup_2: "Dans InvenTree → Paramètres → Plugins → Paiements, colle-la dans « Tap to Pay : clé affiliate SumUp » (et choisis le groupe du bureau si besoin).",
-    tap_setup_3: "Sur le téléphone qui encaisse : installe l'appli SumUp, connecte-toi au compte de l'asso et active Tap to Pay.",
     /* trésorerie (features/treso.js) */
     treso_title: "Trésorerie",
     treso_tab_wallets: "Portefeuilles",
@@ -995,10 +991,6 @@ const I18N = {
     tap_help: "The SumUp app opens with the amount: the member taps their card or phone. Their wallet is credited on return, once SumUp confirms.",
     tap_noapp: "The SumUp app did not open? Install it on this phone, log in to the association's account and enable Tap to Pay.",
     tap_rcpt: (n) => "Tap to Pay (SumUp)" + (n ? " · collected by " + n : ""),
-    tap_setup_sub: "Not enabled yet: 3 steps, once",
-    tap_setup_1: "On me.sumup.com → Developers → Affiliate keys, create a key.",
-    tap_setup_2: "In InvenTree → Settings → Plugins → Paiements, paste it in « Tap to Pay: SumUp affiliate key » (and pick the board group if needed).",
-    tap_setup_3: "On the collecting phone: install the SumUp app, log in to the association's account and enable Tap to Pay.",
     /* treasury (features/treso.js) */
     treso_title: "Treasury",
     treso_tab_wallets: "Wallets",

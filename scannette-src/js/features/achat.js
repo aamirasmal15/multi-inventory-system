@@ -26,7 +26,6 @@ const ACHAT = {
   topupMax: 99999,
   provider: "sumup", // "sumup" : formulaire dans la Scannette ; "helloasso" : page HelloAsso
   canTap: false, // encaisser des recharges en Tap to Pay (bureau, treso.js)
-  tapSetup: false, // admin, Tap to Pay pas encore configuré : on explique quoi faire
 };
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
@@ -47,7 +46,6 @@ async function loadAchatConfig() {
     ACHAT.topupMax = c.topup_max_cents || 99999;
     ACHAT.provider = c.provider || "sumup";
     ACHAT.canTap = !!c.can_tap;
-    ACHAT.tapSetup = !!c.tap_setup;
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
   }
