@@ -444,8 +444,12 @@ function renderReceipt(p) {
   const box = $("#receiptBody");
   // payé : preuve lisible de loin par le bureau (montant, jour, heure, articles)
   // et « payé il y a … » qui vit : une capture d'écran, elle, ne bouge pas
+  // au bout d'1 h : reçu « ancien », gris et figé — toujours consultable, mais
+  // il ne peut plus passer pour un paiement qui vient d'être fait
+  const old = paid && rcptOld(p);
   const proof = paid
-    ? '<div class="rcpt-proof">' +
+    ? '<div class="rcpt-proof' + (old ? " old" : "") + '">' +
+      (old ? '<div class="rp-old">' + esc(t("rcpt_old")) + "</div>" : "") +
       '<div class="ring">' + CHECK + "</div>" +
       '<div class="rp-k">' + esc(topup ? t("rcpt_proof_topup") : t("rcpt_proof_paid")) + "</div>" +
       '<div class="rp-amt">' + esc(p.total) + "</div>" +
@@ -459,7 +463,7 @@ function renderReceipt(p) {
       "<p>" + esc(p.failed ? t("buy_failed_warn") : t("buy_unpaid_warn")) + "</p></div>";
   box.innerHTML =
     proof +
-    '<div class="card rcpt' + (paid ? " big" : "") + '">' +
+    '<div class="card rcpt' + (paid ? " big" : "") + (old ? " old" : "") + '">' +
     '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t("rcpt_no", p.pk)) + "</div>" +
     // payé : date et acheteur sont déjà en grand au-dessus
     (paid ? "" : '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
@@ -495,14 +499,20 @@ function renderReceipt(p) {
   if ($("#rcptMailBtn")) $("#rcptMailBtn").onclick = () => resendReceipt(p.pk, $("#rcptMailBtn"));
   if ($("#rcptRetry")) $("#rcptRetry").onclick = () => openReceipt(p.pk, true);
   $("#rcptFridge").onclick = () => openFrigo();
-  // « il y a … » rafraîchi tant que ce reçu est affiché
+  // « il y a … » rafraîchi tant que ce reçu est affiché ; passé 1 h, il bascule en « ancien »
   clearInterval(RCPT_TICK);
-  if (paid && p.paid_at)
+  if (paid && p.paid_at && !old)
     RCPT_TICK = setInterval(() => {
       const el = $("#rcptAgo");
       if (!el || !$("#screen-receipt").classList.contains("active")) return clearInterval(RCPT_TICK);
+      if (rcptOld(p)) return renderReceipt(p);
       el.textContent = rcptAgo(p);
     }, 15000);
+}
+
+const RCPT_FRESH_MS = 3600e3; // durée de vie d'un reçu « frais » (1 h)
+function rcptOld(p) {
+  return !!p.paid_at && Date.now() - new Date(p.paid_at).getTime() > RCPT_FRESH_MS;
 }
 
 let RCPT_TICK = null;
