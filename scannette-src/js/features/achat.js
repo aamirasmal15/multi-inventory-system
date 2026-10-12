@@ -442,47 +442,56 @@ function renderReceipt(p) {
   const bal = eurCents(p.wallet_cents || 0);
   const okText = topup ? t("wal_topped_txt", bal) : p.method === "wallet" ? t("wal_paid_rcpt", bal) : t("rcpt_show");
   const box = $("#receiptBody");
-  // payé : preuve lisible de loin par le bureau (montant, jour, heure, articles)
-  // et « payé il y a … » qui vit : une capture d'écran, elle, ne bouge pas
-  // au bout de 15 min : reçu « ancien », gris et figé — toujours consultable, mais
-  // il ne peut plus passer pour un paiement qui vient d'être fait
+  // payé : bandeau vert (le vert suffit à dire « c'est bon ») avec montant, date,
+  // heure et « payé il y a … » qui vit — une capture d'écran, elle, ne bouge pas.
+  // Au bout de 15 min, reçu « ancien » : gris et figé, toujours consultable,
+  // mais il ne peut plus passer pour un paiement qui vient d'être fait.
   const old = paid && rcptOld(p);
-  const proof = paid
-    ? '<div class="rcpt-proof' + (old ? " old" : "") + '">' +
-      (old ? '<div class="rp-old">' + esc(t("rcpt_old")) + "</div>" : "") +
-      '<div class="ring">' + CHECK + "</div>" +
-      '<div class="rp-k">' + esc(topup ? t("rcpt_proof_topup") : t("rcpt_proof_paid")) + "</div>" +
-      '<div class="rp-amt">' + esc(p.total) + "</div>" +
-      '<div class="rp-when">' + esc(p.date) + " · " + esc(p.time) + "</div>" +
-      '<div class="rp-live"><span class="dot"></span><span id="rcptAgo">' + esc(rcptAgo(p)) + "</span></div>" +
-      '<div class="rp-who">' + esc(p.buyer) + "</div>" +
-      '<p class="rp-note">' + esc(okText) + "</p></div>"
+  const head = paid
+    ? '<div class="rcpt-ok' + (old ? " old" : "") + '">' +
+      (old ? '<div class="ro-old">' + esc(t("rcpt_old")) + "</div>" : "") +
+      '<div class="ro-top"><span class="ro-ic">' + CHECK + "</span>" +
+      '<div class="ro-l"><div class="ro-k">' + esc(topup ? t("rcpt_proof_topup") : t("rcpt_proof_paid")) + "</div>" +
+      '<div class="ro-when">' + esc(p.date) + " · " + esc(p.time) + "</div></div>" +
+      '<div class="ro-amt">' + esc(p.total) + "</div></div>" +
+      '<div class="ro-live"><span class="dot"></span><span id="rcptAgo">' + esc(rcptAgo(p)) + "</span>" +
+      '<span class="ro-who">' + esc(p.buyer) + "</span></div></div>"
     : '<div class="rcpt-hero ' + st + '">' +
       '<div class="ring">' + (p.failed ? "✕" : "…") + "</div>" +
       "<h2>" + esc(p.failed ? t("buy_failed") : t("buy_unpaid")) + "</h2>" +
       "<p>" + esc(p.failed ? t("buy_failed_warn") : t("buy_unpaid_warn")) + "</p></div>";
+  // articles : vignette, nom, « 2 × 0,70 € », total de la ligne
+  const thumb = (l) =>
+    topup
+      ? '<span class="ri-ph">👛</span>'
+      : l.thumbnail
+        ? '<img class="ri-img" src="' + esc(mediaUrl(l.thumbnail)) + '" alt="" onerror="thumbErr(this,\'loc\')">'
+        : '<span class="ri-ph">' + locBox().innerHTML + "</span>";
   box.innerHTML =
-    proof +
-    '<div class="card rcpt' + (paid ? " big" : "") + (old ? " old" : "") + '">' +
-    '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t("rcpt_no", p.pk)) + "</div>" +
-    // payé : date et acheteur sont déjà en grand au-dessus
-    (paid ? "" : '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
-      '<div class="rcpt-meta">' + esc(p.buyer) + "</div>") +
-    "</div>" +
-    '<span class="rcpt-badge ' + st + '">' +
-    esc(paid ? t("rcpt_paid") : p.failed ? t("rcpt_failed") : t("rcpt_pending")) + "</span></div>" +
-    '<div class="rcpt-lines">' +
+    head +
+    '<div class="card rcpt' + (old ? " old" : "") + '">' +
+    (paid
+      ? ""
+      : '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t("rcpt_no", p.pk)) + "</div>" +
+        '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
+        '<div class="rcpt-meta">' + esc(p.buyer) + "</div></div>" +
+        '<span class="rcpt-badge ' + st + '">' + esc(p.failed ? t("rcpt_failed") : t("rcpt_pending")) + "</span></div>") +
+    '<div class="rcpt-items">' +
     p.lines
       .map(
         (l) =>
-          '<div class="rcpt-line"><span class="q">' + l.quantity + "×</span><span class=\"n\">" + esc(topup ? t("wal_topup_line") : l.name) +
-          '</span><span class="p">' + esc(l.total) + "</span></div>",
+          '<div class="ri">' + thumb(l) +
+          '<div class="ri-m"><div class="ri-n">' + esc(topup ? t("wal_topup_line") : l.name) + "</div>" +
+          (topup ? "" : '<div class="ri-q">' + l.quantity + " × " + esc(l.unit) + "</div>") + "</div>" +
+          '<div class="ri-p">' + esc(l.total) + "</div></div>",
       )
       .join("") +
     "</div>" +
     '<div class="rcpt-total"><span>' + esc(t("buy_total")) + "</span><span>" + esc(p.total) + "</span></div>" +
-    '<div class="rcpt-pay">' +
-    esc(p.method === "wallet" ? t("wal_name") : p.channel === "tap" ? t("tap_rcpt", p.collected_by) : p.provider) + (p.payment_ref ? " · " + esc(p.payment_ref) : "") + "</div>" +
+    '<div class="rcpt-pay">' + esc(t("rcpt_no", p.pk)) + " · " +
+    esc(p.method === "wallet" ? t("wal_name") : p.channel === "tap" ? t("tap_rcpt", p.collected_by) : p.provider) +
+    (p.payment_ref ? " · " + esc(p.payment_ref) : "") + "</div>" +
+    (paid ? '<p class="rcpt-note">' + esc(okText) + "</p>" : "") +
     (p.warning ? '<div class="rcpt-warn">⚠ ' + esc(p.warning) + "</div>" : "") +
     "</div>" +
     (paid

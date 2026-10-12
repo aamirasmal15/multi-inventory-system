@@ -123,8 +123,10 @@ def receipt_context(p):
                 "quantity": ln.quantity,
                 "unit": euros(ln.unit_cents),
                 "total": euros(ln.total_cents),
+                # vignette de l'article (ecran de recu de la Scannette)
+                "thumbnail": ln.part.get_thumbnail_url() if ln.part_id and ln.part and ln.part.image else None,
             }
-            for ln in p.lines.all()
+            for ln in p.lines.select_related("part")
         ]
     )
     return {
