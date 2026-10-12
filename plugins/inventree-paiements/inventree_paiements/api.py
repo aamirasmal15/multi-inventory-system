@@ -62,6 +62,8 @@ def purchase_data(p):
         "failed": p.status != "paid" and getattr(p, "sumup_status", None) in ("FAILED", "EXPIRED"),
         "date": ctx["date"],
         "time": ctx["time"],
+        # instant du paiement (UTC, ISO) : « payé il y a 2 min » en direct sur le reçu
+        "paid_at": p.paid_at.isoformat() if p.paid_at else None,
         "buyer": ctx["buyer"],
         "lines": ctx["lines"],
         "count": ctx["count"],

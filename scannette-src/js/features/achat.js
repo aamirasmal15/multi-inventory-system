@@ -440,18 +440,31 @@ function renderReceipt(p) {
   const topup = p.kind === "topup";
   const st = paid ? "ok" : p.failed ? "bad" : "wait";
   const bal = eurCents(p.wallet_cents || 0);
-  const okTitle = topup ? t("wal_topped_title") : t("rcpt_thanks");
   const okText = topup ? t("wal_topped_txt", bal) : p.method === "wallet" ? t("wal_paid_rcpt", bal) : t("rcpt_show");
   const box = $("#receiptBody");
+  // payé : preuve lisible de loin par le bureau (montant, jour, heure, articles)
+  // et « payé il y a … » qui vit : une capture d'écran, elle, ne bouge pas
+  const proof = paid
+    ? '<div class="rcpt-proof">' +
+      '<div class="ring">' + CHECK + "</div>" +
+      '<div class="rp-k">' + esc(topup ? t("rcpt_proof_topup") : t("rcpt_proof_paid")) + "</div>" +
+      '<div class="rp-amt">' + esc(p.total) + "</div>" +
+      '<div class="rp-when">' + esc(rcptDay(p)) + " · " + esc(p.time) + "</div>" +
+      '<div class="rp-live"><span class="dot"></span><span id="rcptAgo">' + esc(rcptAgo(p)) + "</span></div>" +
+      '<div class="rp-who">' + esc(p.buyer) + "</div>" +
+      '<p class="rp-note">' + esc(okText) + "</p></div>"
+    : '<div class="rcpt-hero ' + st + '">' +
+      '<div class="ring">' + (p.failed ? "✕" : "…") + "</div>" +
+      "<h2>" + esc(p.failed ? t("buy_failed") : t("buy_unpaid")) + "</h2>" +
+      "<p>" + esc(p.failed ? t("buy_failed_warn") : t("buy_unpaid_warn")) + "</p></div>";
   box.innerHTML =
-    '<div class="rcpt-hero ' + st + '">' +
-    '<div class="ring">' + (paid ? CHECK : p.failed ? "✕" : "…") + "</div>" +
-    "<h2>" + esc(paid ? okTitle : p.failed ? t("buy_failed") : t("buy_unpaid")) + "</h2>" +
-    "<p>" + esc(paid ? okText : p.failed ? t("buy_failed_warn") : t("buy_unpaid_warn")) + "</p></div>" +
-    '<div class="card rcpt">' +
+    proof +
+    '<div class="card rcpt' + (paid ? " big" : "") + '">' +
     '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t("rcpt_no", p.pk)) + "</div>" +
-    '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
-    '<div class="rcpt-meta">' + esc(p.buyer) + "</div></div>" +
+    // payé : date et acheteur sont déjà en grand au-dessus
+    (paid ? "" : '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
+      '<div class="rcpt-meta">' + esc(p.buyer) + "</div>") +
+    "</div>" +
     '<span class="rcpt-badge ' + st + '">' +
     esc(paid ? t("rcpt_paid") : p.failed ? t("rcpt_failed") : t("rcpt_pending")) + "</span></div>" +
     '<div class="rcpt-lines">' +
@@ -482,6 +495,35 @@ function renderReceipt(p) {
   if ($("#rcptMailBtn")) $("#rcptMailBtn").onclick = () => resendReceipt(p.pk, $("#rcptMailBtn"));
   if ($("#rcptRetry")) $("#rcptRetry").onclick = () => openReceipt(p.pk, true);
   $("#rcptFridge").onclick = () => openFrigo();
+  // « il y a … » rafraîchi tant que ce reçu est affiché
+  clearInterval(RCPT_TICK);
+  if (paid && p.paid_at)
+    RCPT_TICK = setInterval(() => {
+      const el = $("#rcptAgo");
+      if (!el || !$("#screen-receipt").classList.contains("active")) return clearInterval(RCPT_TICK);
+      el.textContent = rcptAgo(p);
+    }, 15000);
+}
+
+let RCPT_TICK = null;
+/* « Aujourd'hui » / « Hier » / date du paiement */
+function rcptDay(p) {
+  if (!p.paid_at) return p.date;
+  const d = new Date(p.paid_at),
+    now = new Date();
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  if (same(d, now)) return t("rcpt_today");
+  if (same(d, new Date(now.getTime() - 864e5))) return t("rcpt_yesterday");
+  return p.date;
+}
+/* « payé à l'instant » / « il y a 3 min » / « il y a 2 h » / « le 12/10/2026 » */
+function rcptAgo(p) {
+  if (!p.paid_at) return t("rcpt_paid");
+  const s = Math.max(0, (Date.now() - new Date(p.paid_at).getTime()) / 1000);
+  if (s < 60) return t("rcpt_ago_now");
+  if (s < 3600) return t("rcpt_ago_min", Math.floor(s / 60));
+  if (s < 86400) return t("rcpt_ago_h", Math.floor(s / 3600));
+  return t("rcpt_ago_day", p.date);
 }
 
 /* le PDF est protégé par le token : téléchargement via fetch + blob */
