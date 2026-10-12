@@ -258,6 +258,12 @@ async function frigoPay(via) {
 function frigoRenderManage(box, list) {
   box.className = "frigo-manage";
   box.innerHTML = "";
+  // trésorerie (portefeuilles, achats de tous, export) : treso.js
+  const tb = document.createElement("button");
+  tb.className = "btn btn-ghost btn-block treso-open";
+  tb.innerHTML = "💶 " + esc(t("treso_title"));
+  tb.onclick = openTreso;
+  box.appendChild(tb);
   if (!list.length) {
     box.insertAdjacentHTML("beforeend", '<div class="card"><div class="skeleton">' + esc(t("frigo_empty_manage")) + "</div></div>");
     return;

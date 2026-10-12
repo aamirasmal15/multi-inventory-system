@@ -165,6 +165,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             path("wallet/topup", api.WalletTopupView.as_view(plugin=self), name="wallet-topup"),
             path("wallet/pay", api.WalletPayView.as_view(plugin=self), name="wallet-pay"),
             path("wallet/admin", api.WalletAdminView.as_view(plugin=self), name="wallet-admin"),
+            path("treso/export.csv", api.TresoExportView.as_view(plugin=self), name="treso-export"),
             path("purchase/<int:pk>", api.PurchaseView.as_view(plugin=self), name="purchase"),
             path("purchase/<int:pk>/receipt.pdf", api.ReceiptView.as_view(plugin=self), name="receipt"),
             path("purchase/<int:pk>/email", api.ReceiptEmailView.as_view(plugin=self), name="receipt-email"),
@@ -576,7 +577,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         w = Wallet.objects.filter(user=user).first()
         entries = []
         if w is not None:
-            for e in WalletEntry.objects.filter(wallet=w).select_related("purchase")[:limit]:
+            for e in WalletEntry.objects.filter(wallet=w).select_related("purchase", "by")[:limit]:
                 entries.append({
                     "date": tz.localtime(e.created_at).strftime("%d/%m/%Y %H:%M"),
                     "kind": e.kind,
@@ -584,6 +585,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
                     "balance_after": e.balance_after,
                     "purchase": e.purchase_id,
                     "label": e.note or (e.purchase.summary(80) if e.purchase else ""),
+                    "by": (e.by.get_full_name() or e.by.username) if e.by else "",
                 })
         bal = w.balance_cents if w else 0
         return {"balance_cents": bal, "balance": euros(bal), "entries": entries}

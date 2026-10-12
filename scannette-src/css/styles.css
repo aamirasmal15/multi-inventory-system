@@ -397,6 +397,25 @@ textarea{resize:none;min-height:56px}
 .wal-chips{grid-template-columns:repeat(4,minmax(0,1fr))}
 .wal-note{margin:16px 0 0}
 .purch-row .pt.plus{color:var(--primary)}
+/* trésorerie (treso.js) */
+.treso-open{margin-bottom:12px}
+.treso-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.treso-search{margin-bottom:12px}
+.purch-row .pt.zero{color:var(--muted);font-weight:600}
+.treso-filters{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.treso-filters label{display:flex;flex-direction:column;gap:4px;min-width:0}
+.treso-filters label.wide{grid-column:1/-1}
+.treso-filters span{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.treso-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.treso-sum div{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.treso-sum span{font-size:11px;color:var(--muted);font-weight:600}
+.treso-sum b{font-size:16px;color:var(--green);white-space:nowrap}
+.treso-more{font-size:12px;color:var(--muted);margin:0 0 10px;text-align:center}
+#tresoCsv{margin-bottom:12px}
+.treso-sign{margin-bottom:16px}
+.treso-note{margin:14px 0}
+.ps-hrow b.plus{color:var(--green)}
+.ps-hrow b.minus{color:var(--red)}
 /* mode Gérer : aide en texte, puis une ligne par produit (gabarit des Lieux,
    .loc-row) : bouton prix (ouvre la fenêtre de prix), stock de chaque article */
 .frigo-manage{display:flex;flex-direction:column;gap:6px}

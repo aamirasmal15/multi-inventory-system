@@ -530,6 +530,20 @@
     <div id="receiptBody"></div>
   </section>
 
+  <!-- TRÉSORERIE du frigo, admins (treso.js) -->
+  <section class="screen" id="screen-treso">
+    <div class="crumb">
+      <button class="iconbtn" id="backBtnTreso"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+      <span data-i18n="frigo_crumb">Frigo</span>
+    </div>
+    <h1 class="title" data-i18n="treso_title">Trésorerie</h1>
+    <div class="seg" id="tresoSeg">
+      <button type="button" class="seg-btn active" data-tab="wallets"><span data-i18n="treso_tab_wallets">Portefeuilles</span></button>
+      <button type="button" class="seg-btn" data-tab="purchases"><span data-i18n="treso_tab_purch">Achats</span></button>
+    </div>
+    <div id="tresoBody"></div>
+  </section>
+
   <!-- MES ACHATS (achat.js) -->
   <section class="screen" id="screen-purchases">
     <div class="crumb">
@@ -588,6 +602,7 @@
 <script src="js/features/loan.js?v=__ASSETV__"></script>
 <script src="js/features/achat.js?v=__ASSETV__"></script>
 <script src="js/features/frigo.js?v=__ASSETV__"></script>
+<script src="js/features/treso.js?v=__ASSETV__"></script>
 <script src="js/features/account.js?v=__ASSETV__"></script>
 <script src="js/features/users.js?v=__ASSETV__"></script>
 <script src="js/features/create.js?v=__ASSETV__"></script>

@@ -63,6 +63,7 @@ def purchase_data(p):
         "lines": ctx["lines"],
         "count": ctx["count"],
         "total": ctx["total"],
+        "amount_cents": p.amount_cents,
         "provider": ctx["provider"],
         "payment_ref": p.payment_ref,
         "stock_removed": p.stock_removed,
@@ -203,18 +204,117 @@ class CheckoutView(PluginView):
         })
 
 
+def treso_queryset(request):
+    """Achats payes de tous les membres, filtres ?user=<pk>&from=AAAA-MM-JJ&to=AAAA-MM-JJ (bornes incluses)."""
+    import datetime
+
+    from django.utils import timezone
+
+    from .models import Purchase
+
+    qs = Purchase.objects.filter(status=Purchase.STATUS_PAID).select_related("user", "location").prefetch_related("lines")
+    q = request.query_params
+    if q.get("user"):
+        try:
+            qs = qs.filter(user_id=int(q["user"]))
+        except ValueError:
+            pass
+    for key, op in (("from", "gte"), ("to", "lt")):
+        try:
+            d = datetime.date.fromisoformat(q.get(key) or "")
+        except ValueError:
+            continue
+        if key == "to":
+            d += datetime.timedelta(days=1)
+        start = timezone.make_aware(datetime.datetime.combine(d, datetime.time.min))
+        qs = qs.filter(**{f"paid_at__{op}": start})
+    return qs.order_by("-paid_at", "-pk")
+
+
 class PurchaseListView(PluginView):
-    """« Mes achats » : les 30 derniers achats payes de l'utilisateur."""
+    """« Mes achats » : les 30 derniers achats payes de l'utilisateur.
+
+    ?all=1 (admins, ecran Tresorerie) : ceux de tous les membres, filtres par
+    membre et periode (treso_queryset), 300 au plus.
+    """
 
     def get(self, request):
         from .models import Purchase
 
+        if request.query_params.get("all"):
+            if not is_admin(request.user):
+                return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+            qs = treso_queryset(request)
+            total = sum(qs.values_list("amount_cents", flat=True))
+            return Response({"total_cents": total, "count": qs.count(), "purchases": [purchase_data(p) for p in qs[:300]]})
         qs = (
             Purchase.objects.filter(user=request.user, status=Purchase.STATUS_PAID)
             .select_related("user", "location")
             .prefetch_related("lines")[:30]
         )
         return Response([purchase_data(p) for p in qs])
+
+
+class TresoExportView(PluginView):
+    """Admins : export CSV (Excel FR : « ; », virgule decimale, UTF-8 BOM) des
+    achats, recharges et corrections de solde d'une periode (memes filtres)."""
+
+    def get(self, request):
+        import csv
+        import io
+
+        from django.utils import timezone
+
+        from .models import WalletEntry
+        from .receipt import buyer_name
+
+        if not is_admin(request.user):
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        eur = lambda c: f"{c / 100:.2f}".replace(".", ",")
+        rows = []
+        for p in treso_queryset(request):
+            topup = p.kind == p.KIND_TOPUP
+            rows.append((
+                p.paid_at,
+                p.pk,
+                buyer_name(p.user),
+                p.user.username if p.user else "",
+                "Recharge" if topup else "Achat",
+                "Portefeuille" if p.method == p.METHOD_WALLET else "Carte (SumUp)",
+                "Recharge du portefeuille" if topup else p.summary(500),
+                eur(p.amount_cents),
+                p.payment_ref,
+                p.warning,
+            ))
+        # corrections des admins : pas d'achat associe, mais elles bougent les soldes
+        adj = WalletEntry.objects.filter(kind=WalletEntry.KIND_ADJUST).select_related("wallet__user", "by")
+        q = request.query_params
+        if q.get("user"):
+            try:
+                adj = adj.filter(wallet__user_id=int(q["user"]))
+            except ValueError:
+                pass
+        for e in adj:
+            d = timezone.localdate(e.created_at).isoformat()
+            if (q.get("from") and d < q["from"]) or (q.get("to") and d > q["to"]):
+                continue
+            u = e.wallet.user
+            rows.append((
+                e.created_at, "", buyer_name(u), u.username, "Correction", "Portefeuille",
+                e.note + (f" (par {buyer_name(e.by)})" if e.by else ""), eur(e.amount_cents), "", "",
+            ))
+        rows.sort(key=lambda r: r[0], reverse=True)
+        buf = io.StringIO()
+        buf.write("\ufeff")
+        w = csv.writer(buf, delimiter=";")
+        w.writerow(["Date", "Heure", "N° achat", "Membre", "Identifiant", "Type", "Moyen", "Détail", "Montant (€)", "Réf. SumUp", "Anomalie"])
+        for r in rows:
+            dt = timezone.localtime(r[0])
+            w.writerow([dt.strftime("%d/%m/%Y"), dt.strftime("%H:%M"), *r[1:]])
+        resp = HttpResponse(buf.getvalue(), content_type="text/csv; charset=utf-8")
+        tag = "_".join(filter(None, [q.get("from"), q.get("to")])) or timezone.localdate().isoformat()
+        resp["Content-Disposition"] = f'attachment; filename="tresorerie-frigo-{tag}.csv"'
+        return resp
 
 
 class PurchaseView(PluginView):
@@ -365,10 +465,31 @@ class WalletAdminView(PluginView):
 
         if not is_admin(request.user):
             return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
-        return Response([
-            {"user": w.user_id, "username": w.user.username, "name": buyer_name(w.user), "balance_cents": w.balance_cents}
-            for w in Wallet.objects.select_related("user").filter(balance_cents__gt=0)
-        ])
+        from django.contrib.auth import get_user_model
+
+        # un membre precis : solde + derniers mouvements (fenetre de correction)
+        if request.query_params.get("user"):
+            try:
+                user = get_user_model().objects.get(pk=int(request.query_params["user"]))
+            except (TypeError, ValueError, get_user_model().DoesNotExist):
+                return Response({"detail": "Membre introuvable."}, status=status.HTTP_404_NOT_FOUND)
+            data = self.plugin.wallet_data(user, limit=50)
+            data.update({"user": user.pk, "username": user.username, "name": buyer_name(user)})
+            return Response(data)
+        # tous les membres actifs, avec ou sans portefeuille (crediter un nouveau
+        # membre qui paie en especes) ; plus gros soldes d'abord
+        bal = dict(Wallet.objects.values_list("user_id", "balance_cents"))
+        users = get_user_model().objects.filter(is_active=True)
+        rows = [
+            {"user": u.pk, "username": u.username, "name": buyer_name(u), "balance_cents": bal.get(u.pk, 0)}
+            for u in users
+        ]
+        rows.sort(key=lambda r: (-r["balance_cents"], r["name"].lower()))
+        return Response({
+            "total_cents": sum(bal.values()),
+            "count": sum(1 for v in bal.values() if v > 0),
+            "members": rows,
+        })
 
     def post(self, request):
         from django.contrib.auth import get_user_model
