@@ -148,8 +148,7 @@ function openWalletSheet(need) {
       "</div>" +
       '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
       '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min))) + "</div>" +
-      '<button class="btn btn-primary btn-block" data-go disabled></button>' +
-      '<p class="ps-note wal-note">' + esc(t("wal_explain", ACHAT.provider === "helloasso" ? "HelloAsso" : "SumUp")) + "</p>"
+      '<button class="btn btn-primary btn-block" data-go disabled></button>'
     : '<p class="ps-note wal-note">' + esc(t("wal_nocard")) + "</p>";
   const ov = document.createElement("div");
   ov.className = "modal-ov sheet-ov";
