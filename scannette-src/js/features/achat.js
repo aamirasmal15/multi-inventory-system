@@ -294,20 +294,12 @@ function loadSumupSdk() {
   return sumupSdkPromise;
 }
 
-/* bloc « paiement sécurisé » sous le formulaire de carte : ce qui protège
-   vraiment le payeur (formulaire SumUp, 3-D Secure, prestataire agréé) */
-function payTrustHtml() {
-  const ic = (d) =>
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + d + "</svg>";
-  const row = (d, k) => '<li>' + ic(d) + "<span>" + esc(t(k)) + "</span></li>";
+/* une phrase rassurante sous le formulaire de carte, avec le montant */
+function payTrustHtml(total) {
   return (
-    '<div class="pay-trust">' +
-    '<div class="pay-trust-h">' + ic('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>') +
-    "<b>" + esc(t("trust_title")) + "</b></div><ul>" +
-    row('<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z"/><path d="m9 12 2 2 4-4"/>', "trust_card") +
-    row('<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>', "trust_3ds") +
-    row('<path d="M3 21h18M5 21V10M19 21V10M9 21v-6h6v6M12 3 3 8h18Z"/>', "trust_psp") +
-    "</ul></div>"
+    '<p class="pay-safe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>' +
+    esc(t("pay_safe", total)) + "</span></p>"
   );
 }
 
@@ -337,8 +329,8 @@ function openPaySheet(r, recap) {
         .join("") +
       "</details>" +
       '<div class="pay-widget"><div id="sumupCard"><div class="skeleton">' + esc(t("loading")) + "</div></div></div>" +
-      payTrustHtml() +
-      '<p class="pay-note">' + esc(t("buy_secure")) + "</p></div>";
+      payTrustHtml(r.total) +
+      "</div>";
     lockScroll();
     let closed = false;
     const close = (paid) => {

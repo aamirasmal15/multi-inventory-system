@@ -309,12 +309,8 @@ textarea{resize:none;min-height:56px}
    contenant un champ ou un bouton n'est jamais masqué. */
 #sumupCard .sumup-payment-widget-theme>div>div>div:first-child:not(:has(iframe,button,input,form,a,img)){display:none}
 .pay-note{font-size:12px;color:var(--muted);text-align:center;margin:12px 0 0}
-.pay-trust{margin-top:12px;background:var(--green-light);border:1px solid var(--green);border-radius:12px;padding:12px 14px}
-.pay-trust-h{display:flex;align-items:center;gap:8px;color:var(--green);font-size:14px;margin-bottom:8px}
-.pay-trust-h svg{width:18px;height:18px;flex:none}
-.pay-trust ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
-.pay-trust li{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.4;color:var(--text)}
-.pay-trust li svg{width:15px;height:15px;flex:none;margin-top:1px;color:var(--green)}
+.pay-safe{display:flex;align-items:flex-start;justify-content:center;gap:7px;font-size:12.5px;line-height:1.45;color:var(--muted);text-align:left;margin:12px 6px 0}
+.pay-safe svg{width:15px;height:15px;flex:none;margin-top:1px;color:var(--green)}
 /* reçu : même pastille que l'écran « Stock mis à jour » (.done .ring) */
 .rcpt-hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 10px 16px}
 .rcpt-hero .ring{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:var(--green-light);border:1px solid var(--green);color:var(--green);margin-bottom:14px;font-size:30px;font-weight:700}
