@@ -79,6 +79,28 @@ class SumUpClient:
                 return None
             raise
 
+    def get_transaction(self, transaction_code):
+        """Transaction d'apres son code SumUp (TAAA...), ou None (404)."""
+        try:
+            return self._call(
+                "GET",
+                f"/v2.1/merchants/{self.merchant_code}/transactions?transaction_code={requests.utils.quote(transaction_code)}",
+            )
+        except SumUpError as e:
+            if e.status in (400, 404):
+                return None
+            raise
+
+    def transactions_between(self, oldest, newest, limit=50):
+        """Transactions du compte entre deux instants (datetime UTC), plus recentes d'abord."""
+        q = (
+            f"limit={limit}&order=descending"
+            f"&oldest_time={requests.utils.quote(oldest.strftime('%Y-%m-%dT%H:%M:%SZ'))}"
+            f"&newest_time={requests.utils.quote(newest.strftime('%Y-%m-%dT%H:%M:%SZ'))}"
+        )
+        res = self._call("GET", f"/v2.1/merchants/{self.merchant_code}/transactions/history?{q}") or {}
+        return res.get("items") or []
+
     def get_checkout(self, checkout_id):
         """GET /checkouts/<id> -> status PENDING / PAID / FAILED / EXPIRED."""
         return self._call("GET", f"/v0.1/checkouts/{checkout_id}")

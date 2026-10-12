@@ -120,8 +120,10 @@ function enterApp() {
   const buyBack = sessionStorage.getItem("achat_open");
   if (buyBack) {
     sessionStorage.removeItem("achat_open");
+    const buyTx = sessionStorage.getItem("achat_tx");
+    sessionStorage.removeItem("achat_tx");
     history.replaceState(null, "", BASE);
-    openReceipt(Number(buyBack), true);
+    openReceipt(Number(buyBack), true, buyTx);
     return;
   }
   // arrivée par le QR du frigo : page d'achat directement

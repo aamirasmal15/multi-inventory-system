@@ -350,7 +350,8 @@ class PurchaseView(PluginView):
             return Response({"detail": "Achat introuvable."}, status=status.HTTP_404_NOT_FOUND)
         if self.plugin.is_configured(p.provider):
             try:
-                p = self.plugin.confirm(p)
+                # Tap to Pay : code de transaction renvoye par l'appli SumUp (reverifie)
+                p = self.plugin.confirm(p, tx_code=request.query_params.get("tx") or None)
             except PaymentError as e:
                 # verification impossible pour l'instant : l'etat connu reste affiche
                 logger.warning("Paiements : vérification de l'achat #%s impossible : %s", p.pk, e)

@@ -517,17 +517,22 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         return {"checkout_id": checkout_id}
 
     # ---- confirmation ----
-    def confirm(self, purchase):
+    def confirm(self, purchase, tx_code=None):
         """Verifie le paiement aupres de SumUp ; retire le stock une seule fois.
 
         Idempotent : appele au retour de l'utilisateur, a chaque webhook et a
-        chaque relance de l'ecran de recu. Renvoie le Purchase a jour.
+        chaque relance de l'ecran de recu. tx_code : code de transaction
+        renvoye par l'appli SumUp (Tap to Pay), toujours reverifie chez SumUp.
+        Renvoie le Purchase a jour.
         """
         from .models import Purchase
 
         if purchase.status == Purchase.STATUS_PAID or not purchase.checkout_id:
             return purchase
-        ref = self._tap_paid(purchase) if purchase.channel == Purchase.CHANNEL_TAP else self._sumup_paid(purchase)
+        if purchase.channel == Purchase.CHANNEL_TAP:
+            ref = self._tap_paid(purchase, tx_code)
+        else:
+            ref = self._sumup_paid(purchase)
         if ref is None:
             return purchase  # pas (encore) paye
 
@@ -536,6 +541,10 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         with transaction.atomic(), guard.system_action():
             p = Purchase.objects.select_for_update().get(pk=purchase.pk)
             if p.status == Purchase.STATUS_PAID:
+                return p
+            # une transaction SumUp ne paie qu'un seul achat (Tap to Pay : rapprochement)
+            if Purchase.objects.filter(payment_ref=str(ref)[:64]).exclude(pk=p.pk).exists():
+                logger.error("SumUp : transaction %s déjà rattachée à un autre achat (#%s)", ref, p.pk)
                 return p
             p.status = Purchase.STATUS_PAID
             p.paid_at = timezone.now()
@@ -683,27 +692,75 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         tx = data.get("transactions") or []
         return data.get("transaction_code") or (tx[0].get("transaction_code") if tx else "") or p.checkout_id
 
-    def _tap_paid(self, p):
+    # fenetre ou chercher l'encaissement d'une recharge Tap to Pay apres sa creation
+    TAP_WINDOW = (-60, 30 * 60)  # secondes
+
+    def _tap_paid(self, p, tx_code=None):
         """Code de transaction si l'appli SumUp a encaisse la recharge (Tap to Pay), sinon None.
 
-        Retrouvee par notre reference (foreign_transaction_id) ; statut,
-        montant et devise verifies.
+        L'appli SumUp, ouverte depuis une page web, ne garde pas notre
+        reference (foreign-tx-id) sur la transaction. On la retrouve donc :
+        1. par notre reference, au cas ou elle serait gardee ;
+        2. par le code de transaction renvoye par l'appli au retour (smp-tx-code) ;
+        3. a defaut (code absent, rattrapage planifie) : LA transaction reussie
+           du meme montant encaissee juste apres la creation de la recharge,
+           seulement si elle est unique et pas deja rattachee a un autre achat.
+        Toujours verifie : statut, montant, devise, heure.
         """
-        data = self.sumup().find_transaction(p.checkout_id)
+        import datetime
+
+        from .models import Purchase
+
+        client = self.sumup()
+        data = client.find_transaction(p.checkout_id)
         if isinstance(data, list):
             data = data[0] if data else None
-        if not data or data.get("status") != "SUCCESSFUL":
+        if not data and tx_code:
+            data = client.get_transaction(str(tx_code)[:64])
+        if not data:
+            start = p.created_at + datetime.timedelta(seconds=self.TAP_WINDOW[0])
+            end = p.created_at + datetime.timedelta(seconds=self.TAP_WINDOW[1])
+            used = set(Purchase.objects.exclude(pk=p.pk).exclude(payment_ref="").values_list("payment_ref", flat=True))
+            matches = [
+                t for t in client.transactions_between(start, min(end, timezone.now()))
+                if t.get("status") == "SUCCESSFUL"
+                and self._cents_of(t) == p.amount_cents
+                and t.get("transaction_code") not in used
+            ]
+            if len(matches) != 1:
+                if len(matches) > 1:
+                    logger.warning("Tap to Pay : %s transactions possibles pour la recharge #%s, rapprochement manuel", len(matches), p.pk)
+                return None
+            data = matches[0]
+        if data.get("status") != "SUCCESSFUL":
             return None
-        try:
-            amount = Decimal(str(data.get("amount"))) * 100
-        except (ArithmeticError, ValueError, TypeError):
-            amount = Decimal(-1)
-        if not amount.is_finite() or int(amount.quantize(Decimal("1"), ROUND_HALF_UP)) != p.amount_cents or (
-            data.get("currency") != "EUR"
-        ):
+        if self._cents_of(data) != p.amount_cents or data.get("currency", "EUR") != "EUR":
             logger.error("SumUp : transaction Tap to Pay incohérente avec l'achat #%s : %s", p.pk, data)
             return None
+        # un vieux code de transaction ne peut pas payer une nouvelle recharge
+        ts = data.get("timestamp")
+        if ts:
+            try:
+                when = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            except ValueError:
+                when = None
+            if when and not (
+                p.created_at + datetime.timedelta(seconds=self.TAP_WINDOW[0])
+                <= when
+                <= p.created_at + datetime.timedelta(seconds=self.TAP_WINDOW[1])
+            ):
+                logger.error("SumUp : transaction %s hors de la fenêtre de la recharge #%s", data.get("transaction_code"), p.pk)
+                return None
         return data.get("transaction_code") or p.checkout_id
+
+    @staticmethod
+    def _cents_of(t):
+        """Montant d'une transaction SumUp en centimes (-1 si illisible)."""
+        try:
+            amount = Decimal(str(t.get("amount"))) * 100
+            return int(amount.quantize(Decimal("1"), ROUND_HALF_UP)) if amount.is_finite() else -1
+        except (ArithmeticError, ValueError, TypeError):
+            return -1
 
     def _remove_stock(self, p):
         """Preleve chaque ligne dans le frigo ; consigne les anomalies sans bloquer.

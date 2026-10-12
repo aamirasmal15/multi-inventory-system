@@ -381,7 +381,7 @@ function openPaySheet(r, recap) {
 /* ---- reçu ----
    fresh : on sort du paiement à l'instant -> la confirmation du prestataire
    peut avoir quelques secondes de retard, on relit l'état plusieurs fois */
-async function openReceipt(pk, fresh) {
+async function openReceipt(pk, fresh, tx) {
   rememberView("receipt", pk);
   show("#screen-receipt");
   const box = $("#receiptBody");
@@ -389,7 +389,7 @@ async function openReceipt(pk, fresh) {
   let p = null;
   for (let i = 0; i < (fresh ? 6 : 1); i++) {
     try {
-      p = await api("/plugin/paiements/purchase/" + pk);
+      p = await api("/plugin/paiements/purchase/" + pk + (tx ? "?tx=" + encodeURIComponent(tx) : ""));
     } catch (e) {
       toast(e.message, "bad");
       gotoScan();

@@ -12,6 +12,9 @@
   // Retour d'une étape 3-D Secure SumUp en pleine page : ?achat=<pk> (même mémorisation)
   const dlBuy = new URLSearchParams(window.location.search).get("achat");
   if (dlBuy && /^\d+$/.test(dlBuy)) sessionStorage.setItem("achat_open", dlBuy);
+  // retour de l'appli SumUp (Tap to Pay) : code de la transaction, revérifié par le serveur
+  const dlTx = new URLSearchParams(window.location.search).get("smp-tx-code");
+  if (dlBuy && dlTx && /^[A-Za-z0-9]{4,40}$/.test(dlTx)) sessionStorage.setItem("achat_tx", dlTx);
   // QR de la porte du frigo : /frigo -> ?frigo=1 (même mémorisation). La
   // connexion passe en mode frigo tant que la demande est en attente.
   if (new URLSearchParams(window.location.search).has("frigo")) sessionStorage.setItem("frigo_open", "1");
