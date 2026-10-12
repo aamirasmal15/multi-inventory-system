@@ -14,7 +14,17 @@
    - plugin absent ou non configuré -> le frigo l'annonce, rien d'autre ne change.
    ========================================================================== */
 
-const ACHAT = { enabled: false, googlePay: null, fridge: null, admin: false, wallet: 0, minCard: 100, topupMax: 5000 };
+const ACHAT = {
+  enabled: false,
+  googlePay: null,
+  fridge: null,
+  admin: false,
+  wallet: 0,
+  minCard: 100,
+  topupMin: 100,
+  topupMax: 5000,
+  provider: "sumup", // "sumup" : formulaire dans la Scannette ; "helloasso" : page HelloAsso
+};
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
 
@@ -29,7 +39,9 @@ async function loadAchatConfig() {
     ACHAT.fridge = c.fridge || null;
     ACHAT.admin = !!c.admin;
     ACHAT.minCard = c.min_card_cents || 100;
+    ACHAT.topupMin = c.topup_min_cents || 100;
     ACHAT.topupMax = c.topup_max_cents || 5000;
+    ACHAT.provider = c.provider || "sumup";
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
   }
@@ -118,7 +130,7 @@ async function fridgeBuy(lines, recap, cents, opts) {
 const TOPUP_CHIPS = [200, 500, 1000, 2000];
 function openWalletSheet(need) {
   need = need || 0;
-  const min = ACHAT.minCard,
+  const min = ACHAT.topupMin,
     max = ACHAT.topupMax;
   // montant proposé : le plus petit raccourci qui couvre le panier
   const pre = TOPUP_CHIPS.find((c) => c >= Math.max(need, min)) || TOPUP_CHIPS[TOPUP_CHIPS.length - 1];
@@ -140,7 +152,7 @@ function openWalletSheet(need) {
     '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
     '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min), eurCents(max))) + "</div>" +
     '<button class="btn btn-primary btn-block" data-go disabled></button>' +
-    '<p class="ps-note wal-note">' + esc(t("wal_explain")) + "</p></div>";
+    '<p class="ps-note wal-note">' + esc(t("wal_explain", ACHAT.provider === "helloasso" ? "HelloAsso" : "SumUp")) + "</p></div>";
   const input = ov.querySelector("#walInput"),
     go = ov.querySelector("[data-go]");
   const cents = () => {
@@ -193,6 +205,7 @@ function openWalletSheet(need) {
       return;
     }
     close();
+    if (r.redirect_url) return goHelloAsso(r);
     openPaySheet(r, [{ name: t("wal_topup_line"), quantity: 1, total: r.total }]);
   };
   document.body.appendChild(ov);
@@ -222,12 +235,22 @@ async function payCheckout(body, recap, opts) {
   } catch (_) {}
   // la feuille s'ouvre tout de suite ; le formulaire s'y monte dès que le
   // script SumUp est là (préchargé à l'ouverture du frigo / de la fiche)
+  if (r.redirect_url) return goHelloAsso(r);
   return openPaySheet(r, recap);
 }
 
 /* préchargement silencieux du script SumUp à l'ouverture du frigo */
 function prefetchSumup() {
-  if (ACHAT.enabled) loadSumupSdk().catch(() => {});
+  if (ACHAT.enabled && ACHAT.provider === "sumup") loadSumupSdk().catch(() => {});
+}
+
+/* HelloAsso : paiement sur sa page, en pleine page. Retour sur ?achat=<pk>
+   (boot.js -> reçu, qui relit le paiement) ; abandon -> ?frigo=1, panier
+   intact (sessionStorage, même onglet). */
+function goHelloAsso(r) {
+  toast(t("buy_redirect"), "ok");
+  window.location.href = r.redirect_url;
+  return new Promise(() => {}); // la page s'en va : le bouton reste en attente
 }
 
 function loadSumupSdk() {

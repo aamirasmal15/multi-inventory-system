@@ -17,8 +17,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .core import MIN_CARD_CENTS, TOPUP_MAX_CENTS
-from .sumup import SumUpError
+from .core import TOPUP_MAX_CENTS, TOPUP_MIN_CENTS, PaymentError
 
 logger = logging.getLogger("inventree")
 
@@ -101,7 +100,10 @@ class ConfigView(PluginView):
             } if loc else None,
             "admin": is_admin(request.user),
             # sous ce montant, SumUp refuse la carte : portefeuille obligatoire
-            "min_card_cents": MIN_CARD_CENTS,
+            "min_card_cents": self.plugin.min_card_cents(),
+            "topup_min_cents": TOPUP_MIN_CENTS,
+            # sumup : formulaire dans la Scannette ; helloasso : redirection
+            "provider": self.plugin.provider(),
             "topup_max_cents": TOPUP_MAX_CENTS,
         })
 
@@ -184,21 +186,22 @@ class FridgePriceView(PluginView):
 
 
 class CheckoutView(PluginView):
-    """Cree le paiement SumUp du panier ; le widget de la Scannette l'execute."""
+    """Cree le paiement par carte du panier (SumUp : widget de la Scannette ; HelloAsso : redirection)."""
 
     def post(self, request):
         if not self.plugin.is_configured():
-            return Response({"detail": "Paiement non configuré."}, status=503)
+            return Response({"detail": "Paiement par carte non configuré."}, status=503)
         data = request.data if isinstance(request.data, dict) else {}
         try:
-            purchase, checkout_id = self.plugin.start_checkout(request, data)
+            purchase, out = self.plugin.start_checkout(request, data)
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except SumUpError as e:
+        except PaymentError as e:
             return Response({"detail": f"Paiement impossible : {e}"}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({
             "purchase": purchase.pk,
-            "checkout_id": checkout_id,
+            "provider": purchase.provider,
+            **out,  # checkout_id (SumUp) ou redirect_url (HelloAsso)
             "total": purchase_data(purchase)["total"],
             "amount_cents": purchase.amount_cents,
         })
@@ -280,7 +283,7 @@ class TresoExportView(PluginView):
                 buyer_name(p.user),
                 p.user.username if p.user else "",
                 "Recharge" if topup else "Achat",
-                "Portefeuille" if p.method == p.METHOD_WALLET else "Carte (SumUp)",
+                "Portefeuille" if p.method == p.METHOD_WALLET else f"Carte ({p.get_provider_display()})",
                 "Recharge du portefeuille" if topup else p.summary(500),
                 eur(p.amount_cents),
                 p.payment_ref,
@@ -307,7 +310,7 @@ class TresoExportView(PluginView):
         buf = io.StringIO()
         buf.write("\ufeff")
         w = csv.writer(buf, delimiter=";")
-        w.writerow(["Date", "Heure", "N° achat", "Membre", "Identifiant", "Type", "Moyen", "Détail", "Montant (€)", "Réf. SumUp", "Anomalie"])
+        w.writerow(["Date", "Heure", "N° achat", "Membre", "Identifiant", "Type", "Moyen", "Détail", "Montant (€)", "Réf. paiement", "Anomalie"])
         for r in rows:
             dt = timezone.localtime(r[0])
             w.writerow([dt.strftime("%d/%m/%Y"), dt.strftime("%H:%M"), *r[1:]])
@@ -324,10 +327,10 @@ class PurchaseView(PluginView):
         p = self.get_purchase(request, pk)
         if p is None:
             return Response({"detail": "Achat introuvable."}, status=status.HTTP_404_NOT_FOUND)
-        if self.plugin.is_configured():
+        if self.plugin.is_configured(p.provider):
             try:
                 p = self.plugin.confirm(p)
-            except SumUpError as e:
+            except PaymentError as e:
                 # verification impossible pour l'instant : l'etat connu reste affiche
                 logger.warning("Paiements : vérification de l'achat #%s impossible : %s", p.pk, e)
         data = purchase_data(p)
@@ -381,33 +384,49 @@ class ReceiptEmailView(PluginView):
 
 
 class WebhookView(APIView):
-    """Notification SumUp ({"event_type": "CHECKOUT_STATUS_CHANGED", "id": "<checkout>"}).
+    """Notification du prestataire : /webhook/sumup ou /webhook/helloasso.
 
+    SumUp : {"event_type": "CHECKOUT_STATUS_CHANGED", "id": "<checkout>"}.
+    HelloAsso : {"eventType": "Order"|"Payment", "data": {...}, "metadata": {"purchase": pk}}.
     Le contenu n'est PAS cru sur parole : il sert seulement a retrouver
     l'achat, dont le paiement est ensuite verifie par relecture du checkout
-    aupres de SumUp (confirm). Repond toujours 200 pour que SumUp ne rejoue
-    pas indefiniment une notification qui ne nous concerne pas.
+    aupres de l'API (confirm). Repond toujours 200 pour que le prestataire ne
+    rejoue pas indefiniment une notification qui ne nous concerne pas.
     """
 
     plugin = None
     permission_classes = [AllowAny]
     authentication_classes = []  # pas de session -> pas de controle CSRF
 
-    def post(self, request):
+    def post(self, request, provider):
         from .models import Purchase
 
         from django.core.cache import cache
 
         body = request.data if isinstance(request.data, dict) else {}
-        p = Purchase.objects.filter(checkout_id=str(body["id"])).first() if body.get("id") else None
+        p = None
+        try:
+            if provider == "sumup" and body.get("id"):
+                p = Purchase.objects.filter(provider="sumup", checkout_id=str(body["id"])).first()
+            elif provider == "helloasso":
+                data = body.get("data") if isinstance(body.get("data"), dict) else {}
+                meta = body.get("metadata") or data.get("metadata") or {}
+                if isinstance(meta, dict) and meta.get("purchase"):
+                    p = Purchase.objects.filter(provider="helloasso", pk=int(meta["purchase"])).first()
+                if p is None and data.get("checkoutIntentId"):
+                    p = Purchase.objects.filter(
+                        provider="helloasso", checkout_id=str(int(data["checkoutIntentId"]))
+                    ).first()
+        except (TypeError, ValueError):
+            p = None
         # une relecture SumUp toutes les 10 s au plus par achat : le webhook est
         # anonyme, il ne doit pas pouvoir marteler l'API SumUp
         if p is not None and not cache.add(f"paiements_hook:{p.pk}", 1, 10):
             p = None
-        if p is not None and self.plugin.is_configured():
+        if p is not None and self.plugin.is_configured(p.provider):
             try:
                 self.plugin.confirm(p)
-            except SumUpError as e:
+            except PaymentError as e:
                 logger.warning("Paiements : webhook, vérification de l'achat #%s impossible : %s", p.pk, e)
         return Response({"ok": True})
 
@@ -424,17 +443,18 @@ class WalletTopupView(PluginView):
 
     def post(self, request):
         if not self.plugin.is_configured():
-            return Response({"detail": "Paiement non configuré."}, status=503)
+            return Response({"detail": "Paiement par carte non configuré."}, status=503)
         data = request.data if isinstance(request.data, dict) else {}
         try:
-            purchase, checkout_id = self.plugin.start_topup(request, data.get("amount_cents"))
+            purchase, out = self.plugin.start_topup(request, data.get("amount_cents"))
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except SumUpError as e:
+        except PaymentError as e:
             return Response({"detail": f"Paiement impossible : {e}"}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({
             "purchase": purchase.pk,
-            "checkout_id": checkout_id,
+            "provider": purchase.provider,
+            **out,  # checkout_id (SumUp) ou redirect_url (HelloAsso)
             "total": purchase_data(purchase)["total"],
             "amount_cents": purchase.amount_cents,
         })

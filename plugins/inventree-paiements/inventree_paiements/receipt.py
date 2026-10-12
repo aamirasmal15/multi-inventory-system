@@ -147,7 +147,7 @@ def receipt_context(p):
         "count": sum(ln["quantity"] for ln in lines),
         "total": euros(p.amount_cents),
         "by_wallet": p.method == p.METHOD_WALLET,
-        "provider": "Portefeuille" if p.method == p.METHOD_WALLET else "SumUp",
+        "provider": "Portefeuille" if p.method == p.METHOD_WALLET else p.get_provider_display(),
         "payment_ref": p.payment_ref,
         "warning": p.warning,
     }

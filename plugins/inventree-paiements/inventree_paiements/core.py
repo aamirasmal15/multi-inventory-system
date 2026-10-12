@@ -36,12 +36,18 @@ from plugin.mixins import AppMixin, ScheduleMixin, SettingsMixin, UrlsMixin, Val
 
 from . import PLUGIN_VERSION
 from . import guard
+from .helloasso import HelloAssoClient, HelloAssoError
 from .sumup import SumUpClient, SumUpError
 
 logger = logging.getLogger("inventree")
 
 MAX_QTY = 20  # garde-fou par produit : une Scannette n'est pas une caisse de grossiste
 MIN_CARD_CENTS = 100  # SumUp refuse (FAILED) tout paiement par carte sous 1 €
+# HelloAsso ne documente pas de minimum : on laisse passer, un refus a la
+# creation du checkout est remonte tel quel au membre
+MIN_CARD_CENTS_BY_PROVIDER = {"sumup": MIN_CARD_CENTS, "helloasso": 1}
+TOPUP_MIN_CENTS = 100  # recharge minimale, quel que soit le prestataire
+PaymentError = (SumUpError, HelloAssoError)
 TOPUP_MAX_CENTS = 5000  # recharge maximale en une fois
 
 
@@ -65,6 +71,15 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
     MIN_VERSION = "1.4.0"
 
     SETTINGS = {
+        "PROVIDER": {
+            "name": "Prestataire de paiement par carte",
+            "description": (
+                "SumUp : formulaire de carte dans la Scannette (Apple Pay / Google Pay), 1 € minimum, 2,5 %. "
+                "HelloAsso : redirection vers sa page, aucun frais pour l'asso (contribution volontaire proposée au payeur)."
+            ),
+            "choices": [("helloasso", "HelloAsso"), ("sumup", "SumUp")],
+            "default": "helloasso",
+        },
         "FRIDGE_LOCATION": {
             "name": "Emplacement du frigo",
             "description": "Ses articles (sous-emplacements compris) forment la page /frigo de la Scannette",
@@ -90,6 +105,34 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             "name": "Nom affiché au payeur",
             "description": "Nom présenté dans Google Pay / Apple Pay (ex. le nom de l'association)",
             "default": "",
+        },
+        "HELLOASSO_ENV": {
+            "name": "HelloAsso : environnement",
+            "description": "Production = vrais paiements. Sandbox = compte de test api.helloasso-sandbox.com.",
+            "choices": [("production", "Production"), ("sandbox", "Sandbox (test)")],
+            "default": "production",
+        },
+        "HELLOASSO_ORG_SLUG": {
+            "name": "HelloAsso : slug de l'association",
+            "description": "Partie de l'adresse après /associations/ sur helloasso.com",
+            "default": "",
+        },
+        "HELLOASSO_CLIENT_ID": {
+            "name": "HelloAsso : Client ID",
+            "description": "Back-office HelloAsso > Mon compte > Intégrations et API",
+            "default": "",
+        },
+        "HELLOASSO_CLIENT_SECRET": {
+            "name": "HelloAsso : Client Secret",
+            "description": "Back-office HelloAsso > Mon compte > Intégrations et API",
+            "default": "",
+            "protected": True,
+        },
+        "HELLOASSO_PREFILL": {
+            "name": "HelloAsso : pré-remplir le payeur",
+            "description": "Transmet nom, prénom et e-mail du compte à HelloAsso (le membre n'a rien à saisir)",
+            "default": True,
+            "validator": bool,
         },
         "ASSO_NAME": {
             "name": "Reçu : nom de l'association",
@@ -169,7 +212,9 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             path("purchase/<int:pk>", api.PurchaseView.as_view(plugin=self), name="purchase"),
             path("purchase/<int:pk>/receipt.pdf", api.ReceiptView.as_view(plugin=self), name="receipt"),
             path("purchase/<int:pk>/email", api.ReceiptEmailView.as_view(plugin=self), name="receipt-email"),
-            path("webhook/sumup", hook_view, name="webhook"),
+            # /webhook/sumup (return_url des checkouts) et /webhook/helloasso
+            # (URL de notification a declarer dans le back-office HelloAsso)
+            path("webhook/<str:provider>", hook_view, name="webhook"),
         ]
 
     # ---- verrou du frigo (ValidationMixin, cf. guard.py) ----
@@ -182,9 +227,30 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         guard.check_deletion(instance)
 
     # ---- configuration ----
-    def is_configured(self):
-        """Cle API et code marchand SumUp renseignes."""
-        return bool(self.get_setting("SUMUP_API_KEY") and self.get_setting("SUMUP_MERCHANT_CODE"))
+    def provider(self):
+        """Prestataire choisi pour les nouveaux paiements par carte."""
+        return self.get_setting("PROVIDER") or "helloasso"
+
+    def is_configured(self, provider=None):
+        """Identifiants du prestataire (par defaut : celui du reglage) renseignes."""
+        keys = {
+            "sumup": ("SUMUP_API_KEY", "SUMUP_MERCHANT_CODE"),
+            "helloasso": ("HELLOASSO_ORG_SLUG", "HELLOASSO_CLIENT_ID", "HELLOASSO_CLIENT_SECRET"),
+        }.get(provider or self.provider(), ())
+        return bool(keys) and all(self.get_setting(k) for k in keys)
+
+    def min_card_cents(self):
+        """Montant minimal d'un paiement par carte avec le prestataire choisi."""
+        return MIN_CARD_CENTS_BY_PROVIDER.get(self.provider(), MIN_CARD_CENTS)
+
+    def helloasso(self):
+        """Client HelloAsso de l'association configuree."""
+        return HelloAssoClient(
+            self.get_setting("HELLOASSO_ENV"),
+            self.get_setting("HELLOASSO_CLIENT_ID"),
+            self.get_setting("HELLOASSO_CLIENT_SECRET"),
+            self.get_setting("HELLOASSO_ORG_SLUG"),
+        )
 
     def sumup(self):
         """Client SumUp du compte marchand configure."""
@@ -416,10 +482,14 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
         location, lines = self.build_lines(data)
         total = sum(ln["quantity"] * ln["unit_cents"] for ln in lines)
-        if total < MIN_CARD_CENTS:
-            raise ValueError("Paiement par carte : 1 € minimum. Paie avec ton portefeuille ou ajoute un article.")
+        if total < self.min_card_cents():
+            raise ValueError(
+                f"Paiement par carte : {euros(self.min_card_cents())} minimum. Paie avec ton portefeuille ou ajoute un article."
+            )
         with transaction.atomic():
-            purchase = Purchase.objects.create(location=location, user=request.user, amount_cents=total)
+            purchase = Purchase.objects.create(
+                location=location, user=request.user, amount_cents=total, provider=self.provider()
+            )
             PurchaseLine.objects.bulk_create([PurchaseLine(purchase=purchase, **ln) for ln in lines])
         return purchase, self._open_checkout(request, purchase)
 
@@ -431,15 +501,21 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             amount = int(amount_cents)
         except (TypeError, ValueError):
             raise ValueError("Montant invalide.")
-        if not MIN_CARD_CENTS <= amount <= TOPUP_MAX_CENTS:
-            raise ValueError(f"Recharge entre {euros(MIN_CARD_CENTS)} et {euros(TOPUP_MAX_CENTS)}.")
+        if not TOPUP_MIN_CENTS <= amount <= TOPUP_MAX_CENTS:
+            raise ValueError(f"Recharge entre {euros(TOPUP_MIN_CENTS)} et {euros(TOPUP_MAX_CENTS)}.")
         purchase = Purchase.objects.create(
-            location=None, user=request.user, amount_cents=amount, kind=Purchase.KIND_TOPUP
+            location=None, user=request.user, amount_cents=amount, kind=Purchase.KIND_TOPUP, provider=self.provider()
         )
         return purchase, self._open_checkout(request, purchase)
 
     def _open_checkout(self, request, purchase):
-        """Checkout SumUp d'un Purchase deja cree ; le supprime en cas d'echec. Renvoie l'id du checkout."""
+        """Paiement chez le prestataire d'un Purchase deja cree ; le supprime en cas d'echec.
+
+        Renvoie {"checkout_id"} (SumUp : le widget de la Scannette l'execute)
+        ou {"redirect_url"} (HelloAsso : page de paiement en pleine page).
+        """
+        if purchase.provider == "helloasso":
+            return self._helloasso_checkout(request, purchase)
         site = self.site_url(request)
         try:
             res = self.sumup().create_checkout(
@@ -462,7 +538,51 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             raise SumUpError("Réponse SumUp sans identifiant de paiement")
         purchase.checkout_id = checkout_id
         purchase.save(update_fields=["checkout_id"])
-        return checkout_id
+        return {"checkout_id": checkout_id}
+
+    def _helloasso_checkout(self, request, purchase):
+        """Checkout-intent HelloAsso : montant fixe, n° d'achat en metadata, retour sur ?achat=<pk>."""
+        site = self.site_url(request)
+        back = f"{site}/scannette/?achat={purchase.pk}"
+        label = ("Frigo · " if purchase.kind == purchase.KIND_FRIDGE else "") + purchase.summary(230)
+        payload = {
+            "totalAmount": purchase.amount_cents,
+            "initialAmount": purchase.amount_cents,
+            "itemName": label[:250],
+            # abandon sur la page HelloAsso : retour au frigo, panier intact
+            "backUrl": f"{site}/scannette/?frigo=1",
+            "errorUrl": back,
+            "returnUrl": back,
+            "containsDonation": False,
+            "metadata": {"purchase": purchase.pk},
+        }
+        u = purchase.user
+        if self.get_setting("HELLOASSO_PREFILL") and u and u.first_name and u.last_name and u.email:
+            payload["payer"] = {"firstName": u.first_name, "lastName": u.last_name, "email": u.email}
+        client = self.helloasso()
+        try:
+            try:
+                res = client.create_checkout(payload)
+            except HelloAssoError as e:
+                # HelloAsso valide strictement nom/prenom (chiffres, longueur...) :
+                # un payeur refuse ne bloque pas l'achat, il saisira lui-meme
+                if e.status == 400 and "payer" in payload:
+                    logger.warning("HelloAsso : payeur refusé, nouvel essai sans pré-remplissage : %s", e.body)
+                    del payload["payer"]
+                    res = client.create_checkout(payload)
+                else:
+                    raise
+        except HelloAssoError as e:
+            logger.error("Paiements : création du checkout HelloAsso refusée : %s %s", e, e.body)
+            purchase.delete()
+            raise
+        intent, url = (res or {}).get("id"), (res or {}).get("redirectUrl")
+        if not intent or not url:
+            purchase.delete()
+            raise HelloAssoError("Réponse HelloAsso sans lien de paiement")
+        purchase.checkout_id = str(intent)
+        purchase.save(update_fields=["checkout_id"])
+        return {"redirect_url": url}
 
     # ---- confirmation ----
     def confirm(self, purchase):
@@ -475,7 +595,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
         if purchase.status == Purchase.STATUS_PAID or not purchase.checkout_id:
             return purchase
-        ref = self._sumup_paid(purchase)
+        ref = self._helloasso_paid(purchase) if purchase.provider == "helloasso" else self._sumup_paid(purchase)
         if ref is None:
             return purchase  # pas (encore) paye
 
@@ -618,6 +738,26 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         tx = data.get("transactions") or []
         return data.get("transaction_code") or (tx[0].get("transaction_code") if tx else "") or p.checkout_id
 
+    def _helloasso_paid(self, p):
+        """N° de commande si HelloAsso confirme le paiement, sinon None.
+
+        HelloAsso n'ajoute la cle 'order' au checkout-intent qu'une fois le
+        paiement autorise ; on verifie aussi le n° d'achat et le montant.
+        """
+        data = self.helloasso().get_checkout(p.checkout_id) or {}
+        order = data.get("order")
+        if not order:
+            return None
+        meta = data.get("metadata") or {}
+        total = (order.get("amount") or {}).get("total")
+        if str(meta.get("purchase")) != str(p.pk) or (total is not None and int(total) != p.amount_cents):
+            logger.error("HelloAsso : checkout %s incohérent avec l'achat #%s : %s", p.checkout_id, p.pk, data)
+            return None
+        payments = order.get("payments") or []
+        if payments and not any(x.get("state") in ("Authorized", "Processed") for x in payments):
+            return None
+        return order.get("id") or p.checkout_id
+
     def _remove_stock(self, p):
         """Preleve chaque ligne dans le frigo ; consigne les anomalies sans bloquer.
 
@@ -625,7 +765,9 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         achat simultane) ne l'annule pas, il est signale sur le recu et dans
         l'admin pour qu'un membre du bureau regularise.
         """
-        notes = f"Achat frigo #{p.pk} (SumUp {p.payment_ref})"
+        notes = f"Achat frigo #{p.pk} (" + (
+            "portefeuille" if p.method == p.METHOD_WALLET else f"{p.get_provider_display()} {p.payment_ref}"
+        ) + ")"
         warnings = []
         for ln in p.lines.all():
             # articles verrouilles (select_for_update) : deux achats confirmes
@@ -662,13 +804,14 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
         from .models import Purchase
 
-        if not self.is_configured():
-            return
         since = timezone.now() - datetime.timedelta(hours=48)
         for p in Purchase.objects.filter(status=Purchase.STATUS_PENDING, created_at__gte=since).exclude(
             checkout_id=None
         ):
+            # chaque achat est relu chez SON prestataire, meme si le reglage a change depuis
+            if not self.is_configured(p.provider):
+                continue
             try:
                 self.confirm(p)
-            except SumUpError as e:
+            except PaymentError as e:
                 logger.warning("Paiements : rattrapage de l'achat #%s impossible : %s", p.pk, e)

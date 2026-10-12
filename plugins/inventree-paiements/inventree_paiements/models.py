@@ -28,7 +28,10 @@ class Purchase(models.Model):
     # paye par carte (SumUp) ou deduit du portefeuille
     METHOD_CARD = "card"
     METHOD_WALLET = "wallet"
-    METHOD_CHOICES = [(METHOD_CARD, "Carte (SumUp)"), (METHOD_WALLET, "Portefeuille")]
+    METHOD_CHOICES = [(METHOD_CARD, "Carte"), (METHOD_WALLET, "Portefeuille")]
+    # prestataire du paiement par carte (fige a la creation : le reglage
+    # PROVIDER peut changer pendant qu'un achat attend sa confirmation)
+    PROVIDER_CHOICES = [("sumup", "SumUp"), ("helloasso", "HelloAsso")]
 
     # emplacement dans lequel le stock est preleve (frigo), fige a la creation
     location = models.ForeignKey(
@@ -50,6 +53,7 @@ class Purchase(models.Model):
     amount_cents = models.PositiveIntegerField(verbose_name="Montant (centimes)")
     kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_FRIDGE, verbose_name="Type")
     method = models.CharField(max_length=10, choices=METHOD_CHOICES, default=METHOD_CARD, verbose_name="Moyen de paiement")
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default="sumup", verbose_name="Prestataire")
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
