@@ -290,7 +290,7 @@ async function tresoPurchaseList() {
     row.className = "purch-row";
     row.innerHTML =
       '<div class="pm"><div class="t">' + esc(p.buyer) + " · " + esc(p.date) + " " + esc(p.time) + '</div><div class="s">' +
-      esc(t("rcpt_no", p.pk)) + " · " +
+      esc(t(topup ? "rcpt_topup_no" : "rcpt_no", p.pk)) + " · " +
       esc(topup ? t("wal_topup_line") : p.lines.map((l) => (l.quantity > 1 ? l.quantity + "× " : "") + l.name).join(", ")) +
       " · " + esc(p.method === "wallet" ? t("wal_name") : t("treso_card")) +
       (p.warning ? " · ⚠" : "") + '</div></div><div class="pt' + (topup ? " plus" : "") + '">' + (topup ? "+" : "") + esc(p.total) + "</div>";

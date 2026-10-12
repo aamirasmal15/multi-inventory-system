@@ -428,12 +428,13 @@ function renderReceipt(p) {
   // mais il ne peut plus passer pour un paiement qui vient d'être fait.
   const old = paid && rcptOld(p);
   const head = paid
-    ? '<div class="rcpt-ok' + (old ? " old" : "") + '">' +
+    ? // recharge : bandeau bleu 👛 « +1,00 € » (de l'argent qui entre), achat : vert ✓
+      '<div class="rcpt-ok' + (topup ? " topup" : "") + (old ? " old" : "") + '">' +
       (old ? '<div class="ro-old">' + esc(t("rcpt_old")) + "</div>" : "") +
-      '<div class="ro-top"><span class="ro-ic">' + CHECK + "</span>" +
+      '<div class="ro-top"><span class="ro-ic">' + (topup ? '<span class="ro-emo">👛</span>' : CHECK) + "</span>" +
       '<div class="ro-l"><div class="ro-k">' + esc(topup ? t("rcpt_proof_topup") : t("rcpt_proof_paid")) + "</div>" +
       '<div class="ro-when">' + esc(p.date) + " · " + esc(p.time) + "</div></div>" +
-      '<div class="ro-amt">' + esc(p.total) + "</div></div>" +
+      '<div class="ro-amt">' + (topup ? "+" : "") + esc(p.total) + "</div></div>" +
       '<div class="ro-live"><span class="dot"></span><span id="rcptAgo">' + esc(rcptAgo(p)) + "</span>" +
       '<span class="ro-who">' + esc(p.buyer) + "</span></div></div>"
     : '<div class="rcpt-hero ' + st + '">' +
@@ -449,10 +450,10 @@ function renderReceipt(p) {
         : '<span class="ri-ph">' + locBox().innerHTML + "</span>";
   box.innerHTML =
     head +
-    '<div class="card rcpt' + (old ? " old" : "") + '">' +
+    '<div class="card rcpt' + (topup ? " topup" : "") + (old ? " old" : "") + '">' +
     (paid
       ? ""
-      : '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t("rcpt_no", p.pk)) + "</div>" +
+      : '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t(topup ? "rcpt_topup_no" : "rcpt_no", p.pk)) + "</div>" +
         '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
         '<div class="rcpt-meta">' + esc(p.buyer) + "</div></div>" +
         '<span class="rcpt-badge ' + st + '">' + esc(p.failed ? t("rcpt_failed") : t("rcpt_pending")) + "</span></div>") +
@@ -468,7 +469,7 @@ function renderReceipt(p) {
       .join("") +
     "</div>" +
     '<div class="rcpt-total"><span>' + esc(t("buy_total")) + "</span><span>" + esc(p.total) + "</span></div>" +
-    '<div class="rcpt-pay">' + esc(t("rcpt_no", p.pk)) + " · " +
+    '<div class="rcpt-pay">' + esc(t(topup ? "rcpt_topup_no" : "rcpt_no", p.pk)) + " · " +
     esc(p.method === "wallet" ? t("wal_name") : p.channel === "tap" ? t("tap_rcpt", p.collected_by) : p.provider) +
     (p.payment_ref ? " · " + esc(p.payment_ref) : "") + "</div>" +
     (paid ? '<p class="rcpt-note">' + esc(okText) + "</p>" : "") +
@@ -586,7 +587,7 @@ async function openPurchases() {
     const row = document.createElement("button");
     row.className = "purch-row";
     row.innerHTML =
-      '<div class="pm"><div class="t">' + esc(t("rcpt_no", p.pk)) + " · " + esc(p.date) + " " + esc(p.time) +
+      '<div class="pm"><div class="t">' + esc(t(p.kind === "topup" ? "rcpt_topup_no" : "rcpt_no", p.pk)) + " · " + esc(p.date) + " " + esc(p.time) +
       '</div><div class="s">' +
       esc(
         p.kind === "topup"

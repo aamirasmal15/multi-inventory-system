@@ -488,6 +488,16 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         )
         return purchase, self._open_checkout(request, purchase)
 
+    @staticmethod
+    def _sumup_label(purchase):
+        """Description vue dans le tableau de bord SumUp : le panier exact, ou
+        « Recharge portefeuille · <membre> » (meme libelle qu'en Tap to Pay)."""
+        if purchase.kind == purchase.KIND_TOPUP:
+            u = purchase.user
+            name = (u.get_full_name() or u.username)[:60] if u else ""
+            return "Recharge portefeuille" + (f" · {name}" if name else "")
+        return "Frigo · " + purchase.summary(240)
+
     def _open_checkout(self, request, purchase):
         """Checkout SumUp d'un Purchase deja cree (le widget de la Scannette l'execute) ;
         le supprime en cas d'echec. Renvoie {"checkout_id"}.
@@ -499,7 +509,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
                 f"scannette-{purchase.pk}-{uuid.uuid4().hex[:10]}",
                 purchase.amount_cents,
                 # ce que voit SumUp (tableau de bord, releve) : le panier exact
-                ("Frigo · " if purchase.kind == purchase.KIND_FRIDGE else "") + purchase.summary(240),
+                self._sumup_label(purchase),
                 return_url=f"{site}/plugin/paiements/webhook/sumup",
                 # retour navigateur apres une etape 3-D Secure en pleine page
                 redirect_url=f"{site}/scannette/?achat={purchase.pk}",
