@@ -289,8 +289,8 @@ textarea{resize:none;min-height:56px}
 .pay-recap summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-weight:600;font-size:14px;cursor:pointer;list-style:none}
 .pay-recap summary::-webkit-details-marker{display:none}
 .pay-more{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:600;color:var(--primary);background:var(--primary-light);border-radius:999px;padding:4px 8px 4px 11px}
-.pay-more svg{width:14px;height:14px;transition:transform .2s}
-.pay-recap[open] .pay-more svg{transform:rotate(180deg)}
+.pay-more svg{width:14px;height:14px;transition:transform .2s;transform:rotate(180deg)}
+.pay-recap[open] .pay-more svg{transform:none}
 .pay-recap[open] summary{border-bottom:1px solid var(--border)}
 .pay-line{display:flex;gap:9px;font-size:14px;padding:8px 0}
 .pay-line+.pay-line{border-top:1px solid var(--border)}
