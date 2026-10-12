@@ -77,8 +77,8 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
                 "SumUp : formulaire de carte dans la Scannette (Apple Pay / Google Pay), 1 € minimum, 2,5 %. "
                 "HelloAsso : redirection vers sa page, aucun frais pour l'asso (contribution volontaire proposée au payeur)."
             ),
-            "choices": [("helloasso", "HelloAsso"), ("sumup", "SumUp")],
-            "default": "helloasso",
+            "choices": [("sumup", "SumUp"), ("helloasso", "HelloAsso")],
+            "default": "sumup",
         },
         "FRIDGE_LOCATION": {
             "name": "Emplacement du frigo",
@@ -229,7 +229,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
     # ---- configuration ----
     def provider(self):
         """Prestataire choisi pour les nouveaux paiements par carte."""
-        return self.get_setting("PROVIDER") or "helloasso"
+        return self.get_setting("PROVIDER") or "sumup"
 
     def is_configured(self, provider=None):
         """Identifiants du prestataire (par defaut : celui du reglage) renseignes."""
