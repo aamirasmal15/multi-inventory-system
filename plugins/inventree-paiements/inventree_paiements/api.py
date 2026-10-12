@@ -506,7 +506,11 @@ class WalletAdminView(PluginView):
         # tous les membres actifs, avec ou sans portefeuille (crediter un nouveau
         # membre qui paie en especes) ; plus gros soldes d'abord
         bal = dict(Wallet.objects.values_list("user_id", "balance_cents"))
-        users = get_user_model().objects.filter(is_active=True)
+        # compte technique (superuser) masque, sauf s'il a un solde (anomalie a voir)
+        users = [
+            u for u in get_user_model().objects.filter(is_active=True)
+            if not u.is_superuser or bal.get(u.pk, 0)
+        ]
         rows = [
             {"user": u.pk, "username": u.username, "name": buyer_name(u), "balance_cents": bal.get(u.pk, 0)}
             for u in users
@@ -549,9 +553,11 @@ class TapMembersView(PluginView):
 
         if not self.plugin.can_collect(request.user):
             return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        # le superuser est le compte technique de l'instance (superadmin_<asso>) :
+        # personne ne recharge son portefeuille
         rows = [
             {"user": u.pk, "username": u.username, "name": buyer_name(u)}
-            for u in get_user_model().objects.filter(is_active=True)
+            for u in get_user_model().objects.filter(is_active=True, is_superuser=False)
         ]
         rows.sort(key=lambda r: r["name"].lower())
         return Response(rows)
@@ -573,7 +579,7 @@ class TapStartView(PluginView):
             return Response({"detail": "Tap to Pay non configuré (clé affiliate SumUp)."}, status=503)
         data = request.data if isinstance(request.data, dict) else {}
         try:
-            member = get_user_model().objects.get(pk=int(data.get("user")), is_active=True)
+            member = get_user_model().objects.get(pk=int(data.get("user")), is_active=True, is_superuser=False)
         except (TypeError, ValueError, get_user_model().DoesNotExist):
             return Response({"detail": "Membre introuvable."}, status=status.HTTP_400_BAD_REQUEST)
         try:
