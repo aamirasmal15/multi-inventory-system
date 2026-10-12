@@ -22,6 +22,13 @@ from .core import TOPUP_MAX_CENTS, TOPUP_MIN_CENTS, PaymentError
 logger = logging.getLogger("inventree")
 
 
+def instance_name():
+    """Nom de l'instance InvenTree (receipt.py)."""
+    from .receipt import instance_name as name
+
+    return name()
+
+
 def is_admin(user):
     """Staff ou superuser : mode « Gérer » du frigo (stocks, prix), tous les recus."""
     return bool(user and (user.is_staff or user.is_superuser))
@@ -99,7 +106,8 @@ class ConfigView(PluginView):
             # option googlePay du widget SumUp (identifiant public, pas un secret)
             "google_pay": {
                 "merchantId": gp_id,
-                "merchantName": self.plugin.get_setting("PAY_DISPLAY_NAME") or "Scannette",
+                # nom presente dans Google Pay : celui de l'instance (EIRSPACE...)
+                "merchantName": instance_name() or "Scannette",
             } if gp_id else None,
             # locations : le frigo et ses sous-emplacements (masques aux non-admins)
             "fridge": {
@@ -113,8 +121,6 @@ class ConfigView(PluginView):
             # sous ce montant, SumUp refuse la carte : portefeuille obligatoire
             "min_card_cents": self.plugin.min_card_cents(),
             "topup_min_cents": TOPUP_MIN_CENTS,
-            # sumup : formulaire dans la Scannette ; helloasso : redirection
-            "provider": self.plugin.provider(),
             "topup_max_cents": TOPUP_MAX_CENTS,
         })
 
@@ -198,7 +204,7 @@ class FridgePriceView(PluginView):
 
 
 class CheckoutView(PluginView):
-    """Cree le paiement par carte du panier (SumUp : widget de la Scannette ; HelloAsso : redirection)."""
+    """Cree le paiement SumUp du panier ; le widget de la Scannette l'execute."""
 
     def post(self, request):
         if not self.plugin.is_configured():
@@ -213,7 +219,7 @@ class CheckoutView(PluginView):
         return Response({
             "purchase": purchase.pk,
             "provider": purchase.provider,
-            **out,  # checkout_id (SumUp) ou redirect_url (HelloAsso)
+            **out,  # checkout_id
             "total": purchase_data(purchase)["total"],
             "amount_cents": purchase.amount_cents,
         })
@@ -399,10 +405,8 @@ class ReceiptEmailView(PluginView):
 
 
 class WebhookView(APIView):
-    """Notification du prestataire : /webhook/sumup ou /webhook/helloasso.
+    """Notification SumUp (/webhook/sumup) : {"event_type": "CHECKOUT_STATUS_CHANGED", "id": "<checkout>"}.
 
-    SumUp : {"event_type": "CHECKOUT_STATUS_CHANGED", "id": "<checkout>"}.
-    HelloAsso : {"eventType": "Order"|"Payment", "data": {...}, "metadata": {"purchase": pk}}.
     Le contenu n'est PAS cru sur parole : il sert seulement a retrouver
     l'achat, dont le paiement est ensuite verifie par relecture du checkout
     aupres de l'API (confirm). Repond toujours 200 pour que le prestataire ne
@@ -420,20 +424,8 @@ class WebhookView(APIView):
 
         body = request.data if isinstance(request.data, dict) else {}
         p = None
-        try:
-            if provider == "sumup" and body.get("id"):
-                p = Purchase.objects.filter(provider="sumup", checkout_id=str(body["id"])).first()
-            elif provider == "helloasso":
-                data = body.get("data") if isinstance(body.get("data"), dict) else {}
-                meta = body.get("metadata") or data.get("metadata") or {}
-                if isinstance(meta, dict) and meta.get("purchase"):
-                    p = Purchase.objects.filter(provider="helloasso", pk=int(meta["purchase"])).first()
-                if p is None and data.get("checkoutIntentId"):
-                    p = Purchase.objects.filter(
-                        provider="helloasso", checkout_id=str(int(data["checkoutIntentId"]))
-                    ).first()
-        except (TypeError, ValueError):
-            p = None
+        if provider == "sumup" and body.get("id"):
+            p = Purchase.objects.filter(provider="sumup", checkout_id=str(body["id"])).first()
         # une relecture SumUp toutes les 10 s au plus par achat : le webhook est
         # anonyme, il ne doit pas pouvoir marteler l'API SumUp
         if p is not None and not cache.add(f"paiements_hook:{p.pk}", 1, 10):
@@ -469,7 +461,7 @@ class WalletTopupView(PluginView):
         return Response({
             "purchase": purchase.pk,
             "provider": purchase.provider,
-            **out,  # checkout_id (SumUp) ou redirect_url (HelloAsso)
+            **out,  # checkout_id
             "total": purchase_data(purchase)["total"],
             "amount_cents": purchase.amount_cents,
         })

@@ -69,14 +69,14 @@ def plugin_setting(key):
 def logo_data_uri():
     """Logo de l'en-tete du PDF, embarque en data: URI (mis en cache 1 jour).
 
-    Ordre : reglage RECEIPT_LOGO_URL, puis le logo de la Scannette de
+    Ordre : le logo de la Scannette de
     l'instance (img/<instance>-black.png), puis celui de l'asso principale
     (img/eirspace-black.png, present sur toutes les Scannettes). Aucun logo
     joignable -> en-tete sans image (jamais d'echec du recu pour ca).
     """
     site = (getattr(settings, "SITE_URL", None) or "").rstrip("/")
     inst = "".join(c for c in instance_name().lower() if c.isalnum())
-    urls = [plugin_setting("RECEIPT_LOGO_URL").strip()]
+    urls = []
     if site:
         urls += [f"{site}/scannette/img/{inst}-black.png" if inst else "", f"{site}/scannette/img/eirspace-black.png"]
     key = "paiements_logo:" + "|".join(urls)
@@ -131,11 +131,8 @@ def receipt_context(p):
     )
     return {
         "instance": instance_name(),
-        "asso": plugin_setting("ASSO_NAME") or instance_name(),
-        "asso_address": plugin_setting("ASSO_ADDRESS"),
-        "asso_contact": plugin_setting("ASSO_CONTACT"),
-        "asso_id": plugin_setting("ASSO_ID"),
-        "note": plugin_setting("RECEIPT_NOTE"),
+        # nom de l'instance InvenTree (EIRSPACE...) : pas de reglage a remplir
+        "asso": instance_name(),
         "buyer_email": buyer_email(p.user),
         "number": p.pk,
         "paid": p.status == p.STATUS_PAID,

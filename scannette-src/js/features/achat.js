@@ -24,7 +24,6 @@ const ACHAT = {
   minCard: 100,
   topupMin: 100,
   topupMax: 99999,
-  provider: "sumup", // "sumup" : formulaire dans la Scannette ; "helloasso" : page HelloAsso
   canTap: false, // encaisser des recharges en Tap to Pay (admins, treso.js)
 };
 let achatReadyResolve = null;
@@ -44,7 +43,6 @@ async function loadAchatConfig() {
     ACHAT.minCard = c.min_card_cents || 100;
     ACHAT.topupMin = c.topup_min_cents || 100;
     ACHAT.topupMax = c.topup_max_cents || 99999;
-    ACHAT.provider = c.provider || "sumup";
     ACHAT.canTap = !!c.can_tap;
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
@@ -196,7 +194,7 @@ function openWalletSheet(need) {
 }
 
 /* formulaire de recharge de la feuille : montant (raccourcis ou libre), puis
-   paiement par carte (feuille SumUp ou page HelloAsso) */
+   paiement par carte (feuille SumUp) */
 function armTopupForm(ov, close, preset, min, max) {
   const input = ov.querySelector("#walInput"),
     go = ov.querySelector("[data-go]");
@@ -232,7 +230,6 @@ function armTopupForm(ov, close, preset, min, max) {
       return;
     }
     close();
-    if (r.redirect_url) return goHelloAsso(r);
     openPaySheet(r, [{ name: t("wal_topup_line"), quantity: 1, total: r.total }]);
   };
   ov.querySelectorAll(".price-chip").forEach((x) => x.classList.toggle("on", x.dataset.v === input.value));
@@ -258,22 +255,12 @@ async function payCheckout(body, recap, opts) {
   } catch (_) {}
   // la feuille s'ouvre tout de suite ; le formulaire s'y monte dès que le
   // script SumUp est là (préchargé à l'ouverture du frigo / de la fiche)
-  if (r.redirect_url) return goHelloAsso(r);
   return openPaySheet(r, recap);
 }
 
 /* préchargement silencieux du script SumUp à l'ouverture du frigo */
 function prefetchSumup() {
-  if (ACHAT.card && ACHAT.provider === "sumup") loadSumupSdk().catch(() => {});
-}
-
-/* HelloAsso : paiement sur sa page, en pleine page. Retour sur ?achat=<pk>
-   (boot.js -> reçu, qui relit le paiement) ; abandon -> ?frigo=1, panier
-   intact (sessionStorage, même onglet). */
-function goHelloAsso(r) {
-  toast(t("buy_redirect"), "ok");
-  window.location.href = r.redirect_url;
-  return new Promise(() => {}); // la page s'en va : le bouton reste en attente
+  if (ACHAT.card) loadSumupSdk().catch(() => {});
 }
 
 function loadSumupSdk() {

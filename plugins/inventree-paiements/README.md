@@ -3,8 +3,7 @@
 Plugin InvenTree : page **/frigo** de la Scannette. On choisit ses boissons
 dans le frigo et on paie avec son **portefeuille** (solde rechargé à
 l'avance) ou directement par carte, via **SumUp** (carte, Apple Pay, Google
-Pay, sans quitter la page) ou **HelloAsso** (page de paiement HelloAsso). Reçu
-PDF à télécharger ou par e-mail.
+Pay, sans quitter la page). Reçu PDF (format ticket) à télécharger ou par e-mail.
 
 ## Mettre un article en vente
 
@@ -23,14 +22,14 @@ SumUp refuse tout paiement par carte sous 1 €, or une canette coûte moins.
 Chaque membre a donc un portefeuille :
 
 - **recharge** par carte, 1 € minimum, sans plafond (2, 5, 10, 20 € proposés), créditée une
-  fois le paiement confirmé par le prestataire ;
+  fois le paiement confirmé par SumUp ;
 - **achat** : le panier est déduit du solde, à n'importe quel prix, sans
   carte ; débit et retrait du stock dans la même transaction ;
 - le solde **ne passe jamais sous zéro** : ligne verrouillée et solde vérifié
   avant chaque débit (deux achats simultanés ne passent pas sur un seul solde).
 
 Le bouton de paiement du frigo choisit tout seul : portefeuille s'il suffit,
-sinon carte si le panier atteint le minimum du prestataire, sinon recharge.
+sinon carte si le panier atteint 1 €, sinon recharge.
 Sans paiement par carte configuré, le portefeuille marche quand même (recharge
 en espèces auprès du trésorier).
 
@@ -67,20 +66,19 @@ une page web sur Android ; sur iPhone, à vérifier.
 
 ## Réglages du plugin
 
+Le strict nécessaire :
+
 - **Emplacement du frigo**.
-- **Prestataire de paiement par carte** : SumUp (défaut) ou HelloAsso. Chaque
-  achat retient le sien : changer de prestataire n'empêche pas la
-  confirmation des paiements en cours.
-- **SumUp** : clé API secrète (`sup_sk_…`) et code marchand. 1 € minimum,
-  2,5 %.
-- **Google Pay** (SumUp, facultatif) : identifiant marchand Google ; **nom affiché**.
-- **HelloAsso** : environnement (production / sandbox), slug de l'association
-  (adresse `helloasso.com/associations/<slug>`), Client ID et Client Secret
-  (back-office > Mon compte > Intégrations et API), pré-remplissage du payeur.
-  Aucun frais pour l'asso ; HelloAsso propose une contribution volontaire au
-  payeur. L'association doit être vérifiée par HelloAsso (sinon erreur 409).
-- **Reçu** : identité de l'asso, logo, mention ; **envoi par e-mail**
-  automatique (désactivé par défaut : l'acheteur peut toujours se l'envoyer).
+- **SumUp** : clé API secrète (`sup_sk_…`) et code marchand. 1 € minimum par
+  paiement, 2,5 %.
+- **Tap to Pay** (facultatif) : clé affiliate SumUp (et son identifiant
+  d'application si SumUp en a demandé un).
+- **Google Pay** (facultatif) : identifiant marchand Google.
+- **Envoi du reçu par e-mail** automatique (désactivé par défaut : l'acheteur
+  peut toujours se l'envoyer).
+
+Rien à remplir pour le reçu : il prend le nom de l'instance InvenTree et le
+logo de la Scannette.
 
 Apple Pay (SumUp) : déclarer le domaine `inventaire-<asso>.eirspace.fr` dans le
 profil SumUp et publier le fichier fourni sous
@@ -92,12 +90,10 @@ profil SumUp et publier le fichier fourni sous
    l'instance) ; connexion (EirbConnect), puis la page frigo.
 2. `POST /plugin/paiements/checkout` (panier) ou `/wallet/topup` (recharge) :
    prix et disponibilité recalculés côté serveur, achat *en attente*, paiement
-   créé chez le prestataire au montant exact.
-3. SumUp : formulaire dans la Scannette. HelloAsso : page HelloAsso, puis
-   retour sur `/scannette/?achat=<pk>`.
-4. `GET /plugin/paiements/purchase/<pk>`, les webhooks (`…/webhook/sumup`,
-   `…/webhook/helloasso`) et une tâche toutes les 10 min relisent le paiement
-   chez le prestataire. Confirmé : stock prélevé dans le frigo (plus anciens
+   créé chez SumUp au montant exact.
+3. Formulaire SumUp dans la Scannette.
+4. `GET /plugin/paiements/purchase/<pk>`, le webhook `…/webhook/sumup` et une
+   tâche toutes les 10 min relisent le paiement chez SumUp. Confirmé : stock prélevé dans le frigo (plus anciens
    d'abord) ou portefeuille crédité, une seule fois.
 
 ## Endpoints (`/plugin/paiements/`)
@@ -110,7 +106,8 @@ profil SumUp et publier le fichier fourni sous
 | `wallet`, `wallet/topup`, `wallet/pay` | solde et mouvements, recharge, achat au portefeuille |
 | `wallet/admin` | admins : soldes de tous (`?user=<pk>` : mouvements), correction (POST) |
 | `treso/export.csv` | admins : export (`?from=AAAA-MM-JJ&to=…&user=<pk>`) |
-| `webhook/sumup`, `webhook/helloasso` | notifications des prestataires (anonymes, jamais crues sur parole) |
+| `tap/members`, `tap/start` | admins : recharge en Tap to Pay (lien `sumupmerchant://`) |
+| `webhook/sumup` | notification SumUp (anonyme, jamais crue sur parole) |
 
 Achats et portefeuilles sont aussi consultables, en lecture, dans l'admin
 Django (*Achats*, *Portefeuilles*).

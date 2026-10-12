@@ -29,8 +29,8 @@ class Purchase(models.Model):
     METHOD_CARD = "card"
     METHOD_WALLET = "wallet"
     METHOD_CHOICES = [(METHOD_CARD, "Carte"), (METHOD_WALLET, "Portefeuille")]
-    # prestataire du paiement par carte (fige a la creation : le reglage
-    # PROVIDER peut changer pendant qu'un achat attend sa confirmation)
+    # prestataire du paiement par carte : SumUp (champ garde pour l'historique,
+    # une option HelloAsso a existe un temps ; choix inchanges pour la migration 0005)
     PROVIDER_CHOICES = [("sumup", "SumUp"), ("helloasso", "HelloAsso")]
 
     # emplacement dans lequel le stock est preleve (frigo), fige a la creation
