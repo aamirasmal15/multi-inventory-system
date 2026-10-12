@@ -312,8 +312,8 @@ async function tresoCsv(btn) {
   }
 }
 
-/* ---- Tap to Pay : un membre du bureau encaisse la recharge d'un membre ----
-   Sur le téléphone du bureau (appli SumUp connectée au compte de l'asso,
+/* ---- Tap to Pay : un admin encaisse la recharge d'un membre ----
+   Sur le téléphone de l'admin (appli SumUp connectée au compte de l'asso,
    Tap to Pay activé) : membre + montant -> POST /tap/start -> lien
    sumupmerchant:// qui ouvre l'appli SumUp ; le membre pose sa carte ou son
    téléphone ; l'appli revient sur ?achat=<pk> et le reçu relit la transaction
@@ -355,7 +355,7 @@ function openTapSheet(member) {
     go.disabled = !ok;
     go.textContent = c >= ACHAT.topupMin ? t("tap_go", eurCents(c)) : t("tap_go_empty");
   };
-  // choix du membre : recherche dans la liste du bureau, ou membre imposé (fiche Trésorerie)
+  // choix du membre : recherche dans la liste des membres, ou membre imposé (fiche Trésorerie)
   const paintWho = () => {
     if (picked) {
       who.innerHTML =

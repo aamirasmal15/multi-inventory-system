@@ -48,9 +48,9 @@ Bouton **Trésorerie** en tête du mode Gérer du frigo :
 - **Export CSV** de la sélection, corrections comprises (Excel FR : `;`,
   virgule décimale).
 
-## Tap to Pay (bureau)
+## Tap to Pay (admins)
 
-Un membre du bureau encaisse la recharge d'un membre sur son téléphone :
+Un admin encaisse la recharge d'un membre sur son téléphone :
 feuille du portefeuille (ou fiche du membre dans la Trésorerie) → **Encaisser
 une recharge** → membre + montant → l'appli SumUp s'ouvre avec le montant
 (lien `sumupmerchant://`, « Payment Switch » de SumUp) → le membre pose sa
@@ -61,8 +61,8 @@ chez SumUp par notre référence (`foreign_transaction_id`), statut, montant et
 devise vérifiés, puis le portefeuille est crédité (journal : « encaissée par »).
 
 Prérequis : appli SumUp sur le téléphone, connectée au compte de l'asso, Tap to
-Pay activé ; clé affiliate SumUp dans les réglages. Peuvent encaisser : les
-admins et les membres du groupe `BUREAU_GROUP`. SumUp documente ce lien depuis
+Pay activé ; clé affiliate SumUp dans les réglages. Seuls les admins peuvent
+encaisser. SumUp documente ce lien depuis
 une page web sur Android ; sur iPhone, à vérifier.
 
 ## Réglages du plugin

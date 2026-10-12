@@ -25,7 +25,7 @@ const ACHAT = {
   topupMin: 100,
   topupMax: 99999,
   provider: "sumup", // "sumup" : formulaire dans la Scannette ; "helloasso" : page HelloAsso
-  canTap: false, // encaisser des recharges en Tap to Pay (bureau, treso.js)
+  canTap: false, // encaisser des recharges en Tap to Pay (admins, treso.js)
 };
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
@@ -162,7 +162,7 @@ function openWalletSheet(need) {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
     (need > 0 ? '<p class="wal-need">' + esc(t("wal_missing", eurCents(need))) + "</p>" : "") +
     form +
-    // bureau : encaisser la recharge d'un membre sur ce téléphone (Tap to Pay)
+    // admins : encaisser la recharge d'un membre sur ce téléphone (Tap to Pay)
     (ACHAT.canTap ? '<button type="button" class="btn btn-ghost btn-block tap-open" data-tap>📲 ' + esc(t("tap_title")) + "</button>" : "") +
     "</div>";
   lockScroll();

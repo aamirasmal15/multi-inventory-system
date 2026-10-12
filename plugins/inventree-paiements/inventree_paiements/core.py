@@ -177,11 +177,6 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             "description": "Application ID associé à la clé affiliate (facultatif selon SumUp)",
             "default": "",
         },
-        "BUREAU_GROUP": {
-            "name": "Tap to Pay : groupe du bureau",
-            "description": "Nom du groupe InvenTree dont les membres peuvent encaisser des recharges en Tap to Pay (les admins le peuvent toujours). Vide = admins seulement.",
-            "default": "",
-        },
         "SEND_RECEIPT": {
             "name": "Envoyer le reçu par e-mail",
             "description": "Reçu (PDF joint) envoyé automatiquement à l'adresse principale de l'acheteur une fois le paiement confirmé. Désactivé : l'acheteur peut le demander depuis son reçu.",
@@ -263,21 +258,17 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         """Montant minimal d'un paiement par carte avec le prestataire choisi."""
         return MIN_CARD_CENTS_BY_PROVIDER.get(self.provider(), MIN_CARD_CENTS)
 
-    def can_collect(self, user):
-        """Peut encaisser une recharge en Tap to Pay : admin, ou membre du groupe du bureau."""
-        if not user or not user.is_authenticated:
-            return False
-        if user.is_staff or user.is_superuser:
-            return True
-        group = (self.get_setting("BUREAU_GROUP") or "").strip()
-        return bool(group) and user.groups.filter(name=group).exists()
+    @staticmethod
+    def can_collect(user):
+        """Peut encaisser une recharge en Tap to Pay : admins seulement."""
+        return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
 
     def tap_ready(self):
         """Tap to Pay utilisable : compte SumUp et cle affiliate renseignes."""
         return self.is_configured("sumup") and bool(self.get_setting("SUMUP_AFFILIATE_KEY"))
 
     def start_tap(self, request, member, amount_cents):
-        """Recharge encaissee par un membre du bureau : Purchase en attente + lien vers l'appli SumUp.
+        """Recharge encaissee par un admin : Purchase en attente + lien vers l'appli SumUp.
 
         La reference (foreign-tx-id) est gardee dans checkout_id : le paiement
         est ensuite retrouve et verifie chez SumUp par cette reference, jamais

@@ -54,8 +54,8 @@ class Purchase(models.Model):
     kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_FRIDGE, verbose_name="Type")
     method = models.CharField(max_length=10, choices=METHOD_CHOICES, default=METHOD_CARD, verbose_name="Moyen de paiement")
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default="sumup", verbose_name="Prestataire")
-    # en ligne (formulaire / page du prestataire) ou Tap to Pay : un membre du
-    # bureau encaisse sur son telephone (appli SumUp) la recharge d'un membre
+    # en ligne (formulaire / page du prestataire) ou Tap to Pay : un admin
+    # encaisse sur son telephone (appli SumUp) la recharge d'un membre
     CHANNEL_ONLINE = "online"
     CHANNEL_TAP = "tap"
     CHANNEL_CHOICES = [(CHANNEL_ONLINE, "En ligne"), (CHANNEL_TAP, "Tap to Pay")]

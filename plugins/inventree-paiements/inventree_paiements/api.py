@@ -108,7 +108,7 @@ class ConfigView(PluginView):
                 "locations": sorted(loc.get_descendants(include_self=True).values_list("pk", flat=True)),
             } if loc else None,
             "admin": is_admin(request.user),
-            # encaisser des recharges en Tap to Pay (admins, groupe du bureau)
+            # encaisser des recharges en Tap to Pay (admins)
             "can_tap": self.plugin.tap_ready() and self.plugin.can_collect(request.user),
             # sous ce montant, SumUp refuse la carte : portefeuille obligatoire
             "min_card_cents": self.plugin.min_card_cents(),
@@ -548,7 +548,7 @@ class WalletAdminView(PluginView):
 
 
 class TapMembersView(PluginView):
-    """Bureau : membres actifs a qui encaisser une recharge (nom, identifiant ; pas de solde)."""
+    """Admins : membres actifs a qui encaisser une recharge (nom, identifiant ; pas de solde)."""
 
     def get(self, request):
         from django.contrib.auth import get_user_model
@@ -556,7 +556,7 @@ class TapMembersView(PluginView):
         from .receipt import buyer_name
 
         if not self.plugin.can_collect(request.user):
-            return Response({"detail": "Réservé au bureau."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
         rows = [
             {"user": u.pk, "username": u.username, "name": buyer_name(u)}
             for u in get_user_model().objects.filter(is_active=True)
@@ -566,7 +566,7 @@ class TapMembersView(PluginView):
 
 
 class TapStartView(PluginView):
-    """Bureau : recharge d'un membre en Tap to Pay ({"user": pk, "amount_cents": 500}).
+    """Admins : recharge d'un membre en Tap to Pay ({"user": pk, "amount_cents": 500}).
 
     Renvoie le lien sumupmerchant:// qui ouvre l'appli SumUp ; au retour
     (?achat=<pk>), le recu relit la transaction chez SumUp et credite le portefeuille.
@@ -576,7 +576,7 @@ class TapStartView(PluginView):
         from django.contrib.auth import get_user_model
 
         if not self.plugin.can_collect(request.user):
-            return Response({"detail": "Réservé au bureau."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
         if not self.plugin.tap_ready():
             return Response({"detail": "Tap to Pay non configuré (clé affiliate SumUp)."}, status=503)
         data = request.data if isinstance(request.data, dict) else {}
