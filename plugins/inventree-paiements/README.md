@@ -1,8 +1,10 @@
 # inventree-paiements : le frigo
 
 Plugin InvenTree : page **/frigo** de la Scannette. On choisit ses boissons
-dans le frigo, on paie avec **SumUp** (carte, Apple Pay, Google Pay) sans
-quitter la page, et on reçoit un reçu PDF par e-mail.
+dans le frigo et on paie avec son **portefeuille** (solde rechargé à
+l'avance) ou directement par carte, via **SumUp** (carte, Apple Pay, Google
+Pay, sans quitter la page) ou **HelloAsso** (page de paiement HelloAsso). Reçu
+PDF à télécharger ou par e-mail.
 
 ## Mettre un article en vente
 
@@ -15,31 +17,83 @@ quitter la page, et on reçoit un reçu PDF par e-mail.
 Sans prix, un article du frigo reste invisible des membres. Les articles
 trackables (prêts) ne sont jamais vendus.
 
+## Portefeuille
+
+SumUp refuse tout paiement par carte sous 1 €, or une canette coûte moins.
+Chaque membre a donc un portefeuille :
+
+- **recharge** par carte, de 1 à 50 € (2, 5, 10, 20 € proposés), créditée une
+  fois le paiement confirmé par le prestataire ;
+- **achat** : le panier est déduit du solde, à n'importe quel prix, sans
+  carte ; débit et retrait du stock dans la même transaction ;
+- le solde **ne passe jamais sous zéro** : ligne verrouillée et solde vérifié
+  avant chaque débit (deux achats simultanés ne passent pas sur un seul solde).
+
+Le bouton de paiement du frigo choisit tout seul : portefeuille s'il suffit,
+sinon carte si le panier atteint le minimum du prestataire, sinon recharge.
+Sans paiement par carte configuré, le portefeuille marche quand même (recharge
+en espèces auprès du trésorier).
+
+Chaque mouvement est journalisé (`WalletEntry` : recharge, achat, correction).
+
+## Trésorerie (admins)
+
+Bouton **Trésorerie** en tête du mode Gérer du frigo :
+
+- **Portefeuilles** : total dû aux membres, solde de chacun ; corriger un
+  solde (crédit d'espèces reçues, remboursement), note obligatoire, auteur
+  journalisé, jamais sous zéro ;
+- **Achats** : achats et recharges de tous, par période et par membre,
+  totaux encaissé par carte / vendu au portefeuille ;
+- **Export CSV** de la sélection, corrections comprises (Excel FR : `;`,
+  virgule décimale).
+
 ## Réglages du plugin
 
 - **Emplacement du frigo**.
-- **SumUp** : clé API secrète (`sup_sk_…`) et code marchand. La clé d'un
-  compte marchand *sandbox* (paramètres développeur SumUp) donne des paiements
-  de test.
-- **Google Pay** (facultatif) : identifiant marchand Google ; **nom affiché**.
-- **Reçu par e-mail** automatique (désactivé par défaut : l'acheteur peut
-  toujours se l'envoyer depuis son reçu).
+- **Prestataire de paiement par carte** : SumUp (défaut) ou HelloAsso. Chaque
+  achat retient le sien : changer de prestataire n'empêche pas la
+  confirmation des paiements en cours.
+- **SumUp** : clé API secrète (`sup_sk_…`) et code marchand. 1 € minimum,
+  2,5 %.
+- **Google Pay** (SumUp, facultatif) : identifiant marchand Google ; **nom affiché**.
+- **HelloAsso** : environnement (production / sandbox), slug de l'association
+  (adresse `helloasso.com/associations/<slug>`), Client ID et Client Secret
+  (back-office > Mon compte > Intégrations et API), pré-remplissage du payeur.
+  Aucun frais pour l'asso ; HelloAsso propose une contribution volontaire au
+  payeur. L'association doit être vérifiée par HelloAsso (sinon erreur 409).
+- **Reçu** : identité de l'asso, logo, mention ; **envoi par e-mail**
+  automatique (désactivé par défaut : l'acheteur peut toujours se l'envoyer).
 
-Apple Pay : déclarer le domaine `inventaire-<asso>.eirspace.fr` dans le profil
-SumUp et publier le fichier fourni sous
+Apple Pay (SumUp) : déclarer le domaine `inventaire-<asso>.eirspace.fr` dans le
+profil SumUp et publier le fichier fourni sous
 `/.well-known/apple-developer-merchantid-domain-association`.
 
-## Parcours
+## Parcours d'un paiement par carte
 
 1. QR sur la porte : `/frigo` redirige vers `/scannette/?frigo=1` (Caddy de
    l'instance) ; connexion (EirbConnect), puis la page frigo.
-2. Panier, puis `POST /plugin/paiements/checkout` : prix et disponibilité
-   recalculés côté serveur, achat *en attente*, checkout SumUp dont la
-   description est le panier exact (« Frigo · 2 × Coca, Jus d'orange »).
-3. Formulaire SumUp dans la Scannette ; à la fin, `GET /plugin/paiements/purchase/<pk>`
-   (et le webhook `…/webhook/sumup`) relisent le checkout chez SumUp. Statut
-   PAID : stock prélevé dans le frigo (plus anciens d'abord), une seule fois,
-   puis reçu envoyé par e-mail (tâche de fond).
+2. `POST /plugin/paiements/checkout` (panier) ou `/wallet/topup` (recharge) :
+   prix et disponibilité recalculés côté serveur, achat *en attente*, paiement
+   créé chez le prestataire au montant exact.
+3. SumUp : formulaire dans la Scannette. HelloAsso : page HelloAsso, puis
+   retour sur `/scannette/?achat=<pk>`.
+4. `GET /plugin/paiements/purchase/<pk>`, les webhooks (`…/webhook/sumup`,
+   `…/webhook/helloasso`) et une tâche toutes les 10 min relisent le paiement
+   chez le prestataire. Confirmé : stock prélevé dans le frigo (plus anciens
+   d'abord) ou portefeuille crédité, une seule fois.
 
-Les achats sont consultables dans l'admin Django (*Achats*) et dans « Mes
-achats » de la Scannette.
+## Endpoints (`/plugin/paiements/`)
+
+| Chemin | Usage |
+|---|---|
+| `config`, `fridge`, `fridge/price` | réglages vus par la Scannette, catalogue, prix (admins) |
+| `checkout`, `purchase/<pk>`, `purchases` | paiement par carte, état d'un achat, « Mes achats » (`?all=1` : tous, admins) |
+| `purchase/<pk>/receipt.pdf`, `purchase/<pk>/email` | reçu |
+| `wallet`, `wallet/topup`, `wallet/pay` | solde et mouvements, recharge, achat au portefeuille |
+| `wallet/admin` | admins : soldes de tous (`?user=<pk>` : mouvements), correction (POST) |
+| `treso/export.csv` | admins : export (`?from=AAAA-MM-JJ&to=…&user=<pk>`) |
+| `webhook/sumup`, `webhook/helloasso` | notifications des prestataires (anonymes, jamais crues sur parole) |
+
+Achats et portefeuilles sont aussi consultables, en lecture, dans l'admin
+Django (*Achats*, *Portefeuilles*).

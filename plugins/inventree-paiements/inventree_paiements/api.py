@@ -86,7 +86,10 @@ class ConfigView(PluginView):
         gp_id = self.plugin.get_setting("GOOGLE_PAY_MERCHANT_ID")
         loc = self.plugin.fridge_location()
         return Response({
-            "enabled": self.plugin.is_configured(),
+            # frigo ouvert : achat possible au portefeuille meme sans carte configuree
+            "enabled": loc is not None,
+            # paiement par carte (achat direct, recharge) configure
+            "card": self.plugin.is_configured(),
             # option googlePay du widget SumUp (identifiant public, pas un secret)
             "google_pay": {
                 "merchantId": gp_id,
@@ -135,7 +138,8 @@ class FridgeView(PluginView):
         return Response({
             "location": loc.pk,
             "name": loc.name,
-            "enabled": self.plugin.is_configured(),
+            "enabled": True,
+            "card": self.plugin.is_configured(),
             "products": products,
             "wallet_cents": self.plugin.wallet_balance(request.user),
         })

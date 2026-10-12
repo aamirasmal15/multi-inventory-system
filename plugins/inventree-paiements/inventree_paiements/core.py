@@ -625,7 +625,16 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         """Portefeuille du membre, cree au besoin, VERROUILLE (a appeler dans une transaction)."""
         from .models import Wallet
 
-        Wallet.objects.get_or_create(user=user)
+        from django.db import IntegrityError
+
+        if not Wallet.objects.filter(user=user).exists():
+            try:
+                # savepoint : une creation concurrente (meme membre, deux onglets)
+                # ne doit pas casser la transaction appelante
+                with transaction.atomic():
+                    Wallet.objects.create(user=user)
+            except IntegrityError:
+                pass
         return Wallet.objects.select_for_update().get(user=user)
 
     def _wallet_move(self, user, amount_cents, kind, purchase=None, note="", by=None):

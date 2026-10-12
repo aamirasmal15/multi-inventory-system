@@ -219,13 +219,15 @@ function frigoPaintCart() {
   // d'1 € ou plus), sinon la recharge quand la carte est possible
   const choice = payChoice(cents);
   const alt = $("#frigoAltBtn");
-  alt.dataset.via = choice === "wallet" && cents >= ACHAT.minCard ? "card" : choice === "card" ? "topup" : "";
+  alt.dataset.via = !ACHAT.card ? "" : choice === "wallet" && cents >= ACHAT.minCard ? "card" : choice === "card" ? "topup" : "";
   alt.textContent = alt.dataset.via === "card" ? t("wal_alt_card") : t("wal_alt_topup");
   alt.style.display = alt.dataset.via ? "" : "none";
   // sous 1 € sans solde suffisant : on dit pourquoi il faut recharger
   $("#frigoCartInfo").insertAdjacentHTML(
     "beforeend",
-    choice === "topup" ? '<span class="fr-why">' + esc(t("wal_why", eurCents(ACHAT.wallet))) + "</span>" : "",
+    choice === "topup"
+      ? '<span class="fr-why">' + esc(ACHAT.card ? t("wal_why", eurCents(ACHAT.wallet)) : t("wal_why_nocard", eurCents(ACHAT.wallet))) + "</span>"
+      : "",
   );
   bar.classList.add("show");
 }

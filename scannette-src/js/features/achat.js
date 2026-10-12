@@ -15,7 +15,8 @@
    ========================================================================== */
 
 const ACHAT = {
-  enabled: false,
+  enabled: false, // frigo ouvert (achat au portefeuille possible)
+  card: false, // paiement par carte configuré (achat direct, recharge)
   googlePay: null,
   fridge: null,
   admin: false,
@@ -35,6 +36,7 @@ async function loadAchatConfig() {
   try {
     const c = await api("/plugin/paiements/config");
     ACHAT.enabled = !!c.enabled;
+    ACHAT.card = !!c.card;
     ACHAT.googlePay = c.google_pay || null;
     ACHAT.fridge = c.fridge || null;
     ACHAT.admin = !!c.admin;
@@ -91,10 +93,11 @@ async function walletRefresh() {
   }
 }
 
-/* moyen de paiement d'un montant : "wallet" | "card" | "topup" */
+/* moyen de paiement d'un montant : "wallet" | "card" | "topup" ; sans carte
+   configurée, seul le portefeuille existe ("topup" mène alors au trésorier) */
 function payChoice(cents) {
   if (ACHAT.wallet >= cents) return "wallet";
-  if (cents >= ACHAT.minCard) return "card";
+  if (ACHAT.card && cents >= ACHAT.minCard) return "card";
   return "topup";
 }
 /* libellé du bouton principal pour ce montant */
@@ -135,6 +138,17 @@ function openWalletSheet(need) {
   // montant proposé : le plus petit raccourci qui couvre le panier
   const pre = TOPUP_CHIPS.find((c) => c >= Math.max(need, min)) || TOPUP_CHIPS[TOPUP_CHIPS.length - 1];
   const fmtC = (c) => (c / 100).toFixed(2).replace(".", ",");
+  // sans paiement par carte : pas de formulaire, recharge en espèces auprès du trésorier
+  const form = ACHAT.card
+    ? '<div class="ps-steplbl wal-k">' + esc(t("wal_topup_how")) + "</div>" +
+      '<div class="price-chips wal-chips">' +
+      TOPUP_CHIPS.map((c) => '<button type="button" class="price-chip" data-v="' + fmtC(c) + '">' + c / 100 + " €</button>").join("") +
+      "</div>" +
+      '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
+      '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min), eurCents(max))) + "</div>" +
+      '<button class="btn btn-primary btn-block" data-go disabled></button>' +
+      '<p class="ps-note wal-note">' + esc(t("wal_explain", ACHAT.provider === "helloasso" ? "HelloAsso" : "SumUp")) + "</p>"
+    : '<p class="ps-note wal-note">' + esc(t("wal_nocard")) + "</p>";
   const ov = document.createElement("div");
   ov.className = "modal-ov sheet-ov";
   ov.innerHTML =
@@ -145,33 +159,8 @@ function openWalletSheet(need) {
     '<button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
     (need > 0 ? '<p class="wal-need">' + esc(t("wal_missing", eurCents(need))) + "</p>" : "") +
-    '<div class="ps-steplbl wal-k">' + esc(t("wal_topup_how")) + "</div>" +
-    '<div class="price-chips wal-chips">' +
-    TOPUP_CHIPS.map((c) => '<button type="button" class="price-chip" data-v="' + fmtC(c) + '">' + (c / 100) + " €</button>").join("") +
-    "</div>" +
-    '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
-    '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min), eurCents(max))) + "</div>" +
-    '<button class="btn btn-primary btn-block" data-go disabled></button>' +
-    '<p class="ps-note wal-note">' + esc(t("wal_explain", ACHAT.provider === "helloasso" ? "HelloAsso" : "SumUp")) + "</p></div>";
-  const input = ov.querySelector("#walInput"),
-    go = ov.querySelector("[data-go]");
-  const cents = () => {
-    const v = input.value.trim().replace(",", ".");
-    return /^\d{1,3}(\.\d{1,2})?$/.test(v) ? Math.round(parseFloat(v) * 100) : NaN;
-  };
-  const sync = () => {
-    input.style.width = Math.max(4, (input.value || input.placeholder).length) + 0.3 + "ch";
-    const c = cents();
-    const ok = c >= min && c <= max;
-    go.disabled = !ok;
-    go.textContent = ok ? t("wal_topup_x", eurCents(c)) : t("wal_topup_btn");
-  };
-  input.value = fmtC(pre);
-  armPriceChips(ov, input, sync);
-  input.addEventListener("input", sync);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !go.disabled) go.click();
-  });
+    form +
+    "</div>";
   lockScroll();
   let closed = false;
   const close = () => {
@@ -190,6 +179,35 @@ function openWalletSheet(need) {
     if (e.target === ov) close();
   });
   ov.querySelector("[data-x]").onclick = close;
+  document.body.appendChild(ov);
+  if (ACHAT.card) armTopupForm(ov, close, fmtC(pre), min, max);
+  // solde à jour (une recharge a pu aboutir ailleurs)
+  walletRefresh();
+  return Promise.resolve(false);
+}
+
+/* formulaire de recharge de la feuille : montant (raccourcis ou libre), puis
+   paiement par carte (feuille SumUp ou page HelloAsso) */
+function armTopupForm(ov, close, preset, min, max) {
+  const input = ov.querySelector("#walInput"),
+    go = ov.querySelector("[data-go]");
+  const cents = () => {
+    const v = input.value.trim().replace(",", ".");
+    return /^\d{1,3}(\.\d{1,2})?$/.test(v) ? Math.round(parseFloat(v) * 100) : NaN;
+  };
+  const sync = () => {
+    input.style.width = Math.max(4, (input.value || input.placeholder).length) + 0.3 + "ch";
+    const c = cents();
+    const ok = c >= min && c <= max;
+    go.disabled = !ok;
+    go.textContent = ok ? t("wal_topup_x", eurCents(c)) : t("wal_topup_btn");
+  };
+  input.value = preset;
+  armPriceChips(ov, input, sync);
+  input.addEventListener("input", sync);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !go.disabled) go.click();
+  });
   go.onclick = async () => {
     const c = cents();
     const h = go.innerHTML;
@@ -208,12 +226,8 @@ function openWalletSheet(need) {
     if (r.redirect_url) return goHelloAsso(r);
     openPaySheet(r, [{ name: t("wal_topup_line"), quantity: 1, total: r.total }]);
   };
-  document.body.appendChild(ov);
   ov.querySelectorAll(".price-chip").forEach((x) => x.classList.toggle("on", x.dataset.v === input.value));
   sync();
-  // solde à jour (une recharge a pu aboutir ailleurs)
-  walletRefresh();
-  return Promise.resolve(false);
 }
 
 /* ---- paiement ----
@@ -241,7 +255,7 @@ async function payCheckout(body, recap, opts) {
 
 /* préchargement silencieux du script SumUp à l'ouverture du frigo */
 function prefetchSumup() {
-  if (ACHAT.enabled && ACHAT.provider === "sumup") loadSumupSdk().catch(() => {});
+  if (ACHAT.card && ACHAT.provider === "sumup") loadSumupSdk().catch(() => {});
 }
 
 /* HelloAsso : paiement sur sa page, en pleine page. Retour sur ?achat=<pk>
