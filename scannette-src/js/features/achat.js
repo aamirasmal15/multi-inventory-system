@@ -26,6 +26,7 @@ const ACHAT = {
   topupMax: 99999,
   provider: "sumup", // "sumup" : formulaire dans la Scannette ; "helloasso" : page HelloAsso
   canTap: false, // encaisser des recharges en Tap to Pay (bureau, treso.js)
+  tapSetup: false, // admin, Tap to Pay pas encore configuré : on explique quoi faire
 };
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
@@ -46,6 +47,7 @@ async function loadAchatConfig() {
     ACHAT.topupMax = c.topup_max_cents || 99999;
     ACHAT.provider = c.provider || "sumup";
     ACHAT.canTap = !!c.can_tap;
+    ACHAT.tapSetup = !!c.tap_setup;
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
   }
@@ -319,7 +321,9 @@ function openPaySheet(r, recap) {
       '<button class="iconbtn" id="payClose" aria-label="' + esc(t("cancel")) + '">' +
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
       '<details class="pay-recap"' + (recap.length <= 2 ? " open" : "") + ">" +
-      "<summary><span>" + esc(t("frigo_cart_n", n)) + '</span><span class="pay-more">' + esc(t("buy_details")) + "</span></summary>" +
+      "<summary><span>" + esc(t("frigo_cart_n", n)) + '</span><span class="pay-more">' + esc(t("buy_details")) +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' +
+      "</span></summary>" +
       recap
         .map(
           (l) =>

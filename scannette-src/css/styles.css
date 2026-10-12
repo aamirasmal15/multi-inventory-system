@@ -288,9 +288,9 @@ textarea{resize:none;min-height:56px}
 .pay-recap{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);padding:0 14px;margin-bottom:12px}
 .pay-recap summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-weight:600;font-size:14px;cursor:pointer;list-style:none}
 .pay-recap summary::-webkit-details-marker{display:none}
-.pay-more{font-size:12.5px;font-weight:600;color:var(--primary)}
-.pay-more::after{content:" ▾";display:inline-block;transition:transform .15s}
-.pay-recap[open] .pay-more::after{transform:rotate(180deg)}
+.pay-more{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:600;color:var(--primary);background:var(--primary-light);border-radius:999px;padding:4px 8px 4px 11px}
+.pay-more svg{width:14px;height:14px;transition:transform .2s}
+.pay-recap[open] .pay-more svg{transform:rotate(180deg)}
 .pay-recap[open] summary{border-bottom:1px solid var(--border)}
 .pay-line{display:flex;gap:9px;font-size:14px;padding:8px 0}
 .pay-line+.pay-line{border-top:1px solid var(--border)}
@@ -454,6 +454,8 @@ textarea{resize:none;min-height:56px}
 .ps-hrow b.minus{color:var(--red)}
 /* Tap to Pay (treso.js) */
 .tap-open{margin-top:10px}
+.treso-tap{margin-bottom:12px}
+.tap-steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.45}
 .tap-who{margin-bottom:14px}
 .tap-list{margin-top:-4px}
 .tap-picked{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px}

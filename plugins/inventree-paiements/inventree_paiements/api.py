@@ -110,6 +110,8 @@ class ConfigView(PluginView):
             "admin": is_admin(request.user),
             # encaisser des recharges en Tap to Pay (admins, groupe du bureau)
             "can_tap": self.plugin.tap_ready() and self.plugin.can_collect(request.user),
+            # admins : Tap to Pay pas encore configure (cle affiliate manquante)
+            "tap_setup": is_admin(request.user) and not self.plugin.tap_ready(),
             # sous ce montant, SumUp refuse la carte : portefeuille obligatoire
             "min_card_cents": self.plugin.min_card_cents(),
             "topup_min_cents": TOPUP_MIN_CENTS,
