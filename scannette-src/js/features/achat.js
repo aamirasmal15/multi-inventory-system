@@ -7,10 +7,14 @@
    - openReceipt(pk) affiche le reçu : le serveur vérifie d'abord le paiement
      auprès de SumUp, retire le stock, envoie le reçu par e-mail. Aussi
      appelé au retour d'une étape 3-D Secure en pleine page (?achat=<pk>) ;
+   - portefeuille : SumUp refuse la carte sous 1 €, d'où un solde rechargé par
+     carte (1 € min.) puis débité à chaque achat, jamais négatif (verrou
+     serveur). payChoice() choisit : portefeuille s'il suffit, sinon carte si
+     le panier fait 1 € ou plus, sinon recharge (openWalletSheet) ;
    - plugin absent ou non configuré -> le frigo l'annonce, rien d'autre ne change.
    ========================================================================== */
 
-const ACHAT = { enabled: false, googlePay: null, fridge: null, admin: false };
+const ACHAT = { enabled: false, googlePay: null, fridge: null, admin: false, wallet: 0, minCard: 100, topupMax: 5000 };
 let achatReadyResolve = null;
 const achatReadyPromise = new Promise((r) => (achatReadyResolve = r));
 
@@ -24,6 +28,8 @@ async function loadAchatConfig() {
     ACHAT.googlePay = c.google_pay || null;
     ACHAT.fridge = c.fridge || null;
     ACHAT.admin = !!c.admin;
+    ACHAT.minCard = c.min_card_cents || 100;
+    ACHAT.topupMax = c.topup_max_cents || 5000;
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
   }
@@ -56,6 +62,145 @@ function eur(s) {
 }
 function eurCents(c) {
   return eur((c / 100).toFixed(2));
+}
+
+/* ---- portefeuille ---- */
+function setWallet(cents) {
+  ACHAT.wallet = Number(cents) || 0;
+  document.querySelectorAll("[data-wallet-bal]").forEach((el) => (el.textContent = eurCents(ACHAT.wallet)));
+}
+async function walletRefresh() {
+  try {
+    const w = await api("/plugin/paiements/wallet");
+    setWallet(w.balance_cents);
+    return w;
+  } catch (_) {
+    return null;
+  }
+}
+
+/* moyen de paiement d'un montant : "wallet" | "card" | "topup" */
+function payChoice(cents) {
+  if (ACHAT.wallet >= cents) return "wallet";
+  if (cents >= ACHAT.minCard) return "card";
+  return "topup";
+}
+/* libellé du bouton principal pour ce montant */
+function payLabel(cents) {
+  const c = payChoice(cents);
+  return c === "wallet" ? t("wal_pay_btn", eurCents(cents)) : c === "card" ? t("buy_btn", eurCents(cents)) : t("wal_topup_btn");
+}
+
+/* achat d'articles du frigo par le meilleur moyen : lines [{part, quantity}],
+   recap [{name, quantity, total}], opts.cart (panier : vidé une fois payé),
+   opts.via pour forcer "card" ou "topup". */
+async function fridgeBuy(lines, recap, cents, opts) {
+  opts = opts || {};
+  const via = opts.via || payChoice(cents);
+  if (via === "topup") return openWalletSheet(Math.max(0, cents - ACHAT.wallet));
+  if (via === "card") return payCheckout({ source: "frigo", lines }, recap, opts);
+  try {
+    const r = await api("/plugin/paiements/wallet/pay", { method: "POST", body: { lines } });
+    setWallet(r.wallet_cents);
+    if (opts.cart) frigoCartClear();
+    toast(t("wal_paid_toast", eurCents(r.wallet_cents)), "ok");
+    openReceipt(r.purchase, false);
+    return true;
+  } catch (e) {
+    toast(e.message, "bad");
+    walletRefresh();
+    return false;
+  }
+}
+
+/* feuille « Mon portefeuille » : solde, montants rapides, montant libre,
+   recharge par carte. need : ce qui manque pour le panier (centimes). */
+const TOPUP_CHIPS = [200, 500, 1000, 2000];
+function openWalletSheet(need) {
+  need = need || 0;
+  const min = ACHAT.minCard,
+    max = ACHAT.topupMax;
+  // montant proposé : le plus petit raccourci qui couvre le panier
+  const pre = TOPUP_CHIPS.find((c) => c >= Math.max(need, min)) || TOPUP_CHIPS[TOPUP_CHIPS.length - 1];
+  const fmtC = (c) => (c / 100).toFixed(2).replace(".", ",");
+  const ov = document.createElement("div");
+  ov.className = "modal-ov sheet-ov";
+  ov.innerHTML =
+    '<div class="ps-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("wal_title")) + '">' +
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ps-head"><div class="ps-name"><div class="t">👛 ' + esc(t("wal_title")) + '</div><div class="s">' +
+    esc(t("wal_balance_lbl")) + ' <b data-wallet-bal>' + esc(eurCents(ACHAT.wallet)) + "</b></div></div>" +
+    '<button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+    (need > 0 ? '<p class="wal-need">' + esc(t("wal_missing", eurCents(need))) + "</p>" : "") +
+    '<div class="ps-steplbl wal-k">' + esc(t("wal_topup_how")) + "</div>" +
+    '<div class="price-chips wal-chips">' +
+    TOPUP_CHIPS.map((c) => '<button type="button" class="price-chip" data-v="' + fmtC(c) + '">' + (c / 100) + " €</button>").join("") +
+    "</div>" +
+    '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
+    '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min), eurCents(max))) + "</div>" +
+    '<button class="btn btn-primary btn-block" data-go disabled></button>' +
+    '<p class="ps-note wal-note">' + esc(t("wal_explain")) + "</p></div>";
+  const input = ov.querySelector("#walInput"),
+    go = ov.querySelector("[data-go]");
+  const cents = () => {
+    const v = input.value.trim().replace(",", ".");
+    return /^\d{1,3}(\.\d{1,2})?$/.test(v) ? Math.round(parseFloat(v) * 100) : NaN;
+  };
+  const sync = () => {
+    input.style.width = Math.max(4, (input.value || input.placeholder).length) + 0.3 + "ch";
+    const c = cents();
+    const ok = c >= min && c <= max;
+    go.disabled = !ok;
+    go.textContent = ok ? t("wal_topup_x", eurCents(c)) : t("wal_topup_btn");
+  };
+  input.value = fmtC(pre);
+  armPriceChips(ov, input, sync);
+  input.addEventListener("input", sync);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !go.disabled) go.click();
+  });
+  lockScroll();
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    unlockScroll();
+    document.removeEventListener("keydown", onKey);
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 220);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-x]").onclick = close;
+  go.onclick = async () => {
+    const c = cents();
+    const h = go.innerHTML;
+    go.disabled = true;
+    go.innerHTML = '<span class="spin"></span>';
+    let r;
+    try {
+      r = await api("/plugin/paiements/wallet/topup", { method: "POST", body: { amount_cents: c } });
+    } catch (e) {
+      go.disabled = false;
+      go.innerHTML = h;
+      toast(e.message, "bad");
+      return;
+    }
+    close();
+    openPaySheet(r, [{ name: t("wal_topup_line"), quantity: 1, total: r.total }]);
+  };
+  document.body.appendChild(ov);
+  ov.querySelectorAll(".price-chip").forEach((x) => x.classList.toggle("on", x.dataset.v === input.value));
+  sync();
+  // solde à jour (une recharge a pu aboutir ailleurs)
+  walletRefresh();
+  return Promise.resolve(false);
 }
 
 /* ---- paiement ----
@@ -208,6 +353,7 @@ async function openReceipt(pk, fresh) {
     if (p.status === "paid" || p.failed) break;
     await new Promise((res) => setTimeout(res, 2000));
   }
+  if (p.status === "paid" && p.wallet_cents != null) setWallet(p.wallet_cents);
   if (p.status === "paid") {
     // le panier a été payé : on le vide (jamais pour un achat depuis une fiche)
     if (frigoCartPaidBy(p.pk)) frigoCartClear();
@@ -226,13 +372,17 @@ async function openReceipt(pk, fresh) {
 
 function renderReceipt(p) {
   const paid = p.status === "paid";
+  const topup = p.kind === "topup";
   const st = paid ? "ok" : p.failed ? "bad" : "wait";
+  const bal = eurCents(p.wallet_cents || 0);
+  const okTitle = topup ? t("wal_topped_title") : t("rcpt_thanks");
+  const okText = topup ? t("wal_topped_txt", bal) : p.method === "wallet" ? t("wal_paid_rcpt", bal) : t("rcpt_show");
   const box = $("#receiptBody");
   box.innerHTML =
     '<div class="rcpt-hero ' + st + '">' +
     '<div class="ring">' + (paid ? CHECK : p.failed ? "✕" : "…") + "</div>" +
-    "<h2>" + esc(paid ? t("rcpt_thanks") : p.failed ? t("buy_failed") : t("buy_unpaid")) + "</h2>" +
-    "<p>" + esc(paid ? t("rcpt_show") : p.failed ? t("buy_failed_warn") : t("buy_unpaid_warn")) + "</p></div>" +
+    "<h2>" + esc(paid ? okTitle : p.failed ? t("buy_failed") : t("buy_unpaid")) + "</h2>" +
+    "<p>" + esc(paid ? okText : p.failed ? t("buy_failed_warn") : t("buy_unpaid_warn")) + "</p></div>" +
     '<div class="card rcpt">' +
     '<div class="rcpt-top"><div><div class="rcpt-no">' + esc(t("rcpt_no", p.pk)) + "</div>" +
     '<div class="rcpt-meta">' + esc(t("rcpt_when", p.date, p.time)) + "</div>" +
@@ -243,13 +393,13 @@ function renderReceipt(p) {
     p.lines
       .map(
         (l) =>
-          '<div class="rcpt-line"><span class="q">' + l.quantity + "×</span><span class=\"n\">" + esc(l.name) +
+          '<div class="rcpt-line"><span class="q">' + l.quantity + "×</span><span class=\"n\">" + esc(topup ? t("wal_topup_line") : l.name) +
           '</span><span class="p">' + esc(l.total) + "</span></div>",
       )
       .join("") +
     "</div>" +
     '<div class="rcpt-total"><span>' + esc(t("buy_total")) + "</span><span>" + esc(p.total) + "</span></div>" +
-    '<div class="rcpt-pay">' + esc(p.provider) + (p.payment_ref ? " · " + esc(p.payment_ref) : "") + "</div>" +
+    '<div class="rcpt-pay">' + esc(p.method === "wallet" ? t("wal_name") : p.provider) + (p.payment_ref ? " · " + esc(p.payment_ref) : "") + "</div>" +
     (p.warning ? '<div class="rcpt-warn">⚠ ' + esc(p.warning) + "</div>" : "") +
     "</div>" +
     (paid
@@ -313,6 +463,16 @@ async function openPurchases() {
   show("#screen-purchases");
   const box = $("#purchasesList");
   box.innerHTML = '<div class="skeleton">' + esc(t("loading")) + "</div>";
+  // portefeuille en tête : solde + recharge
+  const wc = $("#walletCard");
+  if (wc) {
+    wc.innerHTML =
+      '<div class="wal-card"><div class="wal-l"><div class="wal-k">👛 ' + esc(t("wal_title")) + '</div>' +
+      '<div class="wal-amt" data-wallet-bal>' + esc(eurCents(ACHAT.wallet)) + "</div></div>" +
+      '<button class="btn btn-primary" id="walTopBtn">' + esc(t("wal_topup_short")) + "</button></div>";
+    $("#walTopBtn").onclick = () => openWalletSheet(0);
+    walletRefresh();
+  }
   let list;
   try {
     list = await api("/plugin/paiements/purchases");
@@ -331,8 +491,14 @@ async function openPurchases() {
     row.innerHTML =
       '<div class="pm"><div class="t">' + esc(t("rcpt_no", p.pk)) + " · " + esc(p.date) + " " + esc(p.time) +
       '</div><div class="s">' +
-      esc(p.lines.map((l) => (l.quantity > 1 ? l.quantity + "× " : "") + l.name).join(", ")) +
-      '</div></div><div class="pt">' + esc(p.total) + "</div>";
+      esc(
+        p.kind === "topup"
+          ? t("wal_topup_line")
+          : p.lines.map((l) => (l.quantity > 1 ? l.quantity + "× " : "") + l.name).join(", ") +
+              (p.method === "wallet" ? " · " + t("wal_name") : ""),
+      ) +
+      '</div></div><div class="pt' + (p.kind === "topup" ? " plus" : "") + '">' +
+      (p.kind === "topup" ? "+" : "") + esc(p.total) + "</div>";
     row.onclick = () => openReceipt(p.pk, false);
     box.appendChild(row);
   });

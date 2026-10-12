@@ -15,6 +15,12 @@ cree ici avec un montant TOUJOURS recalcule ici, le formulaire de carte
 (Payment Widget, Apple Pay / Google Pay) s'affiche dans la Scannette. Au
 retour et/ou sur webhook, on RELIT le checkout aupres de SumUp : seul un
 statut PAID retire le stock, une seule fois (verrou de ligne).
+
+Portefeuille : SumUp refuse tout paiement par carte sous 1 €, or une canette
+coute moins. Chaque membre recharge donc son portefeuille par carte (1 € au
+moins) puis ses achats en sont deduits, a n'importe quel prix. Le solde ne
+passe jamais sous zero (ligne verrouillee, verification avant debit). Le
+paiement direct par carte reste possible pour un panier d'1 € ou plus.
 """
 
 import logging
@@ -35,6 +41,13 @@ from .sumup import SumUpClient, SumUpError
 logger = logging.getLogger("inventree")
 
 MAX_QTY = 20  # garde-fou par produit : une Scannette n'est pas une caisse de grossiste
+MIN_CARD_CENTS = 100  # SumUp refuse (FAILED) tout paiement par carte sous 1 €
+TOPUP_MAX_CENTS = 5000  # recharge maximale en une fois
+
+
+def euros(cents):
+    """1234 -> « 12,34 € »."""
+    return f"{cents / 100:.2f}".replace(".", ",") + " €"
 
 
 class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, ValidationMixin, InvenTreePlugin):
@@ -148,6 +161,10 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             path("fridge/price", api.FridgePriceView.as_view(plugin=self), name="fridge-price"),
             path("checkout", api.CheckoutView.as_view(plugin=self), name="checkout"),
             path("purchases", api.PurchaseListView.as_view(plugin=self), name="purchases"),
+            path("wallet", api.WalletView.as_view(plugin=self), name="wallet"),
+            path("wallet/topup", api.WalletTopupView.as_view(plugin=self), name="wallet-topup"),
+            path("wallet/pay", api.WalletPayView.as_view(plugin=self), name="wallet-pay"),
+            path("wallet/admin", api.WalletAdminView.as_view(plugin=self), name="wallet-admin"),
             path("purchase/<int:pk>", api.PurchaseView.as_view(plugin=self), name="purchase"),
             path("purchase/<int:pk>/receipt.pdf", api.ReceiptView.as_view(plugin=self), name="receipt"),
             path("purchase/<int:pk>/email", api.ReceiptEmailView.as_view(plugin=self), name="receipt-email"),
@@ -397,13 +414,31 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         from .models import Purchase, PurchaseLine
 
         location, lines = self.build_lines(data)
+        total = sum(ln["quantity"] * ln["unit_cents"] for ln in lines)
+        if total < MIN_CARD_CENTS:
+            raise ValueError("Paiement par carte : 1 € minimum. Paie avec ton portefeuille ou ajoute un article.")
         with transaction.atomic():
-            purchase = Purchase.objects.create(
-                location=location,
-                user=request.user,
-                amount_cents=sum(ln["quantity"] * ln["unit_cents"] for ln in lines),
-            )
+            purchase = Purchase.objects.create(location=location, user=request.user, amount_cents=total)
             PurchaseLine.objects.bulk_create([PurchaseLine(purchase=purchase, **ln) for ln in lines])
+        return purchase, self._open_checkout(request, purchase)
+
+    def start_topup(self, request, amount_cents):
+        """Recharge du portefeuille : Purchase sans ligne + checkout SumUp ; renvoie (purchase, checkout_id)."""
+        from .models import Purchase
+
+        try:
+            amount = int(amount_cents)
+        except (TypeError, ValueError):
+            raise ValueError("Montant invalide.")
+        if not MIN_CARD_CENTS <= amount <= TOPUP_MAX_CENTS:
+            raise ValueError(f"Recharge entre {euros(MIN_CARD_CENTS)} et {euros(TOPUP_MAX_CENTS)}.")
+        purchase = Purchase.objects.create(
+            location=None, user=request.user, amount_cents=amount, kind=Purchase.KIND_TOPUP
+        )
+        return purchase, self._open_checkout(request, purchase)
+
+    def _open_checkout(self, request, purchase):
+        """Checkout SumUp d'un Purchase deja cree ; le supprime en cas d'echec. Renvoie l'id du checkout."""
         site = self.site_url(request)
         try:
             res = self.sumup().create_checkout(
@@ -411,7 +446,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
                 f"scannette-{purchase.pk}-{uuid.uuid4().hex[:10]}",
                 purchase.amount_cents,
                 # ce que voit SumUp (tableau de bord, releve) : le panier exact
-                "Frigo · " + purchase.summary(240),
+                ("Frigo · " if purchase.kind == purchase.KIND_FRIDGE else "") + purchase.summary(240),
                 return_url=f"{site}/plugin/paiements/webhook/sumup",
                 # retour navigateur apres une etape 3-D Secure en pleine page
                 redirect_url=f"{site}/scannette/?achat={purchase.pk}",
@@ -426,7 +461,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             raise SumUpError("Réponse SumUp sans identifiant de paiement")
         purchase.checkout_id = checkout_id
         purchase.save(update_fields=["checkout_id"])
-        return purchase, checkout_id
+        return checkout_id
 
     # ---- confirmation ----
     def confirm(self, purchase):
@@ -452,12 +487,106 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             p.status = Purchase.STATUS_PAID
             p.paid_at = timezone.now()
             p.payment_ref = str(ref)[:64]
-            self._remove_stock(p)
+            if p.kind == Purchase.KIND_TOPUP:
+                self._wallet_move(p.user, p.amount_cents, "topup", purchase=p)
+                p.stock_removed = True  # rien a retirer
+            else:
+                self._remove_stock(p)
             p.save()
             if self.get_setting("SEND_RECEIPT"):
                 # apres commit : le worker relit un achat deja marque paye
                 transaction.on_commit(lambda: self.queue_receipt(p.pk))
         return p
+
+    # ---- portefeuille ----
+    @staticmethod
+    def _wallet_locked(user):
+        """Portefeuille du membre, cree au besoin, VERROUILLE (a appeler dans une transaction)."""
+        from .models import Wallet
+
+        Wallet.objects.get_or_create(user=user)
+        return Wallet.objects.select_for_update().get(user=user)
+
+    def _wallet_move(self, user, amount_cents, kind, purchase=None, note="", by=None):
+        """Credite (+) ou debite (−) le portefeuille ; leve ValueError si le solde passerait sous zero.
+
+        A appeler dans une transaction : la ligne reste verrouillee jusqu'au commit.
+        """
+        from .models import WalletEntry
+
+        w = self._wallet_locked(user)
+        new = w.balance_cents + int(amount_cents)
+        if new < 0:
+            raise ValueError(
+                f"Solde insuffisant : {euros(w.balance_cents)} sur ton portefeuille. Recharge-le pour continuer."
+            )
+        w.balance_cents = new
+        w.save(update_fields=["balance_cents", "updated_at"])
+        WalletEntry.objects.create(
+            wallet=w, kind=kind, amount_cents=int(amount_cents), balance_after=new, purchase=purchase, note=note, by=by
+        )
+        return w
+
+    @staticmethod
+    def wallet_balance(user):
+        """Solde en centimes (0 sans portefeuille)."""
+        from .models import Wallet
+
+        w = Wallet.objects.filter(user=user).only("balance_cents").first()
+        return w.balance_cents if w else 0
+
+    def pay_with_wallet(self, request, data):
+        """Paie le panier avec le portefeuille : debit et retrait du stock dans la meme transaction.
+
+        Rien n'est cree si le solde ne suffit pas (ValueError). Renvoie le Purchase paye.
+        """
+        from .models import Purchase, PurchaseLine
+
+        location, lines = self.build_lines(data)
+        total = sum(ln["quantity"] * ln["unit_cents"] for ln in lines)
+        with transaction.atomic(), guard.system_action():
+            p = Purchase.objects.create(
+                location=location,
+                user=request.user,
+                amount_cents=total,
+                method=Purchase.METHOD_WALLET,
+                status=Purchase.STATUS_PAID,
+                paid_at=timezone.now(),
+            )
+            PurchaseLine.objects.bulk_create([PurchaseLine(purchase=p, **ln) for ln in lines])
+            # debit d'abord : solde insuffisant -> ValueError -> tout est annule (rollback)
+            self._wallet_move(request.user, -total, "purchase", purchase=p)
+            self._remove_stock(p)
+            p.save()
+            if self.get_setting("SEND_RECEIPT"):
+                transaction.on_commit(lambda: self.queue_receipt(p.pk))
+        return p
+
+    def adjust_wallet(self, user, amount_cents, note, by):
+        """Correction d'un admin (remboursement, credit en especes...) ; jamais sous zero."""
+        with transaction.atomic():
+            return self._wallet_move(user, amount_cents, "adjust", note=note[:250], by=by)
+
+    def wallet_data(self, user, limit=20):
+        """Solde et derniers mouvements, pour la Scannette."""
+        from django.utils import timezone as tz
+
+        from .models import Wallet, WalletEntry
+
+        w = Wallet.objects.filter(user=user).first()
+        entries = []
+        if w is not None:
+            for e in WalletEntry.objects.filter(wallet=w).select_related("purchase")[:limit]:
+                entries.append({
+                    "date": tz.localtime(e.created_at).strftime("%d/%m/%Y %H:%M"),
+                    "kind": e.kind,
+                    "amount_cents": e.amount_cents,
+                    "balance_after": e.balance_after,
+                    "purchase": e.purchase_id,
+                    "label": e.note or (e.purchase.summary(80) if e.purchase else ""),
+                })
+        bal = w.balance_cents if w else 0
+        return {"balance_cents": bal, "balance": euros(bal), "entries": entries}
 
     @staticmethod
     def queue_receipt(pk):

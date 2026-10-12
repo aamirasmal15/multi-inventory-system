@@ -17,6 +17,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .core import MIN_CARD_CENTS, TOPUP_MAX_CENTS
 from .sumup import SumUpError
 
 logger = logging.getLogger("inventree")
@@ -51,6 +52,8 @@ def purchase_data(p):
     return {
         "pk": p.pk,
         "status": p.status,
+        "kind": p.kind,
+        "method": p.method,
         # SumUp a refuse le paiement (banque, carte, compte marchand) : rien n'est debite.
         # Non stocke : le meme checkout peut encore aboutir sur un nouvel essai.
         "failed": p.status != "paid" and getattr(p, "sumup_status", None) in ("FAILED", "EXPIRED"),
@@ -96,6 +99,9 @@ class ConfigView(PluginView):
                 "locations": sorted(loc.get_descendants(include_self=True).values_list("pk", flat=True)),
             } if loc else None,
             "admin": is_admin(request.user),
+            # sous ce montant, SumUp refuse la carte : portefeuille obligatoire
+            "min_card_cents": MIN_CARD_CENTS,
+            "topup_max_cents": TOPUP_MAX_CENTS,
         })
 
 
@@ -128,6 +134,7 @@ class FridgeView(PluginView):
             "name": loc.name,
             "enabled": self.plugin.is_configured(),
             "products": products,
+            "wallet_cents": self.plugin.wallet_balance(request.user),
         })
 
 
@@ -223,7 +230,10 @@ class PurchaseView(PluginView):
             except SumUpError as e:
                 # verification impossible pour l'instant : l'etat connu reste affiche
                 logger.warning("Paiements : vérification de l'achat #%s impossible : %s", p.pk, e)
-        return Response(purchase_data(p))
+        data = purchase_data(p)
+        # solde apres une recharge (ou un achat au portefeuille) : affiche sur le recu
+        data["wallet_cents"] = self.plugin.wallet_balance(p.user) if p.user_id else 0
+        return Response(data)
 
 
 class ReceiptView(PluginView):
@@ -300,3 +310,82 @@ class WebhookView(APIView):
             except SumUpError as e:
                 logger.warning("Paiements : webhook, vérification de l'achat #%s impossible : %s", p.pk, e)
         return Response({"ok": True})
+
+
+class WalletView(PluginView):
+    """Portefeuille du membre : solde et derniers mouvements."""
+
+    def get(self, request):
+        return Response(self.plugin.wallet_data(request.user))
+
+
+class WalletTopupView(PluginView):
+    """Recharge par carte : cree le checkout SumUp ({"amount_cents": 500}), execute par le widget."""
+
+    def post(self, request):
+        if not self.plugin.is_configured():
+            return Response({"detail": "Paiement non configuré."}, status=503)
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            purchase, checkout_id = self.plugin.start_topup(request, data.get("amount_cents"))
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except SumUpError as e:
+            return Response({"detail": f"Paiement impossible : {e}"}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({
+            "purchase": purchase.pk,
+            "checkout_id": checkout_id,
+            "total": purchase_data(purchase)["total"],
+            "amount_cents": purchase.amount_cents,
+        })
+
+
+class WalletPayView(PluginView):
+    """Paie le panier avec le portefeuille ({"lines": [...]}, comme /checkout) ; immediat."""
+
+    def post(self, request):
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            p = self.plugin.pay_with_wallet(request, data)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"purchase": p.pk, "wallet_cents": self.plugin.wallet_balance(request.user)})
+
+
+class WalletAdminView(PluginView):
+    """Admins : soldes de tous les membres (GET) ; correction d'un solde (POST).
+
+    POST {"user": pk, "amount_cents": -250, "note": "Remboursé en espèces"} :
+    jamais sous zero. Chaque correction est journalisee (auteur, note).
+    """
+
+    def get(self, request):
+        from .models import Wallet
+        from .receipt import buyer_name
+
+        if not is_admin(request.user):
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        return Response([
+            {"user": w.user_id, "username": w.user.username, "name": buyer_name(w.user), "balance_cents": w.balance_cents}
+            for w in Wallet.objects.select_related("user").filter(balance_cents__gt=0)
+        ])
+
+    def post(self, request):
+        from django.contrib.auth import get_user_model
+
+        if not is_admin(request.user):
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        data = request.data if isinstance(request.data, dict) else {}
+        try:
+            user = get_user_model().objects.get(pk=int(data.get("user")))
+            amount = int(data.get("amount_cents"))
+        except (TypeError, ValueError, get_user_model().DoesNotExist):
+            return Response({"detail": "Membre ou montant invalide."}, status=status.HTTP_400_BAD_REQUEST)
+        note = str(data.get("note") or "").strip()
+        if not amount or abs(amount) > 100000 or not note:
+            return Response({"detail": "Montant non nul et note obligatoires."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            w = self.plugin.adjust_wallet(user, amount, note, request.user)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"user": user.pk, "balance_cents": w.balance_cents})

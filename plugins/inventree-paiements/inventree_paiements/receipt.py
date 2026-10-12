@@ -113,6 +113,20 @@ def logo_data_uri():
 def receipt_context(p):
     """Tout ce que montre un recu, en valeurs deja formatees."""
     paid = timezone.localtime(p.paid_at or p.created_at)
+    topup = p.kind == p.KIND_TOPUP
+    lines = (
+        [{"name": "Recharge du portefeuille", "quantity": 1, "unit": euros(p.amount_cents), "total": euros(p.amount_cents)}]
+        if topup
+        else [
+            {
+                "name": ln.name,
+                "quantity": ln.quantity,
+                "unit": euros(ln.unit_cents),
+                "total": euros(ln.total_cents),
+            }
+            for ln in p.lines.all()
+        ]
+    )
     return {
         "instance": instance_name(),
         "asso": plugin_setting("ASSO_NAME") or instance_name(),
@@ -126,20 +140,14 @@ def receipt_context(p):
         "date": paid.strftime("%d/%m/%Y"),
         "time": paid.strftime("%H:%M"),
         "buyer": buyer_name(p.user),
-        "source": "Frigo",
+        "source": "Portefeuille" if topup else "Frigo",
         "location": p.location.name if p.location else "",
-        "lines": [
-            {
-                "name": ln.name,
-                "quantity": ln.quantity,
-                "unit": euros(ln.unit_cents),
-                "total": euros(ln.total_cents),
-            }
-            for ln in p.lines.all()
-        ],
-        "count": sum(ln.quantity for ln in p.lines.all()),
+        "topup": topup,
+        "lines": lines,
+        "count": sum(ln["quantity"] for ln in lines),
         "total": euros(p.amount_cents),
-        "provider": "SumUp",
+        "by_wallet": p.method == p.METHOD_WALLET,
+        "provider": "Portefeuille" if p.method == p.METHOD_WALLET else "SumUp",
         "payment_ref": p.payment_ref,
         "warning": p.warning,
     }

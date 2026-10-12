@@ -21,6 +21,14 @@ class Purchase(models.Model):
         (STATUS_PENDING, "En attente de paiement"),
         (STATUS_PAID, "Payé"),
     ]
+    # achat d'articles du frigo, ou recharge du portefeuille (aucune ligne)
+    KIND_FRIDGE = "fridge"
+    KIND_TOPUP = "topup"
+    KIND_CHOICES = [(KIND_FRIDGE, "Achat au frigo"), (KIND_TOPUP, "Recharge du portefeuille")]
+    # paye par carte (SumUp) ou deduit du portefeuille
+    METHOD_CARD = "card"
+    METHOD_WALLET = "wallet"
+    METHOD_CHOICES = [(METHOD_CARD, "Carte (SumUp)"), (METHOD_WALLET, "Portefeuille")]
 
     # emplacement dans lequel le stock est preleve (frigo), fige a la creation
     location = models.ForeignKey(
@@ -40,6 +48,8 @@ class Purchase(models.Model):
         verbose_name="Acheteur",
     )
     amount_cents = models.PositiveIntegerField(verbose_name="Montant (centimes)")
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default=KIND_FRIDGE, verbose_name="Type")
+    method = models.CharField(max_length=10, choices=METHOD_CHOICES, default=METHOD_CARD, verbose_name="Moyen de paiement")
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -69,6 +79,8 @@ class Purchase(models.Model):
 
     def summary(self, limit=250):
         """« 2 × Coca 33cl, Jus d'orange » : description envoyee a SumUp."""
+        if self.kind == self.KIND_TOPUP:
+            return "Recharge du portefeuille"
         parts = [
             (ln.name if ln.quantity == 1 else f"{ln.quantity} × {ln.name}")
             for ln in self.lines.all()
@@ -142,3 +154,72 @@ class PriceChange(models.Model):
         ordering = ["-date", "-pk"]
         verbose_name = "Changement de prix"
         verbose_name_plural = "Changements de prix"
+
+
+class Wallet(models.Model):
+    """Portefeuille d'un membre : recharge par carte, debite a chaque achat.
+
+    Le solde n'est JAMAIS negatif : chaque mouvement se fait ligne verrouillee
+    (select_for_update), apres verification du solde. Il est la somme des
+    mouvements (WalletEntry), garde ici pour le lire et le verrouiller vite.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="+",
+        verbose_name="Membre",
+    )
+    balance_cents = models.PositiveIntegerField(default=0, verbose_name="Solde (centimes)")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Mis à jour le")
+
+    class Meta:
+        """Plus gros soldes en premier (admin)."""
+
+        ordering = ["-balance_cents"]
+        verbose_name = "Portefeuille"
+        verbose_name_plural = "Portefeuilles"
+
+    def __str__(self):
+        """Libelle court pour l'admin Django."""
+        return f"{self.user} : {self.balance_cents / 100:.2f} €"
+
+
+class WalletEntry(models.Model):
+    """Mouvement du portefeuille : recharge (+), achat (−), correction d'un admin (±)."""
+
+    KIND_TOPUP = "topup"
+    KIND_PURCHASE = "purchase"
+    KIND_ADJUST = "adjust"
+    KIND_CHOICES = [
+        (KIND_TOPUP, "Recharge"),
+        (KIND_PURCHASE, "Achat"),
+        (KIND_ADJUST, "Correction"),
+    ]
+
+    wallet = models.ForeignKey(Wallet, on_delete=models.PROTECT, related_name="entries", verbose_name="Portefeuille")
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, verbose_name="Type")
+    # signe : + credit, − debit
+    amount_cents = models.IntegerField(verbose_name="Montant (centimes)")
+    balance_after = models.PositiveIntegerField(verbose_name="Solde après (centimes)")
+    purchase = models.ForeignKey(
+        Purchase, on_delete=models.PROTECT, null=True, blank=True, related_name="+", verbose_name="Achat"
+    )
+    note = models.CharField(max_length=250, blank=True, verbose_name="Note")
+    # auteur d'une correction (admin) ; vide pour une recharge ou un achat
+    by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="Par",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Le")
+
+    class Meta:
+        """Plus recents en premier."""
+
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "Mouvement de portefeuille"
+        verbose_name_plural = "Mouvements de portefeuille"

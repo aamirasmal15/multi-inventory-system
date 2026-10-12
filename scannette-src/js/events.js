@@ -285,7 +285,9 @@ $("#frigoOpenBtn")?.addEventListener("click", openFrigo);
 $("#backBtnFrigo")?.addEventListener("click", gotoScan);
 $("#frigoMineBtn")?.addEventListener("click", openPurchases);
 $("#backBtnPurch")?.addEventListener("click", openFrigo);
-$("#frigoPayBtn")?.addEventListener("click", frigoPay);
+$("#frigoPayBtn")?.addEventListener("click", () => frigoPay());
+$("#frigoAltBtn")?.addEventListener("click", (e) => frigoPay(e.currentTarget.dataset.via));
+$("#frigoWalletBtn")?.addEventListener("click", () => openWalletSheet(0));
 document.querySelectorAll("#frigoModeSeg .seg-btn").forEach((b) => {
   b.addEventListener("click", () => {
     if (!b.classList.contains("active")) frigoSetMode(b.dataset.mode);

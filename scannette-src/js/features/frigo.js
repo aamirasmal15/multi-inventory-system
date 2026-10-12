@@ -7,7 +7,8 @@
    ouvre le frigo. Le reste de la Scannette n'y mène pas.
 
    - Acheter : un produit = un part (stock cumulé de ses articles rangés dans
-     le frigo), quantités au panier, barre de paiement en bas.
+     le frigo), quantités au panier, barre de paiement en bas : portefeuille
+     s'il suffit, sinon carte (1 € min.), sinon recharge (cf. achat.js).
    - Gérer (admins) : comptage direct de chaque article du frigo, produits
      sans prix signalés (invisibles des membres tant qu'il n'y en a pas).
    Le panier survit au rafraîchissement et à l'aller-retour SSO (sessionStorage) ;
@@ -100,6 +101,7 @@ async function openFrigo() {
 async function frigoLoad() {
   try {
     FRIGO = await api("/plugin/paiements/fridge");
+    setWallet(FRIGO.wallet_cents);
   } catch (e) {
     $("#frigoList").innerHTML = '<div class="skeleton">' + esc(e.message) + "</div>";
     frigoPaintCart();
@@ -212,24 +214,39 @@ function frigoPaintCart() {
   $("#frigoCartInfo").innerHTML =
     "<b>" + esc(t("frigo_cart_n", n)) + "</b><span>" +
     esc(lines.map((l) => (l.q > 1 ? l.q + "× " : "") + l.p.name).join(", ")) + "</span>";
-  $("#frigoPayBtn").textContent = t("buy_btn", eurCents(cents));
+  $("#frigoPayBtn").textContent = payLabel(cents);
+  // second choix, discret : la carte quand le portefeuille suffit (panier
+  // d'1 € ou plus), sinon la recharge quand la carte est possible
+  const choice = payChoice(cents);
+  const alt = $("#frigoAltBtn");
+  alt.dataset.via = choice === "wallet" && cents >= ACHAT.minCard ? "card" : choice === "card" ? "topup" : "";
+  alt.textContent = alt.dataset.via === "card" ? t("wal_alt_card") : t("wal_alt_topup");
+  alt.style.display = alt.dataset.via ? "" : "none";
+  // sous 1 € sans solde suffisant : on dit pourquoi il faut recharger
+  $("#frigoCartInfo").insertAdjacentHTML(
+    "beforeend",
+    choice === "topup" ? '<span class="fr-why">' + esc(t("wal_why", eurCents(ACHAT.wallet))) + "</span>" : "",
+  );
   bar.classList.add("show");
 }
 
-async function frigoPay() {
+async function frigoPay(via) {
   const lines = frigoCartLines();
   if (!lines.length) return;
+  const cents = lines.reduce((s, l) => s + l.q * l.p.unit_cents, 0);
   const btn = $("#frigoPayBtn"),
     html = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span>';
-  const paid = await payCheckout(
-    { source: "frigo", lines: lines.map((l) => ({ part: l.p.part, quantity: l.q })) },
+  const paid = await fridgeBuy(
+    lines.map((l) => ({ part: l.p.part, quantity: l.q })),
     lines.map((l) => ({ name: l.p.name, quantity: l.q, total: eurCents(l.q * l.p.unit_cents) })),
-    { cart: true },
+    cents,
+    { cart: true, via: typeof via === "string" ? via : undefined },
   );
   btn.disabled = false;
   btn.innerHTML = html;
+  frigoPaintCart();
   // refusé côté serveur (stock parti entre-temps, prix changé) : on relit le frigo
   if (paid === false && $("#screen-frigo").classList.contains("active")) frigoLoad();
 }
@@ -537,7 +554,7 @@ function renderFridgeBuy(box, p) {
     box.querySelector(".buy-qty b").textContent = q;
     box.querySelector('[data-d="-1"]').disabled = q <= 1;
     box.querySelector('[data-d="1"]').disabled = q >= p.available;
-    pay.textContent = t("buy_btn", eurCents(p.unit_cents * q));
+    pay.textContent = payLabel(p.unit_cents * q);
   };
   box.querySelectorAll(".buy-qty button").forEach((b) => {
     b.onclick = () => {
@@ -548,13 +565,17 @@ function renderFridgeBuy(box, p) {
   pay.onclick = async () => {
     pay.disabled = true;
     pay.innerHTML = '<span class="spin"></span>';
-    await payCheckout({ lines: [{ part: p.part, quantity: q }] }, [
-      { name: p.name, quantity: q, total: eurCents(p.unit_cents * q) },
-    ]);
+    await fridgeBuy(
+      [{ part: p.part, quantity: q }],
+      [{ name: p.name, quantity: q, total: eurCents(p.unit_cents * q) }],
+      p.unit_cents * q,
+    );
     pay.disabled = false;
     sync();
   };
   sync();
+  // solde à jour : le bouton choisit portefeuille / carte / recharge
+  walletRefresh().then(() => document.contains(pay) && !pay.disabled && sync());
   box.style.display = "";
 }
 function syncCreatePrice() {

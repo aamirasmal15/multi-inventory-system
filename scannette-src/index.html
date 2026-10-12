@@ -507,6 +507,7 @@
       <button class="iconbtn" id="backBtnFrigo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
       <span data-i18n="frigo_crumb">Frigo</span>
       <div class="spacer"></div>
+      <button class="fr-mine fr-wal" id="frigoWalletBtn" aria-label="Portefeuille">👛 <b data-wallet-bal>0,00 €</b></button>
       <button class="fr-mine" id="frigoMineBtn" data-i18n="frigo_mine">Mes achats</button>
     </div>
     <h1 class="title"><span aria-hidden="true">🧊 </span><span id="frigoTitle">Frigo</span></h1>
@@ -517,7 +518,10 @@
     <div id="frigoList" class="frigo-grid"></div>
     <div class="fr-cartbar" id="frigoCartBar">
       <div class="fr-cartinfo" id="frigoCartInfo"></div>
-      <button class="btn btn-primary" id="frigoPayBtn"></button>
+      <div class="fr-cartbtns">
+        <button class="btn btn-primary" id="frigoPayBtn"></button>
+        <button class="fr-alt" id="frigoAltBtn" style="display:none"></button>
+      </div>
     </div>
   </section>
 
@@ -533,6 +537,7 @@
       <span data-i18n="purch_crumb">Mes achats</span>
     </div>
     <h1 class="title" data-i18n="purch_title">Mes achats</h1>
+    <div id="walletCard"></div>
     <div class="card" id="purchasesList"></div>
   </section>
 

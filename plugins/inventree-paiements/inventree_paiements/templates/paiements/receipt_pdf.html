@@ -85,8 +85,8 @@ la Scannette (achat paye).
     </div>
     <div class="box">
       <div class="k">Objet</div>
-      <div class="v">Achat au {{ source|lower }}{% if location and location != source %} · {{ location }}{% endif %}</div>
-      <div class="s">{{ count }} article{{ count|pluralize }}</div>
+      <div class="v">{% if topup %}Recharge du portefeuille{% else %}Achat au {{ source|lower }}{% endif %}{% if location and location != source %} · {{ location }}{% endif %}</div>
+      {% if not topup %}<div class="s">{{ count }} article{{ count|pluralize }}</div>{% endif %}
     </div>
   </div>
 
@@ -105,7 +105,7 @@ la Scannette (achat paye).
   </div>
 
   <div class="pay">
-    {% if paid %}Payé par carte via <b>{{ provider }}</b> le {{ date }} à {{ time }}{% if payment_ref %} · Référence de transaction <b>{{ payment_ref }}</b>{% endif %}.{% else %}Ce paiement n'a pas été confirmé par {{ provider }}.{% endif %}
+    {% if paid and by_wallet %}Payé avec le <b>portefeuille</b> de l'acheteur le {{ date }} à {{ time }}.{% elif paid %}Payé par carte via <b>{{ provider }}</b> le {{ date }} à {{ time }}{% if payment_ref %} · Référence de transaction <b>{{ payment_ref }}</b>{% endif %}.{% else %}Ce paiement n'a pas été confirmé par {{ provider }}.{% endif %}
   </div>
   {% if warning %}<div class="warn">⚠ {{ warning }}. Un membre du bureau va régulariser.</div>{% endif %}
 

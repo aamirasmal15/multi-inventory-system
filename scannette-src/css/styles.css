@@ -382,6 +382,21 @@ textarea{resize:none;min-height:56px}
 .fr-cartinfo b{font-size:14px}
 .fr-cartinfo span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fr-cartbar .btn{width:auto;flex:none;padding:12px 18px}
+/* portefeuille (achat.js) */
+.fr-cartbtns{display:flex;flex-direction:column;align-items:stretch;gap:4px;flex:none}
+.fr-alt{border:none;background:none;color:var(--primary);font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer;padding:2px 4px}
+.fr-why{color:var(--amber)!important;white-space:normal!important}
+.fr-wal{margin-right:6px}
+.fr-wal b{color:var(--green)}
+.wal-card{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:12px;box-shadow:var(--shadow-sm);padding:14px;margin-bottom:14px}
+.wal-k{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.wal-amt{font-size:26px;font-weight:800;color:var(--green);letter-spacing:-.02em;margin-top:2px}
+.wal-card .btn{width:auto;flex:none;padding:11px 16px}
+.wal-need{background:var(--amber-light);color:var(--amber);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;margin:-6px 0 14px;text-align:center}
+.wal-k.ps-steplbl{margin:0 0 8px;text-align:left}
+.wal-chips{grid-template-columns:repeat(4,minmax(0,1fr))}
+.wal-note{margin:16px 0 0}
+.purch-row .pt.plus{color:var(--primary)}
 /* mode Gérer : aide en texte, puis une ligne par produit (gabarit des Lieux,
    .loc-row) : bouton prix (ouvre la fenêtre de prix), stock de chaque article */
 .frigo-manage{display:flex;flex-direction:column;gap:6px}
