@@ -401,7 +401,8 @@ textarea{resize:none;min-height:56px}
 .wal-need{background:var(--amber-light);color:var(--amber);border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;margin:-6px 0 14px;text-align:center}
 .wal-k.ps-steplbl{margin:0 0 8px;text-align:left}
 .wal-chips{grid-template-columns:repeat(4,minmax(0,1fr))}
-.wal-note{margin:16px 0 0}
+/* .ps-note.wal-note : la règle .ps-note (marge négative) vient plus loin */
+.ps-note.wal-note{font-size:12px;margin:14px 0 0}
 .purch-row .pt.plus{color:var(--primary)}
 /* trésorerie (treso.js) */
 .treso-open{margin-bottom:12px}
