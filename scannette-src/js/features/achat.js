@@ -105,7 +105,10 @@ function payChoice(cents) {
 /* libellé du bouton principal pour ce montant */
 function payLabel(cents) {
   const c = payChoice(cents);
-  return c === "wallet" ? t("wal_pay_btn", eurCents(cents)) : c === "card" ? t("buy_btn", eurCents(cents)) : t("wal_topup_btn");
+  if (c === "wallet") return t("wal_pay_btn", eurCents(cents));
+  if (c === "card") return t("buy_btn", eurCents(cents));
+  // solde insuffisant : on recharge ET on paie, en une seule action
+  return ACHAT.card ? t("wal_topup_pay_btn", eurCents(cents)) : t("wal_topup_btn");
 }
 
 /* achat d'articles du frigo par le meilleur moyen : lines [{part, quantity}],
@@ -114,7 +117,7 @@ function payLabel(cents) {
 async function fridgeBuy(lines, recap, cents, opts) {
   opts = opts || {};
   const via = opts.via || payChoice(cents);
-  if (via === "topup") return openWalletSheet(Math.max(0, cents - ACHAT.wallet));
+  if (via === "topup") return openWalletSheet(Math.max(0, cents - ACHAT.wallet), { lines, cents, cart: !!opts.cart });
   if (via === "card") return payCheckout({ source: "frigo", lines }, recap, opts);
   try {
     const r = await api("/plugin/paiements/wallet/pay", { method: "POST", body: { lines } });
@@ -133,8 +136,9 @@ async function fridgeBuy(lines, recap, cents, opts) {
 /* feuille « Mon portefeuille » : solde, montants rapides, montant libre,
    recharge par carte. need : ce qui manque pour le panier (centimes). */
 const TOPUP_CHIPS = [100, 200, 500, 1000, 2000];
-function openWalletSheet(need) {
+function openWalletSheet(need, buy) {
   need = need || 0;
+  buy = buy || null; // achat à payer juste après la recharge : {lines, cents, cart}
   // plafond du portefeuille : on ne propose que ce qui tient en dessous
   const min = ACHAT.topupMin,
     max = Math.min(ACHAT.topupMax, Math.max(0, ACHAT.walletMax - ACHAT.wallet));
@@ -167,7 +171,9 @@ function openWalletSheet(need) {
     esc(t("wal_balance_lbl")) + ' <b data-wallet-bal>' + esc(eurCents(ACHAT.wallet)) + "</b></div></div>" +
     '<button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
-    (need > 0 ? '<p class="wal-need">' + esc(t("wal_missing", eurCents(need))) + "</p>" : "") +
+    (need > 0
+      ? '<p class="wal-need">' + esc(buy ? t("wal_missing_buy", eurCents(buy.cents), eurCents(need)) : t("wal_missing", eurCents(need))) + "</p>"
+      : "") +
     form +
     // admins : encaisser la recharge d'un membre sur ce téléphone (Tap to Pay)
     (ACHAT.canTap ? '<button type="button" class="btn btn-ghost btn-block tap-open" data-tap>📲 ' + esc(t("tap_title")) + "</button>" : "") +
@@ -197,7 +203,7 @@ function openWalletSheet(need) {
       openTapSheet(null);
     };
   document.body.appendChild(ov);
-  if (ACHAT.card && !full) armTopupForm(ov, close, fmtC(pre), min, max);
+  if (ACHAT.card && !full) armTopupForm(ov, close, fmtC(pre), min, max, buy);
   // solde à jour (une recharge a pu aboutir ailleurs)
   walletRefresh();
   return Promise.resolve(false);
@@ -213,7 +219,7 @@ function walNoRefundHtml() {
 
 /* formulaire de recharge de la feuille : montant (raccourcis ou libre), puis
    paiement par carte (feuille SumUp) */
-function armTopupForm(ov, close, preset, min, max) {
+function armTopupForm(ov, close, preset, min, max, buy) {
   const input = ov.querySelector("#walInput"),
     go = ov.querySelector("[data-go]");
   const cents = () => {
@@ -225,7 +231,11 @@ function armTopupForm(ov, close, preset, min, max) {
     const c = cents();
     const ok = c >= min && c <= max;
     go.disabled = !ok;
-    go.textContent = ok ? t("wal_topup_x", eurCents(c)) : t("wal_topup_btn");
+    go.textContent = !ok
+      ? t("wal_topup_btn")
+      : buy
+        ? t("wal_topup_pay_x", eurCents(c), eurCents(buy.cents))
+        : t("wal_topup_x", eurCents(c));
     // au-delà du plafond : on dit jusqu'où on peut aller
     const r = ov.querySelector("[data-range]");
     if (r) r.textContent = c > max ? t("wal_over", eurCents(max)) : t("wal_range_cap", eurCents(min), eurCents(ACHAT.walletMax));
@@ -251,6 +261,11 @@ function armTopupForm(ov, close, preset, min, max) {
       toast(e.message, "bad");
       return;
     }
+    // achat à enchaîner une fois la recharge confirmée (survit au retour 3-D Secure)
+    try {
+      if (buy) sessionStorage.setItem("topup_then_pay", JSON.stringify({ topup: r.purchase, lines: buy.lines, cart: buy.cart }));
+      else sessionStorage.removeItem("topup_then_pay");
+    } catch (_) {}
     close();
     openPaySheet(r, [{ name: t("wal_topup_line"), quantity: 1, total: r.total }]);
   };
@@ -438,77 +453,31 @@ function openPaySheet(r, recap) {
   });
 }
 
-/* Après une recharge : recharger n'est pas acheter. Une question, un tap :
-   panier en cours -> « Payer mon panier » (portefeuille, reçu vert) ; sinon
-   « Choisir ma conso » (le frigo) ; ou « Non, juste recharger ». */
-async function askConsoAfterTopup(p) {
-  // panier (sessionStorage) chiffré avec le catalogue à jour
-  if (!FRIGO) {
+/* Recharge confirmée. Lancée pour payer un panier (« Recharger et payer ») :
+   l'achat est payé tout de suite avec le portefeuille -> reçu vert. Recharge
+   seule : retour au frigo, solde à jour, bandeau bleu. Le reçu de la
+   recharge reste dans « Mes achats ». */
+async function afterTopup(p) {
+  let intent = null;
+  try {
+    intent = JSON.parse(sessionStorage.getItem("topup_then_pay") || "null");
+    sessionStorage.removeItem("topup_then_pay");
+  } catch (_) {}
+  if (intent && intent.topup === p.pk && Array.isArray(intent.lines) && intent.lines.length) {
     try {
-      FRIGO = await api("/plugin/paiements/fridge");
-    } catch (_) {}
+      const r = await api("/plugin/paiements/wallet/pay", { method: "POST", body: { lines: intent.lines } });
+      setWallet(r.wallet_cents);
+      if (intent.cart) frigoCartClear();
+      toast(t("wal_topped_paid", p.total), "ok");
+      return openReceipt(r.purchase, false);
+    } catch (e) {
+      // stock parti entre-temps... : la recharge est acquise, l'achat est à refaire
+      toast(e.message, "bad");
+      return openFrigo();
+    }
   }
-  const lines = FRIGO ? frigoCartLines() : [];
-  const cents = lines.reduce((s, l) => s + l.q * l.p.unit_cents, 0);
-  const canPay = lines.length && ACHAT.wallet >= cents;
-  const ov = document.createElement("div");
-  ov.className = "modal-ov sheet-ov";
-  ov.innerHTML =
-    '<div class="ps-sheet ask-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("ask_title")) + '">' +
-    '<div class="ps-grab" aria-hidden="true"></div>' +
-    '<div class="ask-done"><span class="ask-ic">👛</span><div><b>' + esc(t("ask_topped", p.total)) + "</b><span>" +
-    esc(t("ask_balance", eurCents(ACHAT.wallet))) + "</span></div></div>" +
-    '<h3 class="ask-q">' + esc(t("ask_title")) + "</h3>" +
-    (canPay
-      ? '<div class="ask-cart">' +
-        lines
-          .map(
-            (l) =>
-              '<div class="ask-line">' + frigoThumb(l.p, "ask-img", false) + '<span class="n">' + (l.q > 1 ? l.q + "× " : "") +
-              esc(l.p.name) + '</span><span class="p">' + esc(eurCents(l.q * l.p.unit_cents)) + "</span></div>",
-          )
-          .join("") +
-        "</div>" +
-        '<button class="btn btn-primary btn-block ask-go" data-pay>' + esc(t("ask_pay_cart", eurCents(cents))) + "</button>"
-      : '<button class="btn btn-primary btn-block ask-go" data-pick>' + esc(t("ask_pick")) + "</button>") +
-    '<button type="button" class="ask-no" data-no>' + esc(t("ask_no")) + "</button></div>";
-  lockScroll();
-  let closed = false;
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    unlockScroll();
-    ov.classList.add("closing");
-    setTimeout(() => ov.remove(), 220);
-  };
-  ov.addEventListener("click", (e) => {
-    if (e.target === ov) close();
-  });
-  ov.querySelector("[data-no]").onclick = close;
-  const pick = ov.querySelector("[data-pick]");
-  if (pick)
-    pick.onclick = () => {
-      close();
-      openFrigo();
-    };
-  const pay = ov.querySelector("[data-pay]");
-  if (pay)
-    pay.onclick = async () => {
-      pay.disabled = true;
-      pay.innerHTML = '<span class="spin"></span>';
-      const ok = await fridgeBuy(
-        lines.map((l) => ({ part: l.p.part, quantity: l.q })),
-        lines.map((l) => ({ name: l.p.name, quantity: l.q, total: eurCents(l.q * l.p.unit_cents) })),
-        cents,
-        { cart: true, via: "wallet" },
-      );
-      if (ok) close();
-      else {
-        pay.disabled = false;
-        pay.textContent = t("ask_pay_cart", eurCents(cents));
-      }
-    };
-  document.body.appendChild(ov);
+  await openFrigo();
+  toast(t("wal_topped_toast", p.total, eurCents(ACHAT.wallet)), "topup");
 }
 
 /* ---- reçu ----
@@ -532,14 +501,15 @@ async function openReceipt(pk, fresh, tx) {
     await new Promise((res) => setTimeout(res, 2000));
   }
   if (p.status === "paid" && p.wallet_cents != null) setWallet(p.wallet_cents);
+  // recharge tout juste confirmée (par le membre) : pas d'écran de reçu, on
+  // enchaîne l'achat prévu, ou on revient au frigo
+  if (fresh && p.status === "paid" && p.kind === "topup" && p.channel !== "tap") return afterTopup(p);
   if (p.status === "paid") {
     // le panier a été payé : on le vide (jamais pour un achat depuis une fiche)
     if (frigoCartPaidBy(p.pk)) frigoCartClear();
     if (fresh) toast(t("buy_paid_toast"), "ok");
   }
   renderReceipt(p);
-  // recharge tout juste confirmée (par le membre lui-même) : « tu prends ta conso ? »
-  if (fresh && p.status === "paid" && p.kind === "topup" && p.channel !== "tap") askConsoAfterTopup(p);
   // reçu e-mail envoyé en tâche de fond : on rafraîchit la mention une fois
   if (p.status === "paid" && p.receipt_auto && !p.receipt_sent_to)
     setTimeout(async () => {
@@ -610,8 +580,10 @@ function renderReceipt(p) {
     (paid ? '<p class="rcpt-note">' + esc(okText) + "</p>" : "") +
     (p.warning ? '<div class="rcpt-warn">⚠ ' + esc(p.warning) + "</div>" : "") +
     "</div>" +
+    // payé : retour au frigo d'abord (une autre conso), le reçu ensuite
+    (paid ? '<button class="btn btn-primary btn-block" id="rcptFridge">' + esc(t("rcpt_back_fridge")) + "</button>" : "") +
     (paid
-      ? '<button class="btn btn-primary btn-block" id="rcptPdf">' + esc(t("rcpt_download")) + "</button>" +
+      ? '<button class="btn btn-ghost btn-block" id="rcptPdf">' + esc(t("rcpt_download")) + "</button>" +
         '<button class="btn btn-ghost btn-block" id="rcptMailBtn">' +
         esc(p.receipt_sent_to ? t("rcpt_resend") : t("rcpt_send")) + "</button>" +
         '<p class="rcpt-mail" id="rcptMail">' +
@@ -619,7 +591,7 @@ function renderReceipt(p) {
       : p.failed
         ? ""
         : '<button class="btn btn-ghost btn-block" id="rcptRetry">' + esc(t("retry")) + "</button>") +
-    '<button class="btn btn-ghost btn-block" id="rcptFridge">' + esc(t("rcpt_back_fridge")) + "</button>";
+    (paid ? "" : '<button class="btn btn-ghost btn-block" id="rcptFridge">' + esc(t("rcpt_back_fridge")) + "</button>");
   if ($("#rcptPdf")) $("#rcptPdf").onclick = () => downloadReceipt(p.pk, $("#rcptPdf"));
   if ($("#rcptMailBtn")) $("#rcptMailBtn").onclick = () => resendReceipt(p.pk, $("#rcptMailBtn"));
   if ($("#rcptRetry")) $("#rcptRetry").onclick = () => openReceipt(p.pk, true);
