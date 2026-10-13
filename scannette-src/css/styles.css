@@ -664,6 +664,10 @@ body.frigo-mode .login-wrap>.card{order:5}
 .modal-ov.closing .modal-card{animation:pkSheetOut .16s ease forwards}
 .modal-card h3{margin:0 0 8px;font-size:16px}
 .modal-card p{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.5}
+/* pastille d'alerte au-dessus du titre (appConfirm, icon: "warn") */
+.modal-card.with-ic{text-align:center}
+.modal-ic{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin:2px auto 12px;font-size:28px;font-weight:800;line-height:1}
+.modal-ic.warn{background:var(--amber-light);color:var(--amber);border:2px solid var(--amber);animation:pop .4s cubic-bezier(.2,1.3,.4,1)}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
 .btn-danger{background:var(--red);color:#fff}
 

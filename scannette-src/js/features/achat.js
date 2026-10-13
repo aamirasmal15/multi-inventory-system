@@ -508,6 +508,7 @@ async function leaveFrigo(next) {
   const w = topupWatch();
   if (!w) return next();
   const stay = await appConfirm({
+    icon: "warn",
     title: t("forgot_t"),
     text: t("forgot", w.total),
     confirmLabel: t("forgot_pick"),
