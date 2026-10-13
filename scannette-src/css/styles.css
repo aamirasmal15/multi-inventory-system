@@ -443,7 +443,7 @@ textarea{resize:none;min-height:56px}
 .ps-note.wal-note{font-size:12px;margin:14px 0 0}
 .ps-steplbl.over{color:var(--amber);font-weight:600}
 /* recharge : pas de remboursement (achat.js, walNoRefundHtml) */
-.wal-norefund{display:flex;flex-direction:column;gap:3px;background:var(--red-light);border-left:3px solid var(--red);border-radius:8px;padding:10px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.45;color:var(--text)}
+.wal-norefund{display:flex;flex-direction:column;gap:3px;background:var(--red-light);border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.45;color:var(--text)}
 .wal-norefund b{color:var(--red);font-size:13px}
 .price-chip:disabled{opacity:.35;cursor:not-allowed}
 .purch-row .pt.plus{color:var(--primary)}
