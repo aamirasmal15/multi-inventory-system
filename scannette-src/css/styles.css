@@ -302,6 +302,10 @@ textarea{resize:none;min-height:56px}
    générées : marges et fond en double retirés, police de l'app. */
 .pay-widget{background:#fff;color:#212529;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);padding:16px 14px 8px;min-height:180px}
 .pay-widget .skeleton{padding:50px 0}
+/* formulaire SumUp bloqué par le réseau (achat.js, openPaySheet) */
+.pay-blocked{text-align:center;padding:18px 4px 8px}
+.pay-blocked b{display:block;font-size:15px;margin-bottom:6px}
+.pay-blocked p{color:#495057;font-size:13px;line-height:1.45;margin:0 0 14px}
 #sumupCard .sumup-payment-widget-theme{padding:0!important;background:transparent!important;font-family:inherit!important}
 #sumupCard #card-form{border-radius:0 0 var(--radius) var(--radius)}
 /* titre « Choisissez un moyen de paiement » du widget : doublon de l'en-tête

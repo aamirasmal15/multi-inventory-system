@@ -263,17 +263,28 @@ function prefetchSumup() {
   if (ACHAT.card) loadSumupSdk().catch(() => {});
 }
 
+/* Script SumUp. Un réseau filtrant (Wi-Fi d'école...) peut le bloquer sans
+   erreur : la requête traîne indéfiniment. Délai de 12 s, puis échec propre
+   (nouvel essai possible) au lieu d'un « Chargement… » sans fin. */
+const SUMUP_SDK_TIMEOUT = 12000;
 function loadSumupSdk() {
   if (window.SumUpCard) return Promise.resolve();
   if (!sumupSdkPromise) {
     sumupSdkPromise = new Promise((ok, ko) => {
       const s = document.createElement("script");
       s.src = SUMUP_SDK;
-      s.onload = ok;
-      s.onerror = () => {
-        sumupSdkPromise = null; // nouvel essai possible au prochain clic
-        ko(new Error(t("buy_sdk_fail")));
+      const fail = () => {
+        clearTimeout(timer);
+        s.remove();
+        sumupSdkPromise = null; // nouvel essai possible
+        ko(new Error(t("buy_blocked")));
       };
+      const timer = setTimeout(fail, SUMUP_SDK_TIMEOUT);
+      s.onload = () => {
+        clearTimeout(timer);
+        ok();
+      };
+      s.onerror = fail;
       document.head.appendChild(s);
     });
   }
@@ -328,6 +339,7 @@ function openPaySheet(r, recap) {
       document.removeEventListener("keydown", onKey);
       ov.classList.add("closing");
       setTimeout(() => ov.remove(), 220);
+      clearTimeout(watchdog);
       try {
         window.SumUpCard && window.SumUpCard.unmount && window.SumUpCard.unmount();
       } catch (_) {}
@@ -365,16 +377,35 @@ function openPaySheet(r, recap) {
     // réglage SumUp par défaut). Apple Pay n'a pas d'option : SumUp l'affiche dans Safari dès que le
     // domaine est validé dans le profil SumUp (fichier .well-known publié).
     if (ACHAT.googlePay) opts.googlePay = ACHAT.googlePay;
-    loadSumupSdk()
-      .then(() => {
-        if (closed) return;
-        $("#sumupCard").innerHTML = "";
-        window.SumUpCard.mount(opts);
-      })
-      .catch((e) => {
-        toast(e.message, "bad");
-        close(false);
-      });
+    // formulaire SumUp : chargé (onLoad) ou bloqué par le réseau -> message clair
+    // dans la feuille (qui reste ouverte, panier intact) avec « Réessayer »
+    const blocked = () => {
+      if (closed) return;
+      const box = $("#sumupCard");
+      box.innerHTML =
+        '<div class="pay-blocked"><b>' + esc(t("buy_blocked_title")) + "</b><p>" + esc(t("buy_blocked")) + "</p>" +
+        '<button type="button" class="btn btn-ghost btn-block" data-retry>' + esc(t("retry")) + "</button></div>";
+      box.querySelector("[data-retry]").onclick = () => {
+        try {
+          window.SumUpCard && window.SumUpCard.unmount && window.SumUpCard.unmount();
+        } catch (_) {}
+        box.innerHTML = '<div class="skeleton">' + esc(t("loading")) + "</div>";
+        mount();
+      };
+    };
+    let watchdog = null;
+    opts.onLoad = () => clearTimeout(watchdog);
+    const mount = () =>
+      loadSumupSdk()
+        .then(() => {
+          if (closed) return;
+          $("#sumupCard").innerHTML = "";
+          clearTimeout(watchdog);
+          watchdog = setTimeout(blocked, 15000);
+          window.SumUpCard.mount(opts);
+        })
+        .catch(blocked);
+    mount();
   });
 }
 
