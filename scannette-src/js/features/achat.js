@@ -482,17 +482,69 @@ async function afterTopup(p) {
   // « recharge effectuée, tu veux acheter quelque chose ? »
   await openFrigo();
   topupWatchSet(p.total);
-  // pastille « ! » : la recharge est faite, mais la conso n'est PAS payée
-  const buy = await appConfirm({
-    icon: "warn",
-    title: t("topped_t"),
-    text: t("topped_q", p.total, eurCents(ACHAT.wallet)),
-    confirmLabel: t("topped_yes"),
-    cancelLabel: t("topped_no"),
+  // « Non » : rien à rattraper ; une conso choisie : on reste sur le frigo, et
+  // la sortie sans achat redemandera « T'as pas oublié ta conso ? »
+  if (!(await toppedSheet(p))) topupWatchClear();
+}
+
+/* Feuille « recharge effectuée » : carte bleue (+5,00 € · solde), bandeau
+   orange « conso pas encore payée », puis les boissons du frigo en un tap
+   (ajout au panier, la barre « Payer · 👛 » apparaît). Résout true si la
+   personne veut une conso, false pour « Non, pas maintenant ». */
+function toppedSheet(p) {
+  return new Promise((resolve) => {
+    const list = ((FRIGO && FRIGO.products) || []).filter((x) => x.buyable && x.available > 0);
+    // les moins chères d'abord : celles qu'on prend « en passant »
+    const quick = list.slice().sort((a, b) => a.unit_cents - b.unit_cents).slice(0, 4);
+    const ov = document.createElement("div");
+    ov.className = "modal-ov sheet-ov";
+    ov.innerHTML =
+      '<div class="ps-sheet td-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("topped_t")) + '">' +
+      '<div class="ps-grab" aria-hidden="true"></div>' +
+      '<div class="td-card"><span class="td-ic">👛</span><div class="td-l"><b>' + esc(t("td_plus", p.total)) + "</b><span>" +
+      esc(t("ask_balance_s", eurCents(ACHAT.wallet))) + "</span></div>" +
+      '<span class="td-ok" aria-hidden="true">✓</span></div>' +
+      '<div class="td-warn"><span class="td-bang" aria-hidden="true">!</span>' + esc(t("td_unpaid")) + "</div>" +
+      '<h3 class="td-q">' + esc(t("td_q")) + "</h3>" +
+      (quick.length
+        ? '<div class="td-grid">' +
+          quick
+            .map(
+              (x) =>
+                '<button type="button" class="td-item" data-part="' + x.part + '">' + frigoThumb(x, "td-img", false) +
+                '<span class="n">' + esc(x.name) + '</span><span class="p">' + esc(eur(x.unit_price)) + "</span></button>",
+            )
+            .join("") +
+          "</div>"
+        : "") +
+      '<button class="btn btn-primary btn-block" data-all>' + esc(t("td_all")) + "</button>" +
+      '<button type="button" class="ask-no" data-no>' + esc(t("topped_no")) + "</button></div>";
+    lockScroll();
+    let done = false;
+    const close = (want) => {
+      if (done) return;
+      done = true;
+      unlockScroll();
+      ov.classList.add("closing");
+      setTimeout(() => ov.remove(), 220);
+      resolve(want);
+    };
+    ov.addEventListener("click", (e) => {
+      if (e.target === ov) close(true); // fermée sans répondre : on garde le filet
+    });
+    ov.querySelector("[data-no]").onclick = () => close(false);
+    ov.querySelector("[data-all]").onclick = () => close(true);
+    ov.querySelectorAll(".td-item").forEach((b) => {
+      b.onclick = () => {
+        // un tap = 1 au panier ; la barre du frigo propose alors « Payer · 👛 »
+        const pk = Number(b.dataset.part);
+        frigoSetQty(pk, (frigoCart()[pk] || 0) + 1);
+        frigoRender();
+        close(true);
+      };
+    });
+    document.body.appendChild(ov);
   });
-  // « Non » : rien à rattraper ; « Oui » : on reste sur le frigo, et la sortie
-  // sans achat redemandera « T'as pas oublié ta conso ? »
-  if (!buy) topupWatchClear();
 }
 
 /* « T'as pas oublié ta conso ? » : après une recharge seule, quitter le frigo

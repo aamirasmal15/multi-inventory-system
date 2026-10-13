@@ -446,6 +446,25 @@ textarea{resize:none;min-height:56px}
 .wal-norefund{display:flex;flex-direction:column;gap:3px;background:var(--red-light);border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.45;color:var(--text)}
 .wal-norefund b{color:var(--red);font-size:13px}
 .price-chip:disabled{opacity:.35;cursor:not-allowed}
+/* recharge effectuée (achat.js, toppedSheet) */
+.td-card{display:flex;align-items:center;gap:12px;background:var(--primary);color:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow-sm)}
+.td-ic{width:42px;height:42px;flex:none;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:21px}
+.td-l{flex:1;min-width:0;display:flex;flex-direction:column}
+.td-l b{font-size:18px;letter-spacing:-.01em}
+.td-l span{font-size:13px;opacity:.92}
+.td-ok{width:26px;height:26px;flex:none;border-radius:50%;background:#fff;color:var(--primary);display:grid;place-items:center;font-weight:800;font-size:14px}
+.td-warn{display:flex;align-items:center;gap:9px;background:var(--amber-light);color:var(--amber);border-radius:10px;padding:10px 12px;font-weight:700;font-size:14px;margin-bottom:16px}
+.td-bang{width:22px;height:22px;flex:none;border-radius:50%;background:var(--amber);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px}
+.td-q{font-size:18px;margin:0 0 10px}
+.td-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.td-item{display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:8px 4px;font-family:inherit;color:var(--text);cursor:pointer;min-width:0}
+.td-item:active{transform:scale(.96)}
+.td-item .n{font-size:11px;line-height:1.25;text-align:center;max-height:2.5em;overflow:hidden;width:100%}
+.td-item .p{font-size:12.5px;font-weight:800;color:var(--green)}
+.td-img{width:48px;height:48px;border-radius:8px;object-fit:cover;background:#fff}
+.td-img.fr-ph{display:grid;place-items:center;color:var(--muted)}
+.td-img.fr-ph svg{width:22px;height:22px}
+.ask-no{display:block;margin:10px auto 0;border:none;background:none;color:var(--muted);font-weight:600;font-size:14px;font-family:inherit;cursor:pointer;padding:8px 12px}
 .purch-row .pt.plus{color:var(--primary)}
 /* trésorerie (treso.js) */
 .treso-open{margin-bottom:12px}
