@@ -156,6 +156,7 @@ function openWalletSheet(need) {
       "</div>" +
       '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
       '<div class="ps-steplbl" data-range>' + esc(t("wal_range_cap", eurCents(min), eurCents(ACHAT.walletMax))) + "</div>" +
+      walNoRefundHtml() +
       '<button class="btn btn-primary btn-block" data-go disabled></button>';
   const ov = document.createElement("div");
   ov.className = "modal-ov sheet-ov";
@@ -200,6 +201,14 @@ function openWalletSheet(need) {
   // solde à jour (une recharge a pu aboutir ailleurs)
   walletRefresh();
   return Promise.resolve(false);
+}
+
+/* avertissement avant de payer une recharge : pas de remboursement, mais
+   l'argent reste dépensable au frigo (feuille du portefeuille, Tap to Pay) */
+function walNoRefundHtml() {
+  return (
+    '<div class="wal-norefund"><b>' + esc(t("wal_norefund_t")) + "</b><span>" + esc(t("wal_norefund")) + "</span></div>"
+  );
 }
 
 /* formulaire de recharge de la feuille : montant (raccourcis ou libre), puis

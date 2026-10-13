@@ -352,6 +352,7 @@ function openTapSheet(member) {
     "</div>" +
     '<div class="ps-amount"><label class="ps-field"><input id="tapInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
     '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(ACHAT.topupMin))) + "</div>" +
+    walNoRefundHtml() +
     '<button class="btn btn-primary btn-block" data-go disabled></button>' +
     '<p class="ps-note wal-note" data-help>' + esc(t("tap_help")) + "</p></div>";
   const who = ov.querySelector(".tap-who"),
