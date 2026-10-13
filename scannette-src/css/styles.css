@@ -698,8 +698,6 @@ input[type=date]:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--pr
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 60px);transform:translate(-50%,160%);visibility:hidden;opacity:0;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:11px 15px;border-radius:var(--radius);font-size:13px;z-index:50;box-shadow:var(--shadow-md);max-width:90%;text-align:center;transition:transform .3s cubic-bezier(.2,.9,.3,1),opacity .2s,visibility .2s}
 .toast.show{transform:translate(-50%,0);visibility:visible;opacity:1}
 .toast.ok{border-color:var(--green);background:var(--green-light)} .toast.bad{border-color:var(--red);background:var(--red-light)}
-/* recharge confirmée (achat.js, afterTopup) */
-.toast.topup{border-color:var(--primary);background:var(--primary-light)}
 .spin{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
 
