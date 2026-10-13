@@ -668,6 +668,7 @@ body.frigo-mode .login-wrap>.card{order:5}
 .modal-card.with-ic{text-align:center}
 .modal-ic{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin:2px auto 12px;font-size:28px;font-weight:800;line-height:1}
 .modal-ic.warn{background:var(--amber-light);color:var(--amber);border:2px solid var(--amber);animation:pop .4s cubic-bezier(.2,1.3,.4,1)}
+.modal-ic.ok{background:var(--green-light);color:var(--green);border:2px solid var(--green);animation:pop .4s cubic-bezier(.2,1.3,.4,1)}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
 .btn-danger{background:var(--red);color:#fff}
 

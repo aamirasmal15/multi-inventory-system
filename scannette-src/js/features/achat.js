@@ -456,8 +456,8 @@ function openPaySheet(r, recap) {
 
 /* Recharge confirmée. Lancée pour payer un panier (« Recharger et payer ») :
    l'achat est payé tout de suite avec le portefeuille -> reçu vert. Recharge
-   seule : retour au frigo, solde à jour (la sortie demandera « T'as pas
-   oublié ta conso ? », qui confirme la recharge). Le reçu de la
+   seule : retour au frigo et « Recharge effectuée, tu souhaites acheter
+   quelque chose ? » (oui : la sortie sans achat redemandera). Le reçu de la
    recharge reste dans « Mes achats ». */
 async function afterTopup(p) {
   let intent = null;
@@ -478,10 +478,21 @@ async function afterTopup(p) {
       return openFrigo();
     }
   }
-  // pas de notification : le solde en haut est à jour, et la question
-  // « T'as pas oublié ta conso ? » (qui confirme la recharge) vient à la sortie
+  // retour au frigo et, tout de suite, la confirmation qui pose la question :
+  // « recharge effectuée, tu veux acheter quelque chose ? »
   await openFrigo();
   topupWatchSet(p.total);
+  // pastille « ! » : la recharge est faite, mais la conso n'est PAS payée
+  const buy = await appConfirm({
+    icon: "warn",
+    title: t("topped_t"),
+    text: t("topped_q", p.total, eurCents(ACHAT.wallet)),
+    confirmLabel: t("topped_yes"),
+    cancelLabel: t("topped_no"),
+  });
+  // « Non » : rien à rattraper ; « Oui » : on reste sur le frigo, et la sortie
+  // sans achat redemandera « T'as pas oublié ta conso ? »
+  if (!buy) topupWatchClear();
 }
 
 /* « T'as pas oublié ta conso ? » : après une recharge seule, quitter le frigo

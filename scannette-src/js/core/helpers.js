@@ -187,7 +187,7 @@ function toast(m, k) {
    Avec promptLabel (et promptPlaceholder), la modale ajoute un champ texte
    facultatif et résout {ok:true, value} au lieu de true — false inchangé.
    Échap ou clic sur le fond = annuler. Contenu posé en textContent (pas d'HTML).
-   icon : "warn" -> pastille « ! » orange au-dessus du titre. */
+   icon : "warn" -> pastille « ! » orange, "ok" -> pastille « ✓ » verte, au-dessus du titre. */
 function appConfirm(opts) {
   return new Promise((resolve) => {
     const ov = document.createElement("div");
@@ -198,12 +198,12 @@ function appConfirm(opts) {
     card.setAttribute("aria-modal", "true");
     const h = document.createElement("h3");
     h.textContent = opts.title || t("confirm_q");
-    if (opts.icon === "warn") {
+    if (opts.icon === "warn" || opts.icon === "ok") {
       card.classList.add("with-ic");
       const ic = document.createElement("div");
-      ic.className = "modal-ic warn";
+      ic.className = "modal-ic " + opts.icon;
       ic.setAttribute("aria-hidden", "true");
-      ic.textContent = "!";
+      ic.textContent = opts.icon === "ok" ? "✓" : "!";
       card.appendChild(ic);
     }
     const p = document.createElement("p");
