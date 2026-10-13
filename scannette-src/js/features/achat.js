@@ -23,7 +23,8 @@ const ACHAT = {
   wallet: 0,
   minCard: 100,
   topupMin: 100,
-  topupMax: 99999,
+  topupMax: 10000,
+  walletMax: 10000, // plafond du solde (le serveur le vérifie aussi)
   canTap: false, // encaisser des recharges en Tap to Pay (admins, treso.js)
 };
 let achatReadyResolve = null;
@@ -42,7 +43,8 @@ async function loadAchatConfig() {
     ACHAT.admin = !!c.admin;
     ACHAT.minCard = c.min_card_cents || 100;
     ACHAT.topupMin = c.topup_min_cents || 100;
-    ACHAT.topupMax = c.topup_max_cents || 99999;
+    ACHAT.topupMax = c.topup_max_cents || 10000;
+    ACHAT.walletMax = c.wallet_max_cents || 10000;
     ACHAT.canTap = !!c.can_tap;
   } catch (_) {
     ACHAT.enabled = false; // plugin non installé
@@ -133,21 +135,28 @@ async function fridgeBuy(lines, recap, cents, opts) {
 const TOPUP_CHIPS = [100, 200, 500, 1000, 2000];
 function openWalletSheet(need) {
   need = need || 0;
+  // plafond du portefeuille : on ne propose que ce qui tient en dessous
   const min = ACHAT.topupMin,
-    max = ACHAT.topupMax;
-  // montant proposé : le plus petit raccourci qui couvre le panier
-  const pre = TOPUP_CHIPS.find((c) => c >= Math.max(need, min)) || TOPUP_CHIPS[TOPUP_CHIPS.length - 1];
+    max = Math.min(ACHAT.topupMax, Math.max(0, ACHAT.walletMax - ACHAT.wallet));
+  const full = max < min;
+  // montant proposé : le plus petit raccourci qui couvre le panier (sans dépasser le plafond)
+  const pre = Math.min(max, TOPUP_CHIPS.find((c) => c >= Math.max(need, min)) || TOPUP_CHIPS[TOPUP_CHIPS.length - 1]);
   const fmtC = (c) => (c / 100).toFixed(2).replace(".", ",");
   // sans paiement par carte : pas de formulaire, recharge en espèces auprès du trésorier
-  const form = ACHAT.card
-    ? '<div class="ps-steplbl wal-k">' + esc(t("wal_topup_how")) + "</div>" +
+  const form = !ACHAT.card
+    ? '<p class="ps-note wal-note">' + esc(t("wal_nocard")) + "</p>"
+    : full
+      ? '<p class="ps-note wal-note">' + esc(t("wal_full", eurCents(ACHAT.walletMax))) + "</p>"
+      : '<div class="ps-steplbl wal-k">' + esc(t("wal_topup_how")) + "</div>" +
       '<div class="price-chips wal-chips">' +
-      TOPUP_CHIPS.map((c) => '<button type="button" class="price-chip" data-v="' + fmtC(c) + '">' + c / 100 + " €</button>").join("") +
+      TOPUP_CHIPS.map(
+        (c) =>
+          '<button type="button" class="price-chip" data-v="' + fmtC(c) + '"' + (c > max ? " disabled" : "") + ">" + c / 100 + " €</button>",
+      ).join("") +
       "</div>" +
       '<div class="ps-amount"><label class="ps-field"><input id="walInput" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00"><span>€</span></label></div>' +
-      '<div class="ps-steplbl">' + esc(t("wal_range", eurCents(min))) + "</div>" +
-      '<button class="btn btn-primary btn-block" data-go disabled></button>'
-    : '<p class="ps-note wal-note">' + esc(t("wal_nocard")) + "</p>";
+      '<div class="ps-steplbl" data-range>' + esc(t("wal_range_cap", eurCents(min), eurCents(ACHAT.walletMax))) + "</div>" +
+      '<button class="btn btn-primary btn-block" data-go disabled></button>';
   const ov = document.createElement("div");
   ov.className = "modal-ov sheet-ov";
   ov.innerHTML =
@@ -187,7 +196,7 @@ function openWalletSheet(need) {
       openTapSheet(null);
     };
   document.body.appendChild(ov);
-  if (ACHAT.card) armTopupForm(ov, close, fmtC(pre), min, max);
+  if (ACHAT.card && !full) armTopupForm(ov, close, fmtC(pre), min, max);
   // solde à jour (une recharge a pu aboutir ailleurs)
   walletRefresh();
   return Promise.resolve(false);
@@ -208,6 +217,10 @@ function armTopupForm(ov, close, preset, min, max) {
     const ok = c >= min && c <= max;
     go.disabled = !ok;
     go.textContent = ok ? t("wal_topup_x", eurCents(c)) : t("wal_topup_btn");
+    // au-delà du plafond : on dit jusqu'où on peut aller
+    const r = ov.querySelector("[data-range]");
+    if (r) r.textContent = c > max ? t("wal_over", eurCents(max)) : t("wal_range_cap", eurCents(min), eurCents(ACHAT.walletMax));
+    if (r) r.classList.toggle("over", c > max);
   };
   input.value = preset;
   armPriceChips(ov, input, sync);

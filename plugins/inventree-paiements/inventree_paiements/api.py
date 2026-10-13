@@ -17,7 +17,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .core import TOPUP_MAX_CENTS, TOPUP_MIN_CENTS, PaymentError
+from .core import TOPUP_MAX_CENTS, TOPUP_MIN_CENTS, WALLET_MAX_CENTS, PaymentError
 
 logger = logging.getLogger("inventree")
 
@@ -122,6 +122,8 @@ class ConfigView(PluginView):
             "min_card_cents": self.plugin.min_card_cents(),
             "topup_min_cents": TOPUP_MIN_CENTS,
             "topup_max_cents": TOPUP_MAX_CENTS,
+            # plafond du solde du portefeuille
+            "wallet_max_cents": WALLET_MAX_CENTS,
         })
 
 

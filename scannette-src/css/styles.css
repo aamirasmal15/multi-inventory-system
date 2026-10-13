@@ -441,6 +441,8 @@ textarea{resize:none;min-height:56px}
 .wal-chips{grid-template-columns:repeat(5,minmax(0,1fr))}
 /* .ps-note.wal-note : la règle .ps-note (marge négative) vient plus loin */
 .ps-note.wal-note{font-size:12px;margin:14px 0 0}
+.ps-steplbl.over{color:var(--amber);font-weight:600}
+.price-chip:disabled{opacity:.35;cursor:not-allowed}
 .purch-row .pt.plus{color:var(--primary)}
 /* trésorerie (treso.js) */
 .treso-open{margin-bottom:12px}

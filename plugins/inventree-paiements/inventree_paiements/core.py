@@ -44,9 +44,10 @@ MAX_QTY = 20  # garde-fou par produit : une Scannette n'est pas une caisse de gr
 MIN_CARD_CENTS = 100  # SumUp refuse (FAILED) tout paiement par carte sous 1 €
 TOPUP_MIN_CENTS = 100  # recharge minimale, quel que soit le prestataire
 PaymentError = (SumUpError,)
-# pas de plafond de recharge : seulement un garde-fou contre une faute de
-# frappe (le champ de la Scannette accepte au plus 999,99 €)
-TOPUP_MAX_CENTS = 99999
+# plafond du portefeuille : le solde ne depasse jamais 100 € (securite ; une
+# recharge est refusee au-dela, recharges en cours comprises)
+WALLET_MAX_CENTS = 10000
+TOPUP_MAX_CENTS = WALLET_MAX_CENTS
 
 
 def euros(cents):
@@ -196,12 +197,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
         from .models import Purchase
 
-        try:
-            amount = int(amount_cents)
-        except (TypeError, ValueError):
-            raise ValueError("Montant invalide.")
-        if not TOPUP_MIN_CENTS <= amount <= TOPUP_MAX_CENTS:
-            raise ValueError(f"Recharge de {euros(TOPUP_MIN_CENTS)} minimum.")
+        amount = self.check_topup(member, amount_cents)
         p = Purchase.objects.create(
             location=None,
             user=member,
@@ -473,16 +469,47 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             PurchaseLine.objects.bulk_create([PurchaseLine(purchase=purchase, **ln) for ln in lines])
         return purchase, self._open_checkout(request, purchase)
 
-    def start_topup(self, request, amount_cents):
-        """Recharge du portefeuille : Purchase sans ligne + checkout SumUp ; renvoie (purchase, checkout_id)."""
+    def topup_room(self, user):
+        """Ce qu'on peut encore recharger sans depasser le plafond du portefeuille.
+
+        Les recharges en attente des 20 dernieres minutes comptent deja : deux
+        recharges lancees en meme temps ne passent pas au-dessus du plafond.
+        """
+        import datetime
+
         from .models import Purchase
 
+        pending = sum(
+            Purchase.objects.filter(
+                user=user,
+                kind=Purchase.KIND_TOPUP,
+                status=Purchase.STATUS_PENDING,
+                created_at__gte=timezone.now() - datetime.timedelta(minutes=20),
+            ).values_list("amount_cents", flat=True)
+        )
+        return max(0, WALLET_MAX_CENTS - self.wallet_balance(user) - pending)
+
+    def check_topup(self, user, amount_cents):
+        """Montant de recharge valide (centimes) ou ValueError lisible."""
         try:
             amount = int(amount_cents)
         except (TypeError, ValueError):
             raise ValueError("Montant invalide.")
-        if not TOPUP_MIN_CENTS <= amount <= TOPUP_MAX_CENTS:
-            raise ValueError(f"Recharge entre {euros(TOPUP_MIN_CENTS)} et {euros(TOPUP_MAX_CENTS)}.")
+        if amount < TOPUP_MIN_CENTS:
+            raise ValueError(f"Recharge de {euros(TOPUP_MIN_CENTS)} minimum.")
+        room = self.topup_room(user)
+        if amount > room:
+            raise ValueError(
+                f"Le portefeuille est plafonné à {euros(WALLET_MAX_CENTS)} : "
+                + (f"{euros(room)} maximum pour cette recharge." if room >= TOPUP_MIN_CENTS else "il est déjà plein.")
+            )
+        return amount
+
+    def start_topup(self, request, amount_cents):
+        """Recharge du portefeuille : Purchase sans ligne + checkout SumUp ; renvoie (purchase, checkout_id)."""
+        from .models import Purchase
+
+        amount = self.check_topup(request.user, amount_cents)
         purchase = Purchase.objects.create(
             location=None, user=request.user, amount_cents=amount, kind=Purchase.KIND_TOPUP
         )
@@ -603,6 +630,10 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
         w = self._wallet_locked(user)
         new = w.balance_cents + int(amount_cents)
+        # correction d'un admin : jamais au-dessus du plafond (une recharge deja
+        # payee, elle, est toujours creditee : le plafond est verifie a sa creation)
+        if kind == "adjust" and amount_cents > 0 and new > WALLET_MAX_CENTS:
+            raise ValueError(f"Le portefeuille est plafonné à {euros(WALLET_MAX_CENTS)}.")
         if new < 0:
             raise ValueError(
                 f"Solde insuffisant : {euros(w.balance_cents)} sur ton portefeuille. Recharge-le pour continuer."
