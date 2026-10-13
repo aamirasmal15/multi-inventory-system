@@ -490,13 +490,15 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
     @staticmethod
     def _sumup_label(purchase):
-        """Description vue dans le tableau de bord SumUp : le panier exact, ou
-        « Recharge portefeuille · <membre> » (meme libelle qu'en Tap to Pay)."""
+        """Description vue dans le tableau de bord SumUp, toujours avec le membre :
+        « Frigo · <membre> · <panier exact> » ou « Recharge portefeuille · <membre> »
+        (meme libelle qu'en Tap to Pay)."""
+        u = purchase.user
+        name = (u.get_full_name() or u.username)[:60] if u else ""
+        who = f" · {name}" if name else ""
         if purchase.kind == purchase.KIND_TOPUP:
-            u = purchase.user
-            name = (u.get_full_name() or u.username)[:60] if u else ""
-            return "Recharge portefeuille" + (f" · {name}" if name else "")
-        return "Frigo · " + purchase.summary(240)
+            return "Recharge portefeuille" + who
+        return "Frigo" + who + " · " + purchase.summary(180)
 
     def _open_checkout(self, request, purchase):
         """Checkout SumUp d'un Purchase deja cree (le widget de la Scannette l'execute) ;
