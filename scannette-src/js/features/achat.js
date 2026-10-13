@@ -123,6 +123,7 @@ async function fridgeBuy(lines, recap, cents, opts) {
     const r = await api("/plugin/paiements/wallet/pay", { method: "POST", body: { lines } });
     setWallet(r.wallet_cents);
     if (opts.cart) frigoCartClear();
+    topupWatchClear();
     toast(t("wal_paid_toast", eurCents(r.wallet_cents)), "ok");
     openReceipt(r.purchase, false);
     return true;
@@ -478,6 +479,43 @@ async function afterTopup(p) {
   }
   await openFrigo();
   toast(t("wal_topped_toast", p.total, eurCents(ACHAT.wallet)), "topup");
+  topupWatchSet(p.total);
+}
+
+/* « T'as pas oublié ta conso ? » : après une recharge seule, quitter le frigo
+   sans rien acheter (dans les 10 min) pose la question. Recharger ne paie pas
+   la boisson ; on rattrape l'oubli avant que la personne parte. */
+const TOPUP_WATCH_MS = 10 * 60e3;
+function topupWatchSet(total) {
+  try {
+    sessionStorage.setItem("topup_watch", JSON.stringify({ total, at: Date.now() }));
+  } catch (_) {}
+}
+function topupWatchClear() {
+  try {
+    sessionStorage.removeItem("topup_watch");
+  } catch (_) {}
+}
+function topupWatch() {
+  try {
+    const w = JSON.parse(sessionStorage.getItem("topup_watch") || "null");
+    return w && Date.now() - w.at < TOPUP_WATCH_MS ? w : null;
+  } catch (_) {
+    return null;
+  }
+}
+async function leaveFrigo(next) {
+  const w = topupWatch();
+  if (!w) return next();
+  const stay = await appConfirm({
+    title: t("forgot_t"),
+    text: t("forgot", w.total),
+    confirmLabel: t("forgot_pick"),
+    cancelLabel: t("forgot_no"),
+  });
+  if (stay) return; // on reste sur le frigo pour choisir la conso
+  topupWatchClear();
+  next();
 }
 
 /* ---- reçu ----
@@ -504,6 +542,7 @@ async function openReceipt(pk, fresh, tx) {
   // recharge tout juste confirmée (par le membre) : pas d'écran de reçu, on
   // enchaîne l'achat prévu, ou on revient au frigo
   if (fresh && p.status === "paid" && p.kind === "topup" && p.channel !== "tap") return afterTopup(p);
+  if (p.status === "paid" && p.kind !== "topup") topupWatchClear();
   if (p.status === "paid") {
     // le panier a été payé : on le vide (jamais pour un achat depuis une fiche)
     if (frigoCartPaidBy(p.pk)) frigoCartClear();
