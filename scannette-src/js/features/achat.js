@@ -264,9 +264,12 @@ function prefetchSumup() {
 }
 
 /* Script SumUp. Un réseau filtrant (Wi-Fi d'école...) peut le bloquer sans
-   erreur : la requête traîne indéfiniment. Délai de 12 s, puis échec propre
-   (nouvel essai possible) au lieu d'un « Chargement… » sans fin. */
-const SUMUP_SDK_TIMEOUT = 12000;
+   erreur : la requête traîne indéfiniment. Délai de 6 s, puis échec propre
+   (nouvel essai possible) au lieu d'un « Chargement… » sans fin. Le dernier
+   échec est retenu (sumupBlocked) : la feuille de paiement le dit tout de
+   suite, sans refaire attendre. */
+const SUMUP_SDK_TIMEOUT = 6000;
+let sumupBlocked = false;
 function loadSumupSdk() {
   if (window.SumUpCard) return Promise.resolve();
   if (!sumupSdkPromise) {
@@ -277,11 +280,13 @@ function loadSumupSdk() {
         clearTimeout(timer);
         s.remove();
         sumupSdkPromise = null; // nouvel essai possible
+        sumupBlocked = true;
         ko(new Error(t("buy_blocked")));
       };
       const timer = setTimeout(fail, SUMUP_SDK_TIMEOUT);
       s.onload = () => {
         clearTimeout(timer);
+        sumupBlocked = false;
         ok();
       };
       s.onerror = fail;
@@ -401,11 +406,13 @@ function openPaySheet(r, recap) {
           if (closed) return;
           $("#sumupCard").innerHTML = "";
           clearTimeout(watchdog);
-          watchdog = setTimeout(blocked, 15000);
+          watchdog = setTimeout(blocked, 8000);
           window.SumUpCard.mount(opts);
         })
         .catch(blocked);
-    mount();
+    // préchargement déjà en échec sur ce réseau : on le dit tout de suite
+    if (sumupBlocked && !window.SumUpCard) blocked();
+    else mount();
   });
 }
 
