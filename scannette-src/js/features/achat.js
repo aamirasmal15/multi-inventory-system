@@ -438,6 +438,79 @@ function openPaySheet(r, recap) {
   });
 }
 
+/* Après une recharge : recharger n'est pas acheter. Une question, un tap :
+   panier en cours -> « Payer mon panier » (portefeuille, reçu vert) ; sinon
+   « Choisir ma conso » (le frigo) ; ou « Non, juste recharger ». */
+async function askConsoAfterTopup(p) {
+  // panier (sessionStorage) chiffré avec le catalogue à jour
+  if (!FRIGO) {
+    try {
+      FRIGO = await api("/plugin/paiements/fridge");
+    } catch (_) {}
+  }
+  const lines = FRIGO ? frigoCartLines() : [];
+  const cents = lines.reduce((s, l) => s + l.q * l.p.unit_cents, 0);
+  const canPay = lines.length && ACHAT.wallet >= cents;
+  const ov = document.createElement("div");
+  ov.className = "modal-ov sheet-ov";
+  ov.innerHTML =
+    '<div class="ps-sheet ask-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("ask_title")) + '">' +
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ask-done"><span class="ask-ic">👛</span><div><b>' + esc(t("ask_topped", p.total)) + "</b><span>" +
+    esc(t("ask_balance", eurCents(ACHAT.wallet))) + "</span></div></div>" +
+    '<h3 class="ask-q">' + esc(t("ask_title")) + "</h3>" +
+    (canPay
+      ? '<div class="ask-cart">' +
+        lines
+          .map(
+            (l) =>
+              '<div class="ask-line">' + frigoThumb(l.p, "ask-img", false) + '<span class="n">' + (l.q > 1 ? l.q + "× " : "") +
+              esc(l.p.name) + '</span><span class="p">' + esc(eurCents(l.q * l.p.unit_cents)) + "</span></div>",
+          )
+          .join("") +
+        "</div>" +
+        '<button class="btn btn-primary btn-block ask-go" data-pay>' + esc(t("ask_pay_cart", eurCents(cents))) + "</button>"
+      : '<button class="btn btn-primary btn-block ask-go" data-pick>' + esc(t("ask_pick")) + "</button>") +
+    '<button type="button" class="ask-no" data-no>' + esc(t("ask_no")) + "</button></div>";
+  lockScroll();
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    unlockScroll();
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 220);
+  };
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-no]").onclick = close;
+  const pick = ov.querySelector("[data-pick]");
+  if (pick)
+    pick.onclick = () => {
+      close();
+      openFrigo();
+    };
+  const pay = ov.querySelector("[data-pay]");
+  if (pay)
+    pay.onclick = async () => {
+      pay.disabled = true;
+      pay.innerHTML = '<span class="spin"></span>';
+      const ok = await fridgeBuy(
+        lines.map((l) => ({ part: l.p.part, quantity: l.q })),
+        lines.map((l) => ({ name: l.p.name, quantity: l.q, total: eurCents(l.q * l.p.unit_cents) })),
+        cents,
+        { cart: true, via: "wallet" },
+      );
+      if (ok) close();
+      else {
+        pay.disabled = false;
+        pay.textContent = t("ask_pay_cart", eurCents(cents));
+      }
+    };
+  document.body.appendChild(ov);
+}
+
 /* ---- reçu ----
    fresh : on sort du paiement à l'instant -> la confirmation du prestataire
    peut avoir quelques secondes de retard, on relit l'état plusieurs fois */
@@ -465,6 +538,8 @@ async function openReceipt(pk, fresh, tx) {
     if (fresh) toast(t("buy_paid_toast"), "ok");
   }
   renderReceipt(p);
+  // recharge tout juste confirmée (par le membre lui-même) : « tu prends ta conso ? »
+  if (fresh && p.status === "paid" && p.kind === "topup" && p.channel !== "tap") askConsoAfterTopup(p);
   // reçu e-mail envoyé en tâche de fond : on rafraîchit la mention une fois
   if (p.status === "paid" && p.receipt_auto && !p.receipt_sent_to)
     setTimeout(async () => {

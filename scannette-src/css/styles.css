@@ -446,6 +446,22 @@ textarea{resize:none;min-height:56px}
 .wal-norefund{display:flex;flex-direction:column;gap:3px;background:var(--red-light);border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.45;color:var(--text)}
 .wal-norefund b{color:var(--red);font-size:13px}
 .price-chip:disabled{opacity:.35;cursor:not-allowed}
+/* après une recharge : « tu prends ta conso ? » (achat.js, askConsoAfterTopup) */
+.ask-done{display:flex;align-items:center;gap:12px;background:var(--primary);color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:16px}
+.ask-ic{width:38px;height:38px;flex:none;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:19px}
+.ask-done b{display:block;font-size:15px}
+.ask-done span{font-size:13px;opacity:.92}
+.ask-q{font-size:19px;margin:0 0 12px;text-align:center}
+.ask-cart{border:1px solid var(--border);border-radius:12px;padding:4px 12px;margin-bottom:12px}
+.ask-line{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:14.5px}
+.ask-line+.ask-line{border-top:1px solid var(--border)}
+.ask-line .n{flex:1;min-width:0;font-weight:600}
+.ask-line .p{font-weight:700;white-space:nowrap}
+.ask-img{width:36px;height:36px;flex:none;border-radius:8px;object-fit:cover;background:#fff;border:1px solid var(--border)}
+.ask-img.fr-ph{display:grid;place-items:center;color:var(--muted)}
+.ask-img.fr-ph svg{width:18px;height:18px}
+.ask-go{font-size:16px;padding:14px}
+.ask-no{display:block;margin:10px auto 0;border:none;background:none;color:var(--muted);font-weight:600;font-size:14px;font-family:inherit;cursor:pointer;padding:8px 12px}
 .purch-row .pt.plus{color:var(--primary)}
 /* trésorerie (treso.js) */
 .treso-open{margin-bottom:12px}
