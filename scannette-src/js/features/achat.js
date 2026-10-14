@@ -53,6 +53,8 @@ async function loadAchatConfig() {
   const fb = $("#frigoOpenBtn");
   if (fb) fb.style.display = ACHAT.fridge ? "" : "none";
   achatReadyResolve();
+  // recharge récente restée sans réponse ni achat : on repose la question
+  if (ACHAT.fridge) setTimeout(forgotOnOpen, 900);
 }
 
 /* verrou du défilement pendant une feuille (paiement, prix) : overflow:hidden
@@ -547,41 +549,65 @@ function toppedSheet(p) {
   });
 }
 
-/* « T'as pas oublié ta conso ? » : après une recharge seule, quitter le frigo
-   sans rien acheter (dans les 10 min) pose la question. Recharger ne paie pas
-   la boisson ; on rattrape l'oubli avant que la personne parte. */
-const TOPUP_WATCH_MS = 10 * 60e3;
+/* « T'as pas oublié ta conso ? » : après une recharge seule, la question
+   revient à chaque sortie du frigo et à chaque ouverture de la Scannette,
+   JUSQU'À une réponse : « Non » (rien pris) ou un achat. « Choisir ma conso »
+   n'en est pas une tant que rien n'est payé. Gardé en localStorage (survit à
+   la fermeture de l'onglet), lié au compte (téléphone partagé). */
 function topupWatchSet(total) {
   try {
-    sessionStorage.setItem("topup_watch", JSON.stringify({ total, at: Date.now() }));
+    localStorage.setItem("topup_watch", JSON.stringify({ user: USERNAME, total, at: Date.now() }));
   } catch (_) {}
 }
 function topupWatchClear() {
   try {
-    sessionStorage.removeItem("topup_watch");
+    localStorage.removeItem("topup_watch");
   } catch (_) {}
 }
 function topupWatch() {
   try {
-    const w = JSON.parse(sessionStorage.getItem("topup_watch") || "null");
-    return w && Date.now() - w.at < TOPUP_WATCH_MS ? w : null;
+    const w = JSON.parse(localStorage.getItem("topup_watch") || "null");
+    return w && w.user === USERNAME ? w : null;
   } catch (_) {
     return null;
   }
 }
-async function leaveFrigo(next) {
-  const w = topupWatch();
-  if (!w) return next();
-  const stay = await appConfirm({
+function forgotAsk(w) {
+  return appConfirm({
     icon: "warn",
     title: t("forgot_t"),
     text: t("forgot", w.total, eurCents(ACHAT.wallet)),
     confirmLabel: t("forgot_pick"),
     cancelLabel: t("forgot_no"),
   });
-  if (stay) return; // on reste sur le frigo pour choisir la conso
-  topupWatchClear();
-  next();
+}
+/* appelée par show() : true = sortie retenue (question posée) */
+let forgotOpen = false;
+function frigoLeaveGuard(id, proceed) {
+  const frigo = $("#screen-frigo");
+  // vers un reçu : c'est un achat en cours, on laisse passer
+  if (!frigo || !frigo.classList.contains("active") || id === "#screen-frigo" || id === "#screen-receipt") return false;
+  const w = topupWatch();
+  if (!w) return false;
+  if (!forgotOpen) {
+    forgotOpen = true;
+    forgotAsk(w).then((stay) => {
+      forgotOpen = false;
+      if (stay) return; // on reste sur le frigo pour choisir la conso
+      topupWatchClear();
+      proceed();
+    });
+  }
+  return true;
+}
+/* prochaine ouverture de la Scannette : recharge récente, ni achat ni réponse */
+async function forgotOnOpen() {
+  await achatReadyPromise;
+  const w = topupWatch();
+  if (!w || $("#screen-frigo").classList.contains("active")) return;
+  await walletRefresh(); // solde affiché dans la question
+  if (await forgotAsk(w)) openFrigo();
+  else topupWatchClear();
 }
 
 /* ---- reçu ----

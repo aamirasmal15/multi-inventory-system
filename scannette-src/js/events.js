@@ -282,7 +282,7 @@ $("#picker")?.addEventListener(
 
 /* ---- frigo et achats (frigo.js, achat.js) ---- */
 $("#frigoOpenBtn")?.addEventListener("click", openFrigo);
-$("#backBtnFrigo")?.addEventListener("click", () => leaveFrigo(gotoScan));
+$("#backBtnFrigo")?.addEventListener("click", gotoScan); // sortie gardée dans show()
 $("#frigoMineBtn")?.addEventListener("click", openPurchases);
 $("#backBtnPurch")?.addEventListener("click", openFrigo);
 $("#frigoPayBtn")?.addEventListener("click", () => frigoPay());

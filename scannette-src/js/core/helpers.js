@@ -77,6 +77,9 @@ const $ = (s) => document.querySelector(s);
 /* Affiche un écran. "drop" : Mon compte descend depuis le chip de la topbar
    (seule animation directionnelle conservée) ; sinon fondu neutre de base. */
 function show(id, dir) {
+  // quitter le frigo juste après une recharge sans achat : achat.js pose
+  // d'abord « T'as pas oublié ta conso ? » (et rejoue show() si on part)
+  if (typeof frigoLeaveGuard === "function" && frigoLeaveGuard(id, () => show(id, dir))) return;
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active", "anim-drop"));
   const el = $(id);
   if (dir === "drop") el.classList.add("anim-drop");
