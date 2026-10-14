@@ -484,15 +484,16 @@ async function afterTopup(p) {
   // « recharge effectuée, tu veux acheter quelque chose ? »
   await openFrigo();
   topupWatchSet(p.total);
-  // « Non » : rien à rattraper ; une conso choisie : on reste sur le frigo, et
-  // la sortie sans achat redemandera « T'as pas oublié ta conso ? »
-  if (!(await toppedSheet(p))) topupWatchClear();
+  // n'importe quel bouton = réponse : plus de relance ; fermée sans choisir :
+  // la feuille reviendra à la sortie du frigo et à la réouverture
+  if (await toppedSheet(p)) topupWatchClear();
 }
 
 /* Feuille « recharge effectuée » : carte bleue (+5,00 € · solde), bandeau
    orange « conso pas encore payée », puis les boissons du frigo en un tap
-   (ajout au panier, la barre « Payer · 👛 » apparaît). Résout true si la
-   personne veut une conso, false pour « Non, pas maintenant ». */
+   (ajout au panier, la barre « Payer · 👛 » apparaît). Résout "yes" (une
+   boisson, ou tout le frigo), "no" (« Non, pas maintenant ») ou null (fermée
+   sans choisir : la question reviendra). */
 function toppedSheet(p) {
   return new Promise((resolve) => {
     const list = ((FRIGO && FRIGO.products) || []).filter((x) => x.buyable && x.available > 0);
@@ -532,28 +533,28 @@ function toppedSheet(p) {
       resolve(want);
     };
     ov.addEventListener("click", (e) => {
-      if (e.target === ov) close(true); // fermée sans répondre : on garde le filet
+      if (e.target === ov) close(null); // fermée sans répondre : la question reviendra
     });
-    ov.querySelector("[data-no]").onclick = () => close(false);
-    ov.querySelector("[data-all]").onclick = () => close(true);
+    ov.querySelector("[data-no]").onclick = () => close("no");
+    ov.querySelector("[data-all]").onclick = () => close("yes");
     ov.querySelectorAll(".td-item").forEach((b) => {
       b.onclick = () => {
         // un tap = 1 au panier ; la barre du frigo propose alors « Payer · 👛 »
         const pk = Number(b.dataset.part);
         frigoSetQty(pk, (frigoCart()[pk] || 0) + 1);
         frigoRender();
-        close(true);
+        close("yes");
       };
     });
     document.body.appendChild(ov);
   });
 }
 
-/* « T'as pas oublié ta conso ? » : après une recharge seule, la question
-   revient à chaque sortie du frigo et à chaque ouverture de la Scannette,
-   JUSQU'À une réponse : « Non » (rien pris) ou un achat. « Choisir ma conso »
-   n'en est pas une tant que rien n'est payé. Gardé en localStorage (survit à
-   la fermeture de l'onglet), lié au compte (téléphone partagé). */
+/* Feuille « recharge effectuée » restée sans réponse (fermée sans choisir,
+   appli quittée) : elle revient à chaque sortie du frigo et à chaque
+   ouverture de la Scannette, jusqu'à un choix (une boisson, tout le frigo ou
+   « Non ») ou un achat. Gardé en localStorage (survit à la fermeture de
+   l'onglet), lié au compte (téléphone partagé). */
 function topupWatchSet(total) {
   try {
     localStorage.setItem("topup_watch", JSON.stringify({ user: USERNAME, total, at: Date.now() }));
@@ -593,11 +594,10 @@ function frigoLeaveGuard(id, proceed) {
   if (!w) return false;
   if (!forgotOpen) {
     forgotOpen = true;
-    forgotAsk(w).then((stay) => {
+    forgotAsk(w).then((r) => {
       forgotOpen = false;
-      if (stay) return; // on reste sur le frigo pour choisir la conso
-      topupWatchClear();
-      proceed();
+      if (r) topupWatchClear(); // réponse donnée : plus de relance
+      if (r === "no") proceed(); // on part ; sinon on reste sur le frigo
     });
   }
   return true;
@@ -607,8 +607,9 @@ async function forgotOnOpen() {
   await achatReadyPromise;
   const w = topupWatch();
   if (!w || $("#screen-frigo").classList.contains("active")) return;
-  if (await forgotAsk(w)) openFrigo();
-  else topupWatchClear();
+  const r = await forgotAsk(w);
+  if (r) topupWatchClear(); // réponse donnée : plus de relance
+  if (r === "yes") openFrigo();
 }
 
 /* ---- reçu ----
