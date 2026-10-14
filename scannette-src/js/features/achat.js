@@ -484,16 +484,16 @@ async function afterTopup(p) {
   // « recharge effectuée, tu veux acheter quelque chose ? »
   await openFrigo();
   topupWatchSet(p.total);
-  // n'importe quel bouton = réponse : plus de relance ; fermée sans choisir :
-  // la feuille reviendra à la sortie du frigo et à la réouverture
+  // une réponse (bouton ou tap à côté) : plus de relance. Appli quittée avant
+  // de répondre : la feuille reviendra à la prochaine ouverture.
   if (await toppedSheet(p)) topupWatchClear();
 }
 
 /* Feuille « recharge effectuée » : carte bleue (+5,00 € · solde), bandeau
    orange « conso pas encore payée », puis les boissons du frigo en un tap
    (ajout au panier, la barre « Payer · 👛 » apparaît). Résout "yes" (une
-   boisson, ou tout le frigo), "no" (« Non, pas maintenant ») ou null (fermée
-   sans choisir : la question reviendra). */
+   boisson, ou tout le frigo) ou "no" (« Non, pas maintenant », tap à côté).
+   Seule l'appli quittée avant de répondre fait revenir la feuille. */
 function toppedSheet(p) {
   return new Promise((resolve) => {
     const list = ((FRIGO && FRIGO.products) || []).filter((x) => x.buyable && x.available > 0);
@@ -533,7 +533,7 @@ function toppedSheet(p) {
       resolve(want);
     };
     ov.addEventListener("click", (e) => {
-      if (e.target === ov) close(null); // fermée sans répondre : la question reviendra
+      if (e.target === ov) close("no"); // tap à côté : vaut « Non, pas maintenant »
     });
     ov.querySelector("[data-no]").onclick = () => close("no");
     ov.querySelector("[data-all]").onclick = () => close("yes");
@@ -550,11 +550,11 @@ function toppedSheet(p) {
   });
 }
 
-/* Feuille « recharge effectuée » restée sans réponse (fermée sans choisir,
-   appli quittée) : elle revient à chaque sortie du frigo et à chaque
-   ouverture de la Scannette, jusqu'à un choix (une boisson, tout le frigo ou
-   « Non ») ou un achat. Gardé en localStorage (survit à la fermeture de
-   l'onglet), lié au compte (téléphone partagé). */
+/* Feuille « recharge effectuée » restée sans réponse (appli quittée avant de
+   répondre) : elle revient à la prochaine ouverture de la Scannette (et à la
+   sortie du frigo), jusqu'à une réponse (un bouton, ou un tap à côté) ou un
+   achat. Gardé en localStorage (survit à la fermeture de l'onglet), lié au
+   compte (téléphone partagé). */
 function topupWatchSet(total) {
   try {
     localStorage.setItem("topup_watch", JSON.stringify({ user: USERNAME, total, at: Date.now() }));
