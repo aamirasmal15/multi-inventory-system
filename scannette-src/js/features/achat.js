@@ -572,14 +572,16 @@ function topupWatch() {
     return null;
   }
 }
-function forgotAsk(w) {
-  return appConfirm({
-    icon: "warn",
-    title: t("forgot_t"),
-    text: t("forgot", w.total, eurCents(ACHAT.wallet)),
-    confirmLabel: t("forgot_pick"),
-    cancelLabel: t("forgot_no"),
-  });
+/* la même feuille qu'après la recharge (+X € rechargés, conso pas encore
+   payée, boissons en un tap) ; catalogue et solde rechargés au besoin */
+async function forgotAsk(w) {
+  if (!FRIGO) {
+    try {
+      FRIGO = await api("/plugin/paiements/fridge");
+    } catch (_) {}
+  }
+  await walletRefresh();
+  return toppedSheet({ total: w.total });
 }
 /* appelée par show() : true = sortie retenue (question posée) */
 let forgotOpen = false;
@@ -605,7 +607,6 @@ async function forgotOnOpen() {
   await achatReadyPromise;
   const w = topupWatch();
   if (!w || $("#screen-frigo").classList.contains("active")) return;
-  await walletRefresh(); // solde affiché dans la question
   if (await forgotAsk(w)) openFrigo();
   else topupWatchClear();
 }
