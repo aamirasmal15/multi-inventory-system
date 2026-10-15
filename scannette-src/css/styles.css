@@ -446,6 +446,9 @@ textarea{resize:none;min-height:56px}
 .wal-norefund{display:flex;flex-direction:column;gap:3px;background:var(--red-light);border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.45;color:var(--text)}
 .wal-norefund b{color:var(--red);font-size:13px}
 .price-chip:disabled{opacity:.35;cursor:not-allowed}
+/* Gérer : produit épuisé, gardé pour le réapprovisionner (frigo.js) */
+.fr-out{display:inline-block;vertical-align:middle;margin-left:6px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--red);background:var(--red-light);border-radius:999px;padding:2px 8px}
+.fr-mrow.is-out .lthumb{opacity:.45}
 /* recharge effectuée (achat.js, toppedSheet) */
 .td-card{display:flex;align-items:center;gap:12px;background:var(--primary);color:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow-sm)}
 .td-ic{width:42px;height:42px;flex:none;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:21px}

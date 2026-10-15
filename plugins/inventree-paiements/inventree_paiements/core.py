@@ -244,27 +244,41 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             return None
 
     @staticmethod
-    def fridge_items(location, part=None):
+    def fridge_items(location, part=None, include_empty=False):
         """Articles de stock disponibles dans le frigo (sous-emplacements compris),
-        les plus anciens d'abord : c'est l'ordre de prelevement."""
-        from django.db.models import F
+        les plus anciens d'abord : c'est l'ordre de prelevement.
+
+        include_empty : aussi les articles tombes a 0 (gardes par InvenTree quand
+        « supprimer a epuisement » est decoche), pour le mode Gerer."""
+        from django.db.models import F, Q
 
         from stock.models import StockItem
+        from stock.status_codes import StockStatusGroups
 
-        qs = StockItem.objects.filter(StockItem.IN_STOCK_FILTER).filter(
-            location__in=location.get_descendants(include_self=True), quantity__gt=0
-        )
+        if include_empty:
+            # mêmes conditions qu'IN_STOCK_FILTER, sans « quantité > 0 »
+            avail = Q(
+                sales_order=None,
+                belongs_to=None,
+                customer=None,
+                consumed_by=None,
+                is_building=False,
+                status__in=StockStatusGroups.AVAILABLE_CODES,
+            )
+        else:
+            avail = StockItem.IN_STOCK_FILTER
+        qs = StockItem.objects.filter(avail).filter(location__in=location.get_descendants(include_self=True))
         if part is not None:
             qs = qs.filter(part=part)
         return qs.select_related("part").order_by(F("expiry_date").asc(nulls_last=True), "pk")
 
-    def fridge_catalog(self, location):
+    def fridge_catalog(self, location, include_empty=False):
         """Produits du frigo, un par part : stock cumule, prix, en vente ou non.
 
         En vente = actif, non trackable (objets pretes) et avec un prix.
         """
         products = {}
-        for it in self.fridge_items(location):
+        for it in self.fridge_items(location, include_empty=include_empty):
             part = it.part
             if part is None or part.trackable:
                 continue

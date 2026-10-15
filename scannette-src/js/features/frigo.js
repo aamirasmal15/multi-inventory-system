@@ -143,7 +143,8 @@ function frigoRenderBuy(box, list) {
     box.innerHTML = '<div class="skeleton fr-span">' + esc(t("frigo_off")) + "</div>";
     return;
   }
-  const buyable = list.filter((p) => p.buyable);
+  // épuisés : seulement dans Gérer (les admins reçoivent aussi le stock à 0)
+  const buyable = list.filter((p) => p.buyable && p.quantity > 0);
   if (!buyable.length) {
     box.innerHTML = '<div class="skeleton fr-span">' + esc(t("frigo_empty")) + "</div>";
     return;
@@ -275,7 +276,10 @@ function frigoRenderManage(box, list) {
   list.forEach((p) => {
     const row = document.createElement("div");
     row.className = "loc-row fr-mrow";
-    row.innerHTML = frigoThumb(p, "lthumb") + '<div class="lmain"><div class="t">' + esc(p.name) + "</div></div>";
+    row.innerHTML =
+      frigoThumb(p, "lthumb") + '<div class="lmain"><div class="t">' + esc(p.name) +
+      (p.quantity > 0 ? "" : ' <span class="fr-out">' + esc(t("frigo_out")) + "</span>") + "</div></div>";
+    if (!(p.quantity > 0)) row.classList.add("is-out");
     const main = row.querySelector(".lmain");
     // ligne « Prix » sobre, alignée sur « Stock » : valeur + bouton Modifier
     const pr = document.createElement("div");

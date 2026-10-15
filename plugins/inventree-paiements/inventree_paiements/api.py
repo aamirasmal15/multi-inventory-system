@@ -140,7 +140,8 @@ class FridgeView(PluginView):
         if loc is None:
             return Response({"detail": "Le frigo n'est pas configuré."}, status=status.HTTP_404_NOT_FOUND)
         admin = is_admin(request.user)
-        products = self.plugin.fridge_catalog(loc)
+        # admins (mode Gérer) : aussi les produits épuisés, pour les voir et les réapprovisionner
+        products = self.plugin.fridge_catalog(loc, include_empty=admin)
         if not admin:
             products = [p for p in products if p["buyable"]]
             for p in products:
