@@ -121,6 +121,8 @@ async function fridgeBuy(lines, recap, cents, opts) {
   const via = opts.via || payChoice(cents);
   if (via === "topup") return openWalletSheet(Math.max(0, cents - ACHAT.wallet), { lines, cents, cart: !!opts.cart });
   if (via === "card") return payCheckout({ source: "frigo", lines }, recap, opts);
+  // portefeuille : paiement immédiat, donc d'abord une confirmation
+  if (!(await confirmWalletPay(lines, recap, cents))) return false;
   try {
     const r = await api("/plugin/paiements/wallet/pay", { method: "POST", body: { lines } });
     setWallet(r.wallet_cents);
@@ -134,6 +136,59 @@ async function fridgeBuy(lines, recap, cents, opts) {
     walletRefresh();
     return false;
   }
+}
+
+/* Confirmation avant un paiement au portefeuille (sinon il part au premier
+   tap) : articles avec photo, total, solde après ; « Payer » ou « Annuler ».
+   Résout true pour payer. */
+function confirmWalletPay(lines, recap, cents) {
+  return new Promise((resolve) => {
+    const after = ACHAT.wallet - cents;
+    const ov = document.createElement("div");
+    ov.className = "modal-ov sheet-ov";
+    ov.innerHTML =
+      '<div class="ps-sheet cw-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("cw_title")) + '">' +
+      '<div class="ps-grab" aria-hidden="true"></div>' +
+      '<h3 class="cw-title">' + esc(t("cw_title")) + "</h3>" +
+      '<div class="cw-lines">' +
+      lines
+        .map((l, i) => {
+          const p = frigoProduct(l.part);
+          return (
+            '<div class="cw-line">' + (p ? frigoThumb(p, "cw-img", false) : '<span class="cw-img fr-ph"></span>') +
+            '<span class="n">' + (l.quantity > 1 ? l.quantity + "× " : "") + esc((recap[i] && recap[i].name) || (p && p.name) || "") +
+            '</span><span class="p">' + esc((recap[i] && recap[i].total) || "") + "</span></div>"
+          );
+        })
+        .join("") +
+      "</div>" +
+      '<div class="cw-sum"><div><span>' + esc(t("buy_total")) + "</span><b>" + esc(eurCents(cents)) + "</b></div>" +
+      '<div class="cw-bal"><span>👛 ' + esc(t("cw_balance")) + "</span><span>" + esc(eurCents(ACHAT.wallet)) + " → <b>" +
+      esc(eurCents(after)) + "</b></span></div></div>" +
+      '<button class="btn btn-primary btn-block cw-go" data-go>' + esc(t("wal_pay_btn", eurCents(cents))) + "</button>" +
+      '<button type="button" class="ask-no" data-no>' + esc(t("cancel")) + "</button></div>";
+    lockScroll();
+    let done = false;
+    const close = (ok) => {
+      if (done) return;
+      done = true;
+      unlockScroll();
+      document.removeEventListener("keydown", onKey);
+      ov.classList.add("closing");
+      setTimeout(() => ov.remove(), 220);
+      resolve(ok);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(false);
+    };
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("click", (e) => {
+      if (e.target === ov) close(false);
+    });
+    ov.querySelector("[data-no]").onclick = () => close(false);
+    ov.querySelector("[data-go]").onclick = () => close(true);
+    document.body.appendChild(ov);
+  });
 }
 
 /* feuille « Mon portefeuille » : solde, montants rapides, montant libre,
