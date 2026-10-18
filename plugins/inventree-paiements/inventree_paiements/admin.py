@@ -7,7 +7,7 @@ leverait AlreadyRegistered.
 
 from django.contrib import admin
 
-from .models import PriceChange, Purchase, PurchaseLine, Wallet, WalletEntry
+from .models import AccessRequest, PriceChange, Purchase, PurchaseLine, Wallet, WalletEntry
 
 
 class PurchaseLineInline(admin.TabularInline):
@@ -95,3 +95,15 @@ class WalletAdmin(admin.ModelAdmin):
 
 if not admin.site.is_registered(Wallet):
     admin.site.register(Wallet, WalletAdmin)
+
+
+class AccessRequestAdmin(admin.ModelAdmin):
+    """Demandes d'acces a l'inventaire (la Scannette les traite, Mon compte > Gerer les membres)."""
+
+    list_display = ("user", "created_at")
+    search_fields = ("user__username", "user__first_name", "user__last_name")
+    readonly_fields = ("user", "created_at")
+
+
+if not admin.site.is_registered(AccessRequest):
+    admin.site.register(AccessRequest, AccessRequestAdmin)

@@ -65,9 +65,9 @@ async function login() {
     setCookie("eir_token", TOKEN, 30);
     setCookie("eir_user", USERNAME, 30);
     // Compte sans aucun rôle (fraîchement créé, pas encore mis dans un groupe) :
-    // écran « en attente d'approbation », comme au retour du SSO (boot.js).
+    // frigo seul ou « en attente d'approbation », comme au retour du SSO (boot.js).
     if ((await checkAuthorized()) === "pending") {
-      showPending();
+      await enterRoleless();
       return;
     }
     enterApp();
@@ -95,6 +95,7 @@ function logout(silent) {
     sessionStorage.removeItem("frigo_cart_purchase");
   } catch (_) {}
   FRIGO = null;
+  leaveFrigoOnly();
   $("#topbar").style.display = "none";
   $("#pass").value = "";
   show("#screen-login");
@@ -112,8 +113,15 @@ function enterApp() {
   // langue du profil InvenTree (fr/en, autre -> en) — non bloquant, les écrans
   // statiques sont re-traduits dès la réponse (voir core/i18n.js)
   syncUserLang();
-  // réglages du plugin prêts (mode de la fiche des objets trackables) — non bloquant
-  loadPretsConfig();
+  // sous-titre de la marque : « Frigo » quand c'est tout ce que voit le compte
+  const sub = $("#topbar .brand small");
+  if (sub) {
+    sub.dataset.i18n = FRIGO_ONLY ? "brand_sub_frigo" : "brand_sub";
+    sub.textContent = t(sub.dataset.i18n);
+  }
+  // réglages du plugin prêts (mode de la fiche des objets trackables) — non
+  // bloquant ; réservé aux membres de l'inventaire (403 sinon), inutile au frigo seul
+  if (!FRIGO_ONLY) loadPretsConfig();
   // plugin paiements (page frigo) — non bloquant
   loadAchatConfig();
   // retour d'une étape 3-D Secure SumUp : reçu de l'achat
@@ -132,6 +140,15 @@ function enterApp() {
     document.body.classList.remove("frigo-mode");
     history.replaceState(null, "", BASE);
     openFrigo();
+    return;
+  }
+  // frigo seul : aucun écran de l'inventaire, même mémorisé (appareil partagé,
+  // lien d'e-mail) — seulement ceux du frigo et Mon compte
+  if (FRIGO_ONLY) {
+    sessionStorage.removeItem("prets_open");
+    const fv = readView();
+    if (fv && ["frigo", "purchases", "receipt", "account"].indexOf(fv.t) >= 0) openView(fv);
+    else openFrigo();
     return;
   }
   // lien profond (email → article) : si un objet est en attente, on l'ouvre

@@ -16,6 +16,21 @@ Pay, sans quitter la page). Reçu PDF (format ticket) à télécharger ou par e-
 Sans prix, un article du frigo reste invisible des membres. Les articles
 trackables (prêts) ne sont jamais vendus.
 
+## Qui a accès à quoi
+
+Le frigo est ouvert à **tout compte** (EirbConnect le crée à la première
+connexion) ; l'inventaire reste **sur approbation**.
+
+- Arrivé par le QR du frigo sans rôle InvenTree : le compte rejoint le groupe
+  **`frigo`** (créé automatiquement, aucun rôle) et la Scannette ne lui montre
+  que le frigo : pas de flèche vers l'inventaire, chaque sortie y ramène.
+- Arrivé par la Scannette sans rôle : écran « en attente d'approbation », la
+  demande est enregistrée (avec un bouton vers le frigo en attendant). Un
+  client du frigo demande l'accès depuis **Mon compte**.
+- Les admins traitent les demandes dans Mon compte > **Gérer les membres** :
+  approuver = groupe des membres (le groupe frigo reste) ; refuser un client du
+  frigo retire seulement sa demande (il garde le frigo et son portefeuille).
+
 ## Portefeuille
 
 SumUp refuse tout paiement par carte sous 1 €, or une canette coûte moins.
@@ -101,6 +116,7 @@ profil SumUp et publier le fichier fourni sous
 | Chemin | Usage |
 |---|---|
 | `config`, `fridge`, `fridge/price` | réglages vus par la Scannette, catalogue, prix (admins) |
+| `access`, `access/admin` | accès du compte (POST `frigo`/`request`/`cancel`) ; admins : demandes en cours, refus |
 | `checkout`, `purchase/<pk>`, `purchases` | paiement par carte, état d'un achat, « Mes achats » (`?all=1` : tous, admins) |
 | `purchase/<pk>/receipt.pdf`, `purchase/<pk>/email` | reçu |
 | `wallet`, `wallet/topup`, `wallet/pay` | solde et mouvements, recharge, achat au portefeuille |
@@ -109,5 +125,5 @@ profil SumUp et publier le fichier fourni sous
 | `tap/members`, `tap/start` | admins : recharge en Tap to Pay (lien `sumupmerchant://`) |
 | `webhook/sumup` | notification SumUp (anonyme, jamais crue sur parole) |
 
-Achats et portefeuilles sont aussi consultables, en lecture, dans l'admin
+Achats, portefeuilles et demandes d'accès sont aussi consultables, en lecture, dans l'admin
 Django (*Achats*, *Portefeuilles*).

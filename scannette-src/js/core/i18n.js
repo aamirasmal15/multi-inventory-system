@@ -23,6 +23,7 @@ const I18N = {
   fr: {
     /* topbar + login */
     brand_sub: "Inventaire",
+    brand_sub_frigo: "Frigo",
     brand_sub_login: "Inventaire · Scannette",
     acct_title: "Mon compte",
     theme: "Thème",
@@ -43,6 +44,7 @@ const I18N = {
     pending_title: "Compte en attente d'approbation",
     pending_p1: "Votre compte est en attente d'approbation.",
     pending_p2: "Contactez un admin si le problème persiste.",
+    pending_frigo: "🧊 Aller au frigo en attendant",
     retry: "Réessayer",
     /* écran scan */
     scan_title: "Inventaire",
@@ -360,6 +362,18 @@ const I18N = {
       "Utilisée pour la Scannette, le site InvenTree, les e-mails et les notifications. Enregistrée automatiquement.",
     lang_saved: (name) => "Langue enregistrée : " + name + ".",
     acct_back: "Retour au scan",
+    acct_back_frigo: "Retour au frigo",
+    acct_mail_sub_frigo: "Touchez une adresse pour y recevoir vos reçus du frigo.",
+    acct_access_title: "Accès à l'inventaire",
+    acct_access_none: "Le frigo est ouvert à tous. L'inventaire du local est réservé aux membres, sur approbation d'un admin.",
+    acct_access_pending: (d) =>
+      "Demande envoyée" + (d ? " le " + d : "") + ". Un admin doit l'approuver ; rouvrez ensuite la Scannette.",
+    acct_access_ask: "Demander l'accès",
+    acct_access_cancel: "Retirer ma demande",
+    acct_access_sent: "Demande envoyée aux admins",
+    acct_access_cancelled: "Demande retirée",
+    acct_access_granted: "Votre demande a été acceptée : l'inventaire vous est ouvert.",
+    acct_access_open: "Ouvrir l'inventaire",
     /* gestion des utilisateurs (admins) */
     users_title: "Utilisateurs",
     users_sub: "Approuvez les nouvelles demandes et gérez les comptes des membres.",
@@ -393,6 +407,14 @@ const I18N = {
       "Cette personne ne pourra plus se connecter à l'inventaire ni à la Scannette. Ses emprunts et son historique restent enregistrés, et le blocage est réversible.",
     users_block_ok: (n) => "Compte de " + n + " bloqué",
     users_react_ok: (n) => n + " peut de nouveau se connecter",
+    users_frigo_t: "Frigo seulement",
+    users_frigo_hint:
+      "Comptes venus par le frigo : ils achètent mais ne voient pas l'inventaire. Donner l'accès les ajoute au groupe des membres.",
+    users_frigo_pill: "Frigo",
+    users_grant: "Donner l'accès",
+    users_refuse_req_q: (n) => "Refuser la demande de " + n + " ?",
+    users_refuse_frigo_txt:
+      "Le compte reste : la personne garde le frigo, ses achats et son portefeuille. Elle pourra refaire une demande depuis Mon compte.",
     users_admin_on: (n) => n + " a maintenant les droits d'administration",
     users_admin_off: (n) => n + " n'a plus les droits d'administration",
     users_self_block: "Impossible de bloquer votre propre compte.",
@@ -574,6 +596,7 @@ const I18N = {
   en: {
     /* topbar + login */
     brand_sub: "Inventory",
+    brand_sub_frigo: "Fridge",
     brand_sub_login: "Inventory · Scannette",
     acct_title: "My account",
     theme: "Theme",
@@ -594,6 +617,7 @@ const I18N = {
     pending_title: "Account awaiting approval",
     pending_p1: "Your account is awaiting approval.",
     pending_p2: "Contact an admin if this persists.",
+    pending_frigo: "🧊 Go to the fridge meanwhile",
     retry: "Try again",
     /* scan screen */
     scan_title: "Inventory",
@@ -911,6 +935,18 @@ const I18N = {
       "Used for the Scannette, the InvenTree site, emails and notifications. Saved automatically.",
     lang_saved: (name) => "Language saved: " + name + ".",
     acct_back: "Back to scanning",
+    acct_back_frigo: "Back to the fridge",
+    acct_mail_sub_frigo: "Tap an address to receive your fridge receipts there.",
+    acct_access_title: "Inventory access",
+    acct_access_none: "The fridge is open to everyone. The inventory is for members, approved by an admin.",
+    acct_access_pending: (d) =>
+      "Request sent" + (d ? " on " + d : "") + ". An admin must approve it; then reopen the Scannette.",
+    acct_access_ask: "Request access",
+    acct_access_cancel: "Withdraw my request",
+    acct_access_sent: "Request sent to the admins",
+    acct_access_cancelled: "Request withdrawn",
+    acct_access_granted: "Your request was approved: the inventory is open to you.",
+    acct_access_open: "Open the inventory",
     /* user management (admins) */
     users_title: "Users",
     users_sub: "Approve new requests and manage member accounts.",
@@ -944,6 +980,14 @@ const I18N = {
       "They will no longer be able to sign in to the inventory or the Scannette. Their loans and history remain on record, and blocking is reversible.",
     users_block_ok: (n) => n + "'s account blocked",
     users_react_ok: (n) => n + " can sign in again",
+    users_frigo_t: "Fridge only",
+    users_frigo_hint:
+      "Accounts that came through the fridge: they buy but do not see the inventory. Granting access adds them to the members group.",
+    users_frigo_pill: "Fridge",
+    users_grant: "Grant access",
+    users_refuse_req_q: (n) => "Refuse the request from " + n + "?",
+    users_refuse_frigo_txt:
+      "The account stays: they keep the fridge, their purchases and their wallet. They can request again from My account.",
     users_admin_on: (n) => n + " now has administrator rights",
     users_admin_off: (n) => n + " no longer has administrator rights",
     users_self_block: "You can't block your own account.",

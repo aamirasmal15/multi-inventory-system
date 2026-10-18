@@ -96,9 +96,16 @@ class ConfigView(PluginView):
     """Ce que la Scannette doit savoir avant d'ouvrir le frigo."""
 
     def get(self, request):
+        from . import access
+
         gp_id = self.plugin.get_setting("GOOGLE_PAY_MERCHANT_ID")
         loc = self.plugin.fridge_location()
+        if loc is not None:
+            # frigo configure : son groupe de clients existe (rien a creer a la main)
+            access.frigo_group()
         return Response({
+            # inventaire / client du frigo / demande d'acces : l'ecran d'entree en depend
+            "access": access.access_state(request.user),
             # frigo ouvert : achat possible au portefeuille meme sans carte configuree
             "enabled": loc is not None,
             # paiement par carte (achat direct, recharge) configure
@@ -125,6 +132,72 @@ class ConfigView(PluginView):
             # plafond du solde du portefeuille
             "wallet_max_cents": WALLET_MAX_CENTS,
         })
+
+
+class AccessView(PluginView):
+    """Acces du compte connecte (access.py).
+
+    GET : son etat. POST {action} :
+    - "frigo" : il entre au frigo sans role -> client du frigo ;
+    - "request" : il demande l'acces a l'inventaire ;
+    - "cancel" : il retire sa demande.
+    """
+
+    def get(self, request):
+        from . import access
+
+        return Response(access.access_state(request.user))
+
+    def post(self, request):
+        from . import access
+
+        action = request.data.get("action")
+        if action == "frigo":
+            if self.plugin.fridge_location() is None:
+                return Response({"detail": "Le frigo n'est pas configuré."}, status=status.HTTP_404_NOT_FOUND)
+            access.join_frigo(request.user)
+        elif action == "request":
+            access.request_access(request.user)
+        elif action == "cancel":
+            access.cancel_request(request.user)
+        else:
+            return Response({"detail": "Action inconnue."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(access.access_state(request.user))
+
+
+class AccessAdminView(PluginView):
+    """Admins : demandes d'acces en cours, refus d'une demande.
+
+    GET -> {group: pk du groupe frigo | null, requests: {pk du compte: date}}.
+    POST {user, action: "refuse"} : retire la demande ; le compte garde le frigo
+    et son portefeuille (la Scannette ne supprime que les comptes sans groupe).
+    L'approbation, elle, passe par l'API InvenTree (groupe des membres).
+    """
+
+    def get(self, request):
+        if not is_admin(request.user):
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        from django.contrib.auth.models import Group
+
+        from . import access
+
+        group = Group.objects.filter(name=access.FRIGO_GROUP).first()
+        return Response({"group": group.pk if group else None, "requests": access.pending_requests()})
+
+    def post(self, request):
+        if not is_admin(request.user):
+            return Response({"detail": "Réservé aux admins."}, status=status.HTTP_403_FORBIDDEN)
+        from django.contrib.auth import get_user_model
+
+        from . import access
+
+        if request.data.get("action") != "refuse":
+            return Response({"detail": "Action inconnue."}, status=status.HTTP_400_BAD_REQUEST)
+        user = get_user_model().objects.filter(pk=request.data.get("user") or 0).first()
+        if user is None:
+            return Response({"detail": "Compte introuvable."}, status=status.HTTP_404_NOT_FOUND)
+        access.cancel_request(user)
+        return Response(access.access_state(user))
 
 
 class FridgeView(PluginView):

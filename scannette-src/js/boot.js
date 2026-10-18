@@ -35,7 +35,7 @@
       return;
     }
     if (st === "pending") {
-      showPending();
+      await enterRoleless(); // frigo seul, ou en attente d'approbation
       return;
     }
     // token invalide -> on nettoie et on retombe sur le login

@@ -8,10 +8,15 @@
    lecture seule pour les autres.
 
    En attente = compte sans groupe : même critère que l'écran « en attente
-   d'approbation » à la connexion (pas de groupe -> pas de rôles).
-   Approuver = poser le groupe des membres (PATCH group_ids), comme le fait
-   finalize.py à la création de l'instance ; is_staff reste le verrou admin.
-   Refuser = supprimer le compte (aucun accès ni historique à ce stade).
+   d'approbation » à la connexion (pas de groupe -> pas de rôles). Avec le
+   frigo (plugin paiements), le groupe « frigo » ne donne aucun rôle : ses
+   comptes sont « frigo seulement », sauf s'ils ont demandé l'accès
+   (/plugin/paiements/access/admin) — ils sont alors en attente aussi.
+   Approuver = ajouter le groupe des membres (PATCH group_ids, les autres
+   groupes restent), comme le fait finalize.py à la création de l'instance ;
+   is_staff reste le verrou admin.
+   Refuser = supprimer le compte (aucun accès ni historique à ce stade) ;
+   pour un client du frigo, seulement retirer sa demande (achats, portefeuille).
    Les membres approuvés, eux, ne se suppriment JAMAIS d'ici : au pire on
    désactive (réversible) — la suppression définitive reste dans InvenTree.
    ========================================================================== */
@@ -19,13 +24,31 @@
 let USERS_ME = null; // /api/user/me/ (guards anti auto-rétrogradation)
 let USERS_LIST = null; // dernière liste chargée (/api/user/)
 let USERS_GROUP = null; // pk du groupe des membres (cible d'approbation)
+let USERS_FRIGO = null; // pk du groupe frigo (clients du frigo, aucun rôle)
+let USERS_REQ = {}; // demandes d'accès en cours {pk du compte: date ISO}
 let USERS_OPEN = {}; // fiches dépliées (pk -> true), conservées au re-rendu
 let USERS_FRESH = 0; // pk à surligner en vert (vient d'être approuvé)
 let USERS_BUSY = false; // une action serveur à la fois
 let USERS_Q = ""; // filtre de la recherche membres
 
+function userGroupPks(u) {
+  return (u.groups || []).map((g) => (g && typeof g === "object" ? g.pk : g));
+}
+/* aucun rôle : ni admin, ni autre groupe que celui du frigo */
+function userRoleless(u) {
+  return !u.is_staff && !u.is_superuser && userGroupPks(u).every((pk) => pk === USERS_FRIGO);
+}
+function userFrigoClient(u) {
+  return USERS_FRIGO != null && userGroupPks(u).indexOf(USERS_FRIGO) >= 0;
+}
 function userPending(u) {
-  return !(u.groups || []).length && !u.is_staff && !u.is_superuser;
+  return userRoleless(u) && (!(u.groups || []).length || !!USERS_REQ[u.pk]);
+}
+function userFrigoOnly(u) {
+  return userRoleless(u) && !userPending(u);
+}
+function userMember(u) {
+  return !userRoleless(u);
 }
 function userName(u) {
   return (((u.first_name || "") + " " + (u.last_name || "")).trim()) || u.username || "?";
@@ -53,18 +76,35 @@ async function openUsers() {
 }
 
 async function usersLoad() {
-  const [me, users, groups] = await Promise.all([
+  const [me, users, groups, acc] = await Promise.all([
     USERS_ME ? Promise.resolve(USERS_ME) : api("/api/user/me/"),
     api("/api/user/"),
     api("/api/user/group/"),
+    usersAccessLoad(),
   ]);
   USERS_ME = me || null;
   USERS_LIST = (Array.isArray(users) && users) || (users && users.results) || [];
   const gl = (Array.isArray(groups) && groups) || (groups && groups.results) || [];
-  // groupe cible : membres_* de préférence (convention create-asso), sinon le premier
-  const g = gl.find((x) => /^membres/i.test(x.name || "")) || gl[0];
+  if (!acc) USERS_FRIGO = (gl.find((x) => x.name === "frigo") || {}).pk || null;
+  // groupe cible : membres_* de préférence (convention create-asso), sinon le
+  // premier — jamais celui du frigo, qui ne donne aucun rôle
+  const g = gl.find((x) => /^membres/i.test(x.name || "")) || gl.find((x) => x.pk !== USERS_FRIGO);
   USERS_GROUP = g ? g.pk : null;
   usersBadgePaint();
+}
+
+/* demandes d'accès + groupe frigo (plugin paiements) ; null si le plugin est
+   absent : on retombe alors sur le seul critère « sans groupe » */
+async function usersAccessLoad() {
+  try {
+    const r = await api("/plugin/paiements/access/admin");
+    USERS_REQ = (r && r.requests) || {};
+    USERS_FRIGO = (r && r.group) || null;
+    return r;
+  } catch (_) {
+    USERS_REQ = {};
+    return null;
+  }
 }
 
 /* recharge silencieuse après une erreur d'action : l'état serveur fait foi */
@@ -80,7 +120,8 @@ function renderUsers() {
     .slice()
     .sort((a, b) => userName(a).localeCompare(userName(b), undefined, { sensitivity: "base" }));
   renderPendingUsers(sorted.filter(userPending));
-  renderMemberUsers(sorted.filter((u) => !userPending(u)));
+  renderMemberUsers(sorted.filter(userMember));
+  renderFrigoUsers(sorted.filter(userFrigoOnly));
   usersBadgePaint(); // les pastilles (chip, Mon compte) suivent chaque action
   USERS_FRESH = 0; // le surlignage vert ne joue qu'au rendu qui suit l'approbation
 }
@@ -126,6 +167,8 @@ function pendingUserRow(u) {
   const nm = document.createElement("div");
   nm.className = "p-name";
   nm.textContent = userName(u);
+  // déjà client du frigo : un refus ne lui retire que sa demande
+  if (userFrigoClient(u)) nm.appendChild(userPill("pill-frigo", t("users_frigo_pill")));
   const ml = document.createElement("div");
   ml.className = "p-mail";
   ml.textContent = u.email || u.username || "";
@@ -139,6 +182,67 @@ function pendingUserRow(u) {
   );
   row.append(av, main, acts);
   return row;
+}
+
+/* ---- clients du frigo (repliés : ils peuvent être nombreux) ---- */
+let USERS_FRIGO_OPEN = false;
+function renderFrigoUsers(list) {
+  const sec = $("#frigoUsersSec");
+  if (!sec) return;
+  sec.style.display = USERS_FRIGO != null && list.length ? "" : "none";
+  $("#frigoUsersCnt").textContent = list.length;
+  const q = USERS_Q.trim().toLowerCase();
+  const shown = q
+    ? list.filter((u) =>
+        (userName(u) + " " + (u.username || "") + " " + (u.email || "")).toLowerCase().includes(q),
+      )
+    : list;
+  // une recherche qui trouve des clients du frigo les montre
+  const open = USERS_FRIGO_OPEN || (!!q && shown.length > 0);
+  $("#frigoUsersFold").setAttribute("aria-expanded", open ? "true" : "false");
+  $("#frigoUsersBody").style.display = open ? "" : "none";
+  const card = $("#frigoUsersCard");
+  card.innerHTML = "";
+  if (!shown.length) {
+    const empty = document.createElement("div");
+    empty.className = "sr-empty";
+    empty.textContent = t("users_none_match", USERS_Q.trim());
+    card.appendChild(empty);
+    return;
+  }
+  shown.forEach((u) => {
+    const row = document.createElement("div");
+    row.className = "p-row";
+    const av = document.createElement("span");
+    av.className = "avatar";
+    av.textContent = userInitials(u);
+    const main = document.createElement("div");
+    main.className = "p-main";
+    const nm = document.createElement("div");
+    nm.className = "p-name";
+    nm.textContent = userName(u);
+    const ml = document.createElement("div");
+    ml.className = "p-mail";
+    ml.textContent = u.email || u.username || "";
+    main.append(nm, ml);
+    const acts = document.createElement("div");
+    acts.className = "p-act";
+    acts.append(pendingActBtn("p-yes", t("users_grant"), userName(u), CHECK, () => approveUser(u, row)));
+    row.append(av, main, acts);
+    card.appendChild(row);
+  });
+}
+function usersFrigoToggle() {
+  USERS_FRIGO_OPEN = $("#frigoUsersFold").getAttribute("aria-expanded") !== "true";
+  renderFrigoList();
+}
+/* re-rendu de la liste du frigo seule (repli, recherche) */
+function renderFrigoList() {
+  renderFrigoUsers(
+    (USERS_LIST || [])
+      .filter(userFrigoOnly)
+      .sort((a, b) => userName(a).localeCompare(userName(b), undefined, { sensitivity: "base" })),
+  );
 }
 
 /* repli animé d'une ligne de la file (approbation ou refus) */
@@ -164,12 +268,15 @@ async function approveUser(u, row) {
   USERS_BUSY = true;
   row.querySelectorAll("button").forEach((b) => (b.disabled = true));
   try {
+    // les groupes existants (frigo) restent : on AJOUTE celui des membres
+    const ids = userGroupPks(u).filter((pk) => pk !== USERS_GROUP).concat([USERS_GROUP]);
     const r = await api("/api/user/" + u.pk + "/", {
       method: "PATCH",
-      body: { group_ids: [USERS_GROUP] },
+      body: { group_ids: ids },
     });
     await collapseUserRow(row);
-    u.groups = (r && r.groups) || [{ pk: USERS_GROUP }];
+    u.groups = (r && r.groups) || ids.map((pk) => ({ pk }));
+    delete USERS_REQ[u.pk]; // demande caduque (le serveur la nettoie aussi)
     USERS_FRESH = u.pk;
     renderUsers();
     toast(t("users_approved", userName(u)), "ok");
@@ -183,16 +290,27 @@ async function approveUser(u, row) {
 
 async function refuseUser(u, row) {
   if (USERS_BUSY) return;
+  // client du frigo : il a des achats, peut-être un portefeuille -> on ne
+  // supprime pas le compte, on retire seulement sa demande
+  const frigo = userFrigoClient(u);
   const ok = await appConfirm({
-    title: t("users_refuse_q", userName(u)),
-    text: t("users_refuse_txt"),
+    title: t(frigo ? "users_refuse_req_q" : "users_refuse_q", userName(u)),
+    text: t(frigo ? "users_refuse_frigo_txt" : "users_refuse_txt"),
     confirmLabel: t("users_refuse"),
-    danger: true,
+    danger: !frigo,
   });
   if (!ok) return;
   USERS_BUSY = true;
   row.querySelectorAll("button").forEach((b) => (b.disabled = true));
   try {
+    if (frigo) {
+      await api("/plugin/paiements/access/admin", { method: "POST", body: { user: u.pk, action: "refuse" } });
+      await collapseUserRow(row);
+      delete USERS_REQ[u.pk];
+      renderUsers();
+      toast(t("users_refused", userName(u)), "ok");
+      return;
+    }
     await api("/api/user/" + u.pk + "/", { method: "DELETE" });
     await collapseUserRow(row);
     USERS_LIST = USERS_LIST.filter((x) => x.pk !== u.pk);
@@ -214,8 +332,9 @@ function usersSetQuery(q) {
     (USERS_LIST || [])
       .slice()
       .sort((a, b) => userName(a).localeCompare(userName(b), undefined, { sensitivity: "base" }))
-      .filter((u) => !userPending(u)),
+      .filter(userMember),
   );
+  renderFrigoList(); // la recherche filtre aussi les clients du frigo
 }
 
 function renderMemberUsers(members) {
@@ -464,7 +583,7 @@ function usersBadgePaint() {
 
 async function usersBadgeRefresh() {
   try {
-    const users = await api("/api/user/");
+    const [users] = await Promise.all([api("/api/user/"), usersAccessLoad()]);
     USERS_LIST = (Array.isArray(users) && users) || (users && users.results) || [];
     usersBadgePaint();
   } catch (_) {}

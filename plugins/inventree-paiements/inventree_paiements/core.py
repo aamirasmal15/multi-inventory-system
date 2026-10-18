@@ -138,6 +138,8 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
         return [
             path("config", api.ConfigView.as_view(plugin=self), name="config"),
+            path("access", api.AccessView.as_view(plugin=self), name="access"),
+            path("access/admin", api.AccessAdminView.as_view(plugin=self), name="access-admin"),
             path("fridge", api.FridgeView.as_view(plugin=self), name="fridge"),
             path("fridge/price", api.FridgePriceView.as_view(plugin=self), name="fridge-price"),
             path("checkout", api.CheckoutView.as_view(plugin=self), name="checkout"),

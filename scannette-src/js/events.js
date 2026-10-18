@@ -23,6 +23,7 @@ $("#acctBackBtn")?.addEventListener("click", closeAccount);
 $("#acctUsersBtn")?.addEventListener("click", openUsers);
 $("#backBtnUsers")?.addEventListener("click", openAccount);
 $("#userSearch")?.addEventListener("input", () => usersSetQuery($("#userSearch").value));
+$("#frigoUsersFold")?.addEventListener("click", usersFrigoToggle);
 $("#userSearchClear")?.addEventListener("click", () => {
   $("#userSearch").value = "";
   usersSetQuery("");
@@ -283,6 +284,7 @@ $("#picker")?.addEventListener(
 /* ---- frigo et achats (frigo.js, achat.js) ---- */
 $("#frigoOpenBtn")?.addEventListener("click", openFrigo);
 $("#backBtnFrigo")?.addEventListener("click", gotoScan); // sortie gardée dans show()
+$("#pendingFrigoBtn")?.addEventListener("click", enterFrigoOnly); // en attendant l'approbation
 $("#frigoMineBtn")?.addEventListener("click", openPurchases);
 $("#backBtnPurch")?.addEventListener("click", openFrigo);
 $("#frigoPayBtn")?.addEventListener("click", () => frigoPay());

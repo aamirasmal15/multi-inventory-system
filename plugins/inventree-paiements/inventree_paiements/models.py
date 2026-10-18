@@ -241,3 +241,32 @@ class WalletEntry(models.Model):
         ordering = ["-created_at", "-pk"]
         verbose_name = "Mouvement de portefeuille"
         verbose_name_plural = "Mouvements de portefeuille"
+
+
+class AccessRequest(models.Model):
+    """Demande d'acces a l'inventaire d'un compte sans role (access.py).
+
+    Un compte sans groupe est « en attente » ; mais un client du frigo (groupe
+    frigo, aucun role) ne l'est que s'il a demande l'acces. La demande garde
+    aussi en attente celui qui l'a faite AVANT de passer au frigo (qui le met
+    dans le groupe frigo). Caduque des que le compte a un role : nettoyee alors.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="+",
+        verbose_name="Compte",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Demandé le")
+
+    class Meta:
+        """Plus anciennes en premier : l'ordre de la file d'attente."""
+
+        ordering = ["created_at", "pk"]
+        verbose_name = "Demande d'accès à l'inventaire"
+        verbose_name_plural = "Demandes d'accès à l'inventaire"
+
+    def __str__(self):
+        """Libelle court pour l'admin Django."""
+        return f"{self.user} ({self.created_at:%Y-%m-%d})"

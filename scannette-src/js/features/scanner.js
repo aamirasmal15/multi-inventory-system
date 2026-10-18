@@ -5,6 +5,12 @@
 /* ---- scan ---- */
 let scanLock = false;
 function gotoScan() {
+  // frigo seul : pas de scan d'inventaire, toute sortie ramène au frigo
+  if (FRIGO_ONLY) {
+    forgetView();
+    openFrigo();
+    return;
+  }
   hideErr($("#scanErr"));
   $("#manualInput").value = "";
   if ($("#partSearch")) clearSearch();

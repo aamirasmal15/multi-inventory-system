@@ -16,7 +16,7 @@ from django.utils.translation import gettext as _
 
 from rest_framework import serializers, status
 from rest_framework.generics import ListAPIView
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -28,6 +28,25 @@ from .models import Loan, Reservation, slot_label, user_date_fmts
 def is_prets_admin(user):
     """Les admins (staff ou superuser) peuvent tout rendre / tout annuler."""
     return bool(user and (user.is_staff or user.is_superuser))
+
+
+class IsInventoryMember(BasePermission):
+    """Membre de l'inventaire : admin, ou role « stock » en lecture.
+
+    Une simple authentification ne suffit pas : des comptes sans role existent
+    (en attente d'approbation, clients du frigo ouvert a tous) et ne doivent ni
+    voir qui emprunte quoi, ni emprunter ou reserver.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if is_prets_admin(user):
+            return True
+        from users.permissions import check_user_role
+
+        return check_user_role(user, "stock", "view")
 
 
 class LoanSerializer(serializers.ModelSerializer):
@@ -198,7 +217,7 @@ def active_reservations(item_pk):
 class PluginAwareView(APIView):
     """Vue de base : recoit une reference au plugin pour lire ses reglages."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsInventoryMember]
 
     # Injecte par setup_urls via as_view(plugin=...)
     plugin = None
@@ -453,7 +472,7 @@ class ReturnView(PluginAwareView):
 class ActiveLoansView(ListAPIView):
     """GET active : liste des prets en cours."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsInventoryMember]
     serializer_class = LoanSerializer
     plugin = None
 
@@ -467,7 +486,7 @@ class ActiveLoansView(ListAPIView):
 class OverdueLoansView(ListAPIView):
     """GET overdue : liste des prets en retard."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsInventoryMember]
     serializer_class = LoanSerializer
     plugin = None
 
@@ -487,7 +506,7 @@ class LoanHistoryView(ListAPIView):
     et renvoie {count, next, previous, results}.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsInventoryMember]
     serializer_class = LoanSerializer
     plugin = None
 
@@ -868,7 +887,7 @@ class ReservationListView(ListAPIView):
     des que 'limit' est passe.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsInventoryMember]
     serializer_class = ReservationSerializer
     plugin = None
 

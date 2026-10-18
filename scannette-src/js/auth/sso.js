@@ -73,10 +73,13 @@ async function checkAuthorized() {
   return "pending"; // authentifie mais aucun groupe/role -> en attente
 }
 
-/* ---- ecran "compte en attente d'approbation" ---- */
-function showPending() {
+/* ---- ecran "compte en attente d'approbation" ----
+   fridge : le frigo est ouvert -> bouton pour y aller en attendant */
+function showPending(fridge) {
   const tb = $("#topbar");
   if (tb) tb.style.display = "none";
+  const fb = $("#pendingFrigoBtn");
+  if (fb) fb.style.display = fridge ? "" : "none";
   show("#screen-pending");
 }
 

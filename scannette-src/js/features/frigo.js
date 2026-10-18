@@ -13,10 +13,18 @@
      sans prix signalés (invisibles des membres tant qu'il n'y en a pas).
    Le panier survit au rafraîchissement et à l'aller-retour SSO (sessionStorage) ;
    le serveur revalide prix et disponibilité au paiement.
+
+   Frigo ouvert à tous, inventaire sur approbation : un compte sans rôle
+   InvenTree passe par enterRoleless. Client du frigo (ou arrivé par le QR) ->
+   mode « frigo seul » (FRIGO_ONLY) : pas de flèche retour, gotoScan ramène
+   ici, rien de l'inventaire n'est chargé. Sinon écran « en attente », la
+   demande d'accès est enregistrée (plugin, /plugin/paiements/access).
    ========================================================================== */
 
 let FRIGO = null; // dernière réponse de /plugin/paiements/fridge
 let FRIGO_MODE = "buy"; // "buy" | "manage"
+let FRIGO_ONLY = false; // compte sans rôle : le frigo et rien d'autre
+let ACCESS = null; // état d'accès du compte (inventory, frigo_client, requested)
 
 /* ---- panier { partPk: quantité } ---- */
 function frigoCart() {
@@ -84,6 +92,14 @@ async function openFrigo() {
   show("#screen-frigo");
   await achatReadyPromise;
   if (!ACHAT.fridge) {
+    if (FRIGO_ONLY) {
+      // frigo coupé entre-temps : rien d'autre à montrer (gotoScan ramènerait ici)
+      $("#frigoModeSeg").style.display = "none";
+      $("#frigoList").className = "frigo-grid";
+      $("#frigoList").innerHTML = '<div class="skeleton fr-span">' + esc(t("frigo_off")) + "</div>";
+      $("#frigoCartBar").classList.remove("show");
+      return;
+    }
     toast(t("frigo_off"), "bad");
     gotoScan();
     return;
@@ -617,4 +633,44 @@ async function saveCreatePrice(partPk) {
 /* ---- page de connexion en mode frigo (avant authentification) ---- */
 function applyFrigoLogin() {
   document.body.classList.add("frigo-mode");
+}
+
+/* ---- compte sans rôle (checkAuthorized -> "pending") ----
+   Arrivé par le QR, ou déjà client du frigo sans demande en cours : le frigo
+   seul. Sinon : en attente d'approbation, demande enregistrée. */
+async function enterRoleless() {
+  let c = null;
+  try {
+    c = await api("/plugin/paiements/config");
+  } catch (_) {} // plugin absent (instance sans frigo) : écran d'attente classique
+  ACCESS = (c && c.access) || null;
+  const fridge = !!(c && c.fridge);
+  const viaQr = !!sessionStorage.getItem("frigo_open");
+  if (fridge && (viaQr || (ACCESS && ACCESS.frigo_client && !ACCESS.requested))) {
+    enterFrigoOnly();
+    return;
+  }
+  if (c && ACCESS && !ACCESS.requested) {
+    api("/plugin/paiements/access", { method: "POST", body: { action: "request" } })
+      .then((a) => (ACCESS = a))
+      .catch(() => {});
+  }
+  showPending(fridge);
+}
+
+/* entre dans l'app limitée au frigo (aussi depuis l'écran d'attente) */
+function enterFrigoOnly() {
+  FRIGO_ONLY = true;
+  document.body.classList.add("frigo-only");
+  // client du frigo : rangé à part des demandes d'accès chez les admins
+  api("/plugin/paiements/access", { method: "POST", body: { action: "frigo" } })
+    .then((a) => (ACCESS = a))
+    .catch(() => {});
+  enterApp(); // ouvre le frigo, ou l'écran du frigo qu'on consultait avant un rafraîchissement
+}
+
+function leaveFrigoOnly() {
+  FRIGO_ONLY = false;
+  ACCESS = null;
+  document.body.classList.remove("frigo-only");
 }

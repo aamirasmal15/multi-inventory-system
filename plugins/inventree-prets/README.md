@@ -55,7 +55,9 @@ Ensuite :
 
 ## Endpoints
 
-Montés sous `/plugin/prets/`, authentification par token InvenTree.
+Montés sous `/plugin/prets/`, authentification par token InvenTree. Réservés aux membres de
+l'inventaire (rôle « stock » en lecture, ou admin) : un compte sans rôle (en attente,
+client du frigo) reçoit 403. Seule exception : `go/<pk>`, lien public des e-mails.
 
 - `POST /plugin/prets/lend` : prêter. Corps : `stock_item` (pk, requis),
   `borrower_user` (pk) ou `borrower_name` (texte), `due_on` (AAAA-MM-JJ,

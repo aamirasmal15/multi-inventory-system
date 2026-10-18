@@ -48,10 +48,13 @@ async function openAccount() {
   try {
     // les deux appels en parallèle : l'échec du plugin (404/403 = pas déployé
     // sur cette instance) ne casse pas l'écran, il le passe en lecture seule
-    const [me, mails] = await Promise.all([
+    const [me, mails, acc] = await Promise.all([
       api("/api/user/me/"),
       api("/plugin/emails/addresses/").catch(() => null),
+      // frigo seul : état de la demande d'accès, relu à chaque ouverture
+      FRIGO_ONLY ? api("/plugin/paiements/access").catch(() => null) : null,
     ]);
+    if (acc) ACCESS = acc;
     ACCT_ME = me || {};
     ACCT_EMAILS = mails && Array.isArray(mails.addresses) ? mails : null;
     renderAccount();
@@ -71,8 +74,10 @@ function renderAccount() {
   // Scannette (LANG), il n'y a plus d'état « défaut » affiché
   acctLangPaint(normLang(ACCT_ME.profile && ACCT_ME.profile.language) || LANG);
   // le bouton du bas suit la flèche : retour contextuel ou retour au scan
+  // (au frigo pour un compte qui n'a que lui)
   $("#acctBackLbl").textContent =
-    ACCT_BACK || ACCT_BACK_LIVE ? t("back") : t("acct_back");
+    ACCT_BACK || ACCT_BACK_LIVE ? t("back") : t(FRIGO_ONLY ? "acct_back_frigo" : "acct_back");
+  renderAcctAccess();
   // entrée « Gérer les membres » au pied de la carte d'identité : admins
   // seulement (l'API n'accorde de toute façon l'écriture qu'aux staff) ;
   // la pastille des demandes en attente se rafraîchit en arrière-plan
@@ -81,6 +86,61 @@ function renderAccount() {
     const adm = !!(ACCT_ME.is_staff || ACCT_ME.is_superuser);
     ub.style.display = adm ? "" : "none";
     if (adm) usersBadgeRefresh();
+  }
+}
+
+/* ---- frigo seul : demander (ou retirer) l'accès à l'inventaire ----
+   Une fois la demande approuvée, la Scannette rouverte entre dans l'inventaire
+   (checkAuthorized voit les rôles du groupe des membres). */
+function renderAcctAccess() {
+  const sec = $("#acctAccessSec");
+  if (!sec) return;
+  sec.style.display = FRIGO_ONLY ? "" : "none";
+  if (!FRIGO_ONLY) return;
+  const card = $("#acctAccessCard");
+  const req = !!(ACCESS && ACCESS.requested);
+  card.innerHTML = "";
+  // approuvé pendant la session : il suffit de recharger pour entrer
+  if (ACCESS && ACCESS.inventory) {
+    const ok = document.createElement("p");
+    ok.className = "acct-access-txt";
+    ok.textContent = t("acct_access_granted");
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "btn btn-primary btn-block";
+    go.textContent = t("acct_access_open");
+    go.addEventListener("click", () => window.location.replace(BASE));
+    card.append(ok, go);
+    return;
+  }
+  const p = document.createElement("p");
+  p.className = "acct-access-txt";
+  p.textContent = req
+    ? t("acct_access_pending", ACCESS.requested_at ? fmtAccessDate(ACCESS.requested_at) : "")
+    : t("acct_access_none");
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn " + (req ? "btn-ghost" : "btn-primary") + " btn-block";
+  b.textContent = t(req ? "acct_access_cancel" : "acct_access_ask");
+  b.addEventListener("click", () => acctAccessSet(req ? "cancel" : "request", b));
+  card.append(p, b);
+}
+function fmtAccessDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString(LANG === "en" ? "en-GB" : "fr-FR", { day: "numeric", month: "long" });
+}
+async function acctAccessSet(action, btn) {
+  if (ACCT_BUSY) return;
+  ACCT_BUSY = true;
+  btn.disabled = true;
+  try {
+    ACCESS = await api("/plugin/paiements/access", { method: "POST", body: { action } });
+    toast(t(action === "request" ? "acct_access_sent" : "acct_access_cancelled"), "ok");
+  } catch (e) {
+    toast(e.message, "bad");
+  } finally {
+    ACCT_BUSY = false;
+    renderAcctAccess();
   }
 }
 
@@ -172,7 +232,8 @@ function renderAcctMails() {
     card.appendChild(ro);
     return;
   }
-  $("#acctMailSub").textContent = t("acct_mail_sub");
+  // frigo seul : ni emprunts ni réservations, seulement les reçus
+  $("#acctMailSub").textContent = t(FRIGO_ONLY ? "acct_mail_sub_frigo" : "acct_mail_sub");
   $("#acctMailHint").textContent = t("acct_mail_hint");
   ACCT_EMAILS.addresses.forEach((ad) => card.appendChild(acctRow(ad)));
   // ajout d'une adresse (masqué si le plafond est atteint)
