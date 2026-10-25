@@ -308,7 +308,9 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         out = sorted(products.values(), key=lambda p: (not p["buyable"], p["name"].lower()))
         for p in out:
             # vendu a l'unite : une fraction de canette ne s'achete pas
-            p["available"] = int(min(p["quantity"], MAX_QTY)) if p["buyable"] else 0
+            p["available"] = int(p["quantity"]) if p["buyable"] else 0
+            # garde-fou par achat, distinct du stock affiche
+            p["max_qty"] = min(p["available"], MAX_QTY)
             p["quantity"] = float(p["quantity"])
         return out
 
@@ -462,6 +464,8 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
                 raise ValueError("Un article du panier n'est plus en vente dans le frigo.")
             if q > p["available"]:
                 raise ValueError(f"{p['name']} : il n'en reste que {p['available']}.")
+            if q > MAX_QTY:
+                raise ValueError(f"{p['name']} : {MAX_QTY} au plus par achat.")
             lines.append({
                 "part": Part.objects.get(pk=pk), "name": p["name"],
                 "quantity": q, "unit_cents": p["unit_cents"],

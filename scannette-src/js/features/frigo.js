@@ -70,7 +70,7 @@ function frigoCartLines() {
   let changed = false;
   for (const k in c) {
     const p = frigoProduct(k);
-    const q = p && p.buyable ? Math.min(c[k], p.available) : 0;
+    const q = p && p.buyable ? Math.min(c[k], p.max_qty) : 0;
     if (q !== c[k]) changed = true;
     if (q > 0) out.push({ p, q });
     else delete c[k];
@@ -195,10 +195,10 @@ function frigoRenderBuy(box, list) {
       } else {
         ctrl.innerHTML =
           '<div class="fr-step"><button class="mini" aria-label="−">−</button><b>' + n +
-          '</b><button class="mini" aria-label="+"' + (n >= p.available ? " disabled" : "") + ">+</button></div>";
+          '</b><button class="mini" aria-label="+"' + (n >= p.max_qty ? " disabled" : "") + ">+</button></div>";
         const [minus, plus] = ctrl.querySelectorAll("button");
         minus.onclick = (e) => (e.stopPropagation(), set(n - 1));
-        plus.onclick = (e) => (e.stopPropagation(), set(Math.min(p.available, n + 1)));
+        plus.onclick = (e) => (e.stopPropagation(), set(Math.min(p.max_qty, n + 1)));
       }
     };
     // toute la carte : ajoute au panier, ou retire une carte déjà cochée
@@ -581,12 +581,12 @@ function renderFridgeBuy(box, p) {
   const sync = () => {
     box.querySelector(".buy-qty b").textContent = q;
     box.querySelector('[data-d="-1"]').disabled = q <= 1;
-    box.querySelector('[data-d="1"]').disabled = q >= p.available;
+    box.querySelector('[data-d="1"]').disabled = q >= p.max_qty;
     pay.textContent = payLabel(p.unit_cents * q);
   };
   box.querySelectorAll(".buy-qty button").forEach((b) => {
     b.onclick = () => {
-      q = Math.min(p.available, Math.max(1, q + Number(b.dataset.d)));
+      q = Math.min(p.max_qty, Math.max(1, q + Number(b.dataset.d)));
       sync();
     };
   });
