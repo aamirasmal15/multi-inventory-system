@@ -394,33 +394,28 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
 
     @staticmethod
     def last_additions(items, location):
-        """Dernier ajout de chaque article du frigo : {item_pk: {"user", "date"}}.
+        """Derniere modification manuelle de chaque article du frigo : {item_pk: {"user", "date"}}.
 
-        Lu dans l'historique InvenTree (StockItemTracking) : creation, ajout
-        manuel, separation/fusion de lot, ou deplacement VERS le frigo.
+        Lu dans l'historique InvenTree (StockItemTracking) : creation, ajout,
+        comptage (mode Gerer), retrait, deplacement... Les achats (retraits
+        notes « Achat frigo ») et les actions sans auteur ne comptent pas.
         """
         from django.utils import timezone as tz
 
         from stock.models import StockItemTracking
-        from stock.status_codes import StockHistoryCode as C
 
-        fridge = set(location.get_descendants(include_self=True).values_list("pk", flat=True))
-        adds = {C.CREATED.value, C.STOCK_ADD.value, C.SPLIT_FROM_PARENT.value, C.MERGED_STOCK_ITEMS.value,
-                C.RETURNED_TO_STOCK.value, C.RECEIVED_AGAINST_PURCHASE_ORDER.value}
         out = {}
         qs = (
             StockItemTracking.objects.filter(item__in=items)
+            .exclude(notes__startswith="Achat frigo")
+            .exclude(user=None)  # actions systeme (import, script)
             .select_related("user")
             .order_by("item_id", "-date", "-pk")
         )
         for t in qs:
-            if t.item_id in out:
-                continue
-            deltas = t.deltas or {}
-            moved_in = t.tracking_type == C.STOCK_MOVE.value and deltas.get("location") in fridge
-            if t.tracking_type in adds or moved_in:
+            if t.item_id not in out:
                 out[t.item_id] = {
-                    "user": (t.user.get_full_name() or t.user.username) if t.user else "—",
+                    "user": t.user.get_full_name() or t.user.username,
                     "date": tz.localtime(t.date).strftime("%d/%m %H:%M"),
                 }
         return out

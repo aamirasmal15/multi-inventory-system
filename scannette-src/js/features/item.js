@@ -70,6 +70,8 @@ function renderItem(it) {
   $("#qtyInput").value = fmt(it.quantity);
   $(".qty-label").textContent = t("qty_in_stock") + (units ? " (" + units + ")" : "");
   $("#comment").value = "";
+  // article du frigo, non-admin : section stock cachée dès l'affichage
+  if (fridgeLocked(it.location)) $("#qtyBlock").style.display = "none";
   // objet trackable + plugin prêts actif -> bloc prêt à la place de la quantité
   applyItemMode(it);
   // pastille « Variante de <modèle> », posée en différé (features/variants.js)

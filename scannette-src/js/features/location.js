@@ -23,6 +23,7 @@ async function loadLocation(pk) {
       return;
     }
     const r = await api("/api/stock/?location=" + pk + "&cascade=false&part_detail=true&limit=200");
+    await achatReadyPromise; // frigo : stock en lecture seule pour un non-admin
     const items = r.results || r;
     renderLocationItems(loc ? loc.name || t("loc_n", pk) : t("loc_n", pk), items);
   } catch (e) {
@@ -100,8 +101,14 @@ function renderLocationItems(locName, items) {
       const v = parseFloat(input.value.replace(",", "."));
       save.classList.toggle("on", !isNaN(v) && v >= 0 && v !== Number(it.quantity));
     }
-    input.value = fmt(it.quantity);
     paintSub();
+    if (fridgeLocked(it.location)) {
+      // article du frigo : stock géré par les admins, pas de correction ici
+      row.querySelector(".loc-ctrl").remove();
+      wrap.appendChild(row);
+      return;
+    }
+    input.value = fmt(it.quantity);
     row.querySelector(".minus").onclick = () => {
       let v = parseFloat(input.value.replace(",", ".")) || 0;
       v = Math.max(0, v - 1);

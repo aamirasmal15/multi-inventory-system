@@ -530,6 +530,9 @@ function isFridgeLoc(pk) {
 /* ---- verrou du frigo côté Scannette (le serveur refuse de toute façon) ----
    Pour un non-admin : le frigo n'apparaît dans aucune liste d'emplacements, et
    la fiche d'un article rangé dedans est en lecture seule. */
+function fridgeLocked(locPk) {
+  return !!(ACHAT.fridge && !ACHAT.admin && isFridgeLoc(locPk));
+}
 async function hideFridgeLocs(list) {
   await achatReadyPromise;
   if (ACHAT.admin || !ACHAT.fridge) return list;

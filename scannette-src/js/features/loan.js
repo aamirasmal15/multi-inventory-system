@@ -132,7 +132,8 @@ async function applyItemMode(it) {
   await pretsReadyPromise;
   if (CURRENT !== it) return; // l'utilisateur a changé de fiche entre-temps
   const loanUI = isLoanItem(it);
-  $("#qtyBlock").style.display = loanUI ? "none" : "";
+  // article du frigo pour un non-admin : jamais de section stock (frigo.js)
+  $("#qtyBlock").style.display = loanUI || fridgeLocked(it.location) ? "none" : "";
   $("#loanBlock").style.display = loanUI ? "" : "none";
   if (!loanUI) return;
   if (LOAN_PK !== it.pk) {

@@ -220,7 +220,7 @@ class FridgeView(PluginView):
             for p in products:
                 del p["items"]
         else:
-            # mode « Gérer » : qui a ajoute chaque article en dernier
+            # mode « Gérer » : qui a modifie chaque article en dernier (hors achats)
             added = self.plugin.last_additions([i["pk"] for p in products for i in p["items"]], loc)
             for p in products:
                 for i in p["items"]:
