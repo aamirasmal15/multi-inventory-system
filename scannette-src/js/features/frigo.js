@@ -11,6 +11,8 @@
      s'il suffit, sinon carte (1 € min.), sinon recharge (cf. achat.js).
    - Gérer (admins) : comptage direct de chaque article du frigo, produits
      sans prix signalés (invisibles des membres tant qu'il n'y en a pas).
+   - Classement du mois : bandeau en tête de la grille, feuille avec podium
+     (frigoRankPaint, openRanking) — nombre d'articles pris, jamais de montant.
    Le panier survit au rafraîchissement et à l'aller-retour SSO (sessionStorage) ;
    le serveur revalide prix et disponibilité au paiement.
 
@@ -25,6 +27,7 @@ let FRIGO = null; // dernière réponse de /plugin/paiements/fridge
 let FRIGO_MODE = "buy"; // "buy" | "manage"
 let FRIGO_ONLY = false; // compte sans rôle : le frigo et rien d'autre
 let ACCESS = null; // état d'accès du compte (inventory, frigo_client, requested)
+let FRIGO_RANK = null; // classement du mois en cours (bandeau), /plugin/paiements/fridge/ranking
 
 /* ---- panier { partPk: quantité } ---- */
 function frigoCart() {
@@ -124,6 +127,7 @@ async function frigoLoad() {
     return;
   }
   frigoRender();
+  frigoRankLoad();
 }
 function frigoSetMode(m) {
   FRIGO_MODE = m;
@@ -149,6 +153,7 @@ function frigoRender() {
   const box = $("#frigoList");
   if (FRIGO_MODE === "manage") frigoRenderManage(box, list);
   else frigoRenderBuy(box, list);
+  frigoRankPaint();
   frigoPaintCart();
 }
 
@@ -268,6 +273,148 @@ async function frigoPay(via) {
   frigoPaintCart();
   // refusé côté serveur (stock parti entre-temps, prix changé) : on relit le frigo
   if (paid === false && $("#screen-frigo").classList.contains("active")) frigoLoad();
+}
+
+/* ---- Classement du mois : qui a pris le plus d'articles au frigo ----
+   Bandeau en tête de la grille d'achat (leader + sa propre place), qui ouvre
+   une feuille : podium, places 4 à 10, sa place, produit du mois. On peut
+   remonter les mois précédents. Le serveur ne donne que prénom + initiale et
+   un nombre d'articles. Plugin trop ancien (404) : pas de bandeau. */
+async function frigoRankLoad() {
+  try {
+    FRIGO_RANK = await api("/plugin/paiements/fridge/ranking");
+  } catch (_) {
+    FRIGO_RANK = null;
+  }
+  frigoRankPaint();
+}
+function rankMonthName(m, withYear) {
+  const [y, mo] = String(m).split("-").map(Number);
+  const o = withYear ? { month: "long", year: "numeric" } : { month: "long" };
+  return new Date(y, mo - 1, 1).toLocaleDateString(LANG === "fr" ? "fr-FR" : "en-GB", o);
+}
+function frigoRankPaint() {
+  const box = $("#frigoList");
+  const old = box.querySelector(".fr-rank");
+  if (old) old.remove();
+  const r = FRIGO_RANK;
+  if (!r || FRIGO_MODE !== "buy" || !FRIGO || !FRIGO.enabled) return;
+  const month = rankMonthName(r.month);
+  const lead = r.top[0];
+  const sub = !lead
+    ? t("rank_ban_empty")
+    : r.me && r.me.rank === 1
+      ? t("rank_ban_first", r.me.items)
+      : r.me
+        ? t("rank_ban_me", t("rank_ord", r.me.rank), lead.name)
+        : t("rank_ban_lead", lead.name);
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "fr-rank fr-span";
+  b.innerHTML =
+    '<span class="fr-rank-cup" aria-hidden="true">🏆</span>' +
+    '<span class="fr-rank-txt"><b>' + esc(t("rank_ban_title", month)) + "</b><span>" + esc(sub) + "</span></span>" +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+  b.onclick = () => openRanking();
+  box.prepend(b);
+}
+
+function rankBodyHtml(r) {
+  if (!r.top.length) {
+    return '<div class="rk-empty"><div class="rk-empty-i" aria-hidden="true">🧊</div>' + esc(t(r.current ? "rank_empty" : "rank_empty_past")) + "</div>";
+  }
+  const medal = ["🥇", "🥈", "🥉"];
+  // podium : 2e à gauche, 1er au centre, 3e à droite
+  const step = (e) =>
+    !e
+      ? '<div class="rk-col rk-none"></div>'
+      : '<div class="rk-col rk-p' + e.rank + (e.me ? " me" : "") + '">' +
+        '<div class="rk-medal" aria-hidden="true">' + (e.rank === 1 ? "👑" : medal[e.rank - 1]) + "</div>" +
+        '<div class="rk-who">' + esc(e.me ? t("rank_you") : e.name) + "</div>" +
+        '<div class="rk-fav">' + esc(e.favorite) + "</div>" +
+        '<div class="rk-step"><b>' + e.items + "</b><span>" + esc(t("rank_items_w", e.items)) + "</span><i>" + e.rank + "</i></div></div>";
+  let h = '<div class="rk-podium">' + step(r.top[1]) + step(r.top[0]) + step(r.top[2]) + "</div>";
+  // sa place, en clair
+  const me = r.me;
+  const ord = me ? t("rank_ord", me.rank) : "";
+  const meTxt = !me
+    ? t(r.current ? "rank_me_none" : "rank_me_none_past")
+    : !r.current
+      ? t("rank_me_past", ord, me.items)
+      : me.rank === 1
+        ? t("rank_me_first", me.items)
+        : t("rank_me_gap", ord, me.items, me.gap, t("rank_ord", me.rank - 1));
+  h += '<div class="rk-me' + (me ? "" : " none") + '">' + esc(meTxt) + "</div>";
+  const row = (e) =>
+    '<div class="rk-row' + (e.me ? " me" : "") + '"><span class="rk-n">' + e.rank + '</span><span class="rk-name"><b>' +
+    esc(e.me ? t("rank_you") : e.name) + "</b><small>" + esc(e.favorite) + '</small></span><span class="rk-q">' + e.items + "</span></div>";
+  const rest = r.top.slice(3);
+  if (rest.length || (me && me.rank > r.top.length)) {
+    h += '<div class="rk-list">' + rest.map(row).join("");
+    if (me && me.rank > r.top.length) h += (me.rank > r.top.length + 1 ? '<div class="rk-gap" aria-hidden="true">⋯</div>' : "") + row(me);
+    h += "</div>";
+  }
+  h += '<div class="rk-foot">';
+  if (r.product) h += "<div>" + esc(t("rank_product", r.product.name, r.product.items)) + "</div>";
+  h += "<div>" + esc(t("rank_total", r.items, r.buyers)) + "</div></div>";
+  return h;
+}
+
+async function openRanking() {
+  let r = FRIGO_RANK;
+  if (!r) return;
+  const ov = document.createElement("div");
+  ov.className = "modal-ov sheet-ov";
+  const chev = (d) =>
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+  ov.innerHTML =
+    '<div class="ps-sheet rk-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("rank_title")) + '">' +
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ps-head"><div class="ps-name"><div class="t">🏆 ' + esc(t("rank_title")) + '</div><div class="s">' + esc(t("rank_sub")) +
+    '</div></div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' + chev("M18 6 6 18M6 6l12 12") + "</button></div>" +
+    '<div class="rk-month"><button type="button" class="iconbtn" data-m="1" aria-label="' + esc(t("rank_prev")) + '">' + chev("M15 6l-6 6 6 6") +
+    '</button><b></b><button type="button" class="iconbtn" data-m="-1" aria-label="' + esc(t("rank_next")) + '">' + chev("M9 6l6 6-6 6") + "</button></div>" +
+    '<div class="rk-body"></div></div>';
+  const body = ov.querySelector(".rk-body");
+  const [prev, next] = ov.querySelectorAll(".rk-month button");
+  const paint = () => {
+    const i = r.months.indexOf(r.month);
+    ov.querySelector(".rk-month b").textContent = rankMonthName(r.month, true);
+    // months : du plus récent au plus ancien
+    prev.disabled = i < 0 || i >= r.months.length - 1;
+    next.disabled = i <= 0;
+    body.innerHTML = rankBodyHtml(r);
+  };
+  const go = async (d) => {
+    const m = r.months[r.months.indexOf(r.month) + d];
+    if (!m) return;
+    prev.disabled = next.disabled = true;
+    try {
+      r = await api("/plugin/paiements/fridge/ranking?month=" + encodeURIComponent(m));
+    } catch (e) {
+      toast(e.message, "bad");
+    }
+    paint();
+  };
+  prev.onclick = () => go(1);
+  next.onclick = () => go(-1);
+  lockScroll();
+  const close = () => {
+    unlockScroll();
+    document.removeEventListener("keydown", onKey);
+    ov.classList.add("closing");
+    setTimeout(() => ov.remove(), 220);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("[data-x]").onclick = close;
+  paint();
+  document.body.appendChild(ov);
 }
 
 /* ---- Gérer (admins) : prix et stock de chaque produit, en direct ----

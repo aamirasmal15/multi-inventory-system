@@ -142,6 +142,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             path("access/admin", api.AccessAdminView.as_view(plugin=self), name="access-admin"),
             path("fridge", api.FridgeView.as_view(plugin=self), name="fridge"),
             path("fridge/price", api.FridgePriceView.as_view(plugin=self), name="fridge-price"),
+            path("fridge/ranking", api.FridgeRankingView.as_view(plugin=self), name="fridge-ranking"),
             path("checkout", api.CheckoutView.as_view(plugin=self), name="checkout"),
             path("purchases", api.PurchaseListView.as_view(plugin=self), name="purchases"),
             path("wallet", api.WalletView.as_view(plugin=self), name="wallet"),
@@ -721,6 +722,92 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
                 })
         bal = w.balance_cents if w else 0
         return {"balance_cents": bal, "balance": euros(bal), "entries": entries}
+
+    # ---- classement du mois : qui a pris le plus d'articles au frigo ----
+
+    @staticmethod
+    def _rank_name(user):
+        """« Prénom N. » : le classement est vu de tous, le nom complet reste a la tresorerie."""
+        first, last = (user.first_name or "").strip(), (user.last_name or "").strip()
+        if not first:
+            return user.username
+        return f"{first} {last[0].upper()}." if last else first
+
+    def fridge_ranking(self, user, month=None, limit=10):
+        """Classement d'un mois (« AAAA-MM », defaut : le mois en cours).
+
+        On compte les articles des achats payes du frigo (pas les euros : le
+        montant depense par chacun ne regarde que la tresorerie). A egalite, le
+        premier arrive a ce total passe devant. Le compte technique (superuser)
+        n'y figure pas.
+        """
+        import datetime
+
+        from django.db.models import Max, Sum
+
+        from .models import Purchase, PurchaseLine
+
+        paid = Purchase.objects.filter(
+            status=Purchase.STATUS_PAID, kind=Purchase.KIND_FRIDGE,
+            paid_at__isnull=False, user__isnull=False, user__is_superuser=False,
+        )
+        today = timezone.localdate()
+        current = today.strftime("%Y-%m")
+        # mois ayant des achats (les 12 derniers), le mois en cours toujours propose
+        months = [d.strftime("%Y-%m") for d in paid.datetimes("paid_at", "month", order="DESC")[:12]]
+        if current not in months:
+            months.insert(0, current)
+        try:
+            first = datetime.datetime.strptime(month or "", "%Y-%m")
+        except ValueError:
+            first = datetime.datetime(today.year, today.month, 1)
+        month = first.strftime("%Y-%m")
+        start = timezone.make_aware(first)
+        end = timezone.make_aware(datetime.datetime(first.year + first.month // 12, first.month % 12 + 1, 1))
+
+        rows = (
+            PurchaseLine.objects.filter(purchase__in=paid, purchase__paid_at__gte=start, purchase__paid_at__lt=end)
+            .values("purchase__user", "name")
+            .annotate(q=Sum("quantity"), last=Max("purchase__paid_at"))
+        )
+        people, products = {}, {}
+        for r in rows:
+            p = people.setdefault(r["purchase__user"], {"items": 0, "last": r["last"], "fav": {}})
+            p["items"] += r["q"]
+            p["last"] = max(p["last"], r["last"])
+            p["fav"][r["name"]] = r["q"]
+            products[r["name"]] = products.get(r["name"], 0) + r["q"]
+        order = sorted(people.items(), key=lambda kv: (-kv[1]["items"], kv[1]["last"]))
+        users = {u.pk: u for u in type(user).objects.filter(pk__in=people)}
+
+        def entry(i):
+            pk, p = order[i]
+            fav = max(p["fav"].items(), key=lambda kv: (kv[1], kv[0]))
+            return {
+                "rank": i + 1,
+                "name": self._rank_name(users[pk]),
+                "items": p["items"],
+                "favorite": fav[0],
+                "me": pk == user.pk,
+            }
+
+        me = next((i for i, (pk, _) in enumerate(order) if pk == user.pk), None)
+        mine = None
+        if me is not None:
+            mine = entry(me)
+            # ce qu'il manque pour doubler celui de devant (a egalite il reste devant)
+            mine["gap"] = order[me - 1][1]["items"] - mine["items"] + 1 if me else 0
+        best = max(products.items(), key=lambda kv: (kv[1], kv[0])) if products else None
+        return {
+            "month": month,
+            "current": month == current,
+            "months": months,
+            "top": [entry(i) for i in range(min(limit, len(order)))],
+            "me": mine,
+            "buyers": len(order),
+            "items": sum(p["items"] for p in people.values()),
+            "product": {"name": best[0], "items": best[1]} if best else None,
+        }
 
     @staticmethod
     def queue_receipt(pk):

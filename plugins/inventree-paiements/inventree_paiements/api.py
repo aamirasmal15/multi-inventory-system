@@ -235,6 +235,19 @@ class FridgeView(PluginView):
         })
 
 
+class FridgeRankingView(PluginView):
+    """Classement du mois (?month=AAAA-MM) : qui a pris le plus d'articles au frigo.
+
+    Ouvert a tout client du frigo : prenom + initiale et nombre d'articles,
+    jamais de montant.
+    """
+
+    def get(self, request):
+        if self.plugin.fridge_location() is None:
+            return Response({"detail": "Le frigo n'est pas configuré."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.plugin.fridge_ranking(request.user, request.query_params.get("month")))
+
+
 class FridgePriceView(PluginView):
     """Admins : prix de vente d'un produit du frigo.
 
