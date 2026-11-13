@@ -295,19 +295,29 @@ function rankMonthName(m, withYear) {
   const o = withYear ? { month: "long", year: "numeric" } : { month: "long" };
   return new Date(y, mo - 1, 1).toLocaleDateString(LANG === "fr" ? "fr-FR" : "en-GB", o);
 }
-/* pastille aux initiales, couleur tirée du nom (toujours la même pour une personne) */
-const RANK_COLORS = ["#e8590c", "#1c7ed6", "#2f9e44", "#ae3ec9", "#d6336c", "#0c8599", "#e67700", "#5f3dc4"];
+/* pastille aux initiales, dans le style des avatars du site (la sienne en plein) */
 function rankAvatar(e, cls) {
   const w = String(e.name).replace(/\./g, "").split(/\s+/);
   const ini = ((w[0] || "?").charAt(0) + (w[1] || "").charAt(0)).toUpperCase();
-  let h = 0;
-  for (const c of String(e.name)) h = (h * 31 + c.codePointAt(0)) >>> 0;
-  return '<span class="rk-av' + (cls ? " " + cls : "") + '" style="background:' + RANK_COLORS[h % RANK_COLORS.length] + '">' + esc(ini) + "</span>";
+  return '<span class="avatar rk-av' + (cls ? " " + cls : "") + (e.me ? " me" : "") + '">' + esc(ini) + "</span>";
 }
-/* titre honorifique : par la place sur le podium, sinon par le nombre de consos */
-function rankTitle(e) {
-  if (e.rank <= 3) return t("rank_t" + e.rank);
-  return t(e.items >= 15 ? "rank_l4" : e.items >= 10 ? "rank_l3" : e.items >= 6 ? "rank_l2" : e.items >= 3 ? "rank_l1" : "rank_l0");
+/* paliers : nombre de consos du mois -> titre. rankTier donne le palier
+   atteint, le suivant, ce qu'il manque et l'avancement entre les deux. */
+const RANK_TIERS = [[0, "rank_l0"], [3, "rank_l1"], [6, "rank_l2"], [10, "rank_l3"], [15, "rank_l4"]];
+function rankTier(n) {
+  let i = 0;
+  while (i + 1 < RANK_TIERS.length && n >= RANK_TIERS[i + 1][0]) i++;
+  const cur = RANK_TIERS[i],
+    nx = RANK_TIERS[i + 1];
+  return {
+    name: t(cur[1]),
+    next: nx ? t(nx[1]) : "",
+    left: nx ? nx[0] - n : 0,
+    pct: nx ? Math.round(((n - cur[0]) / (nx[0] - cur[0])) * 100) : 100,
+  };
+}
+function rankBar(tier) {
+  return '<span class="rk-bar' + (tier.next ? "" : " max") + '"><i style="width:' + Math.max(5, tier.pct) + '%"></i></span>';
 }
 const RANK_CUP =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.4a5 5 0 0 1-2.600 2.900V18h3v2H8v-2h3v-3.100A5 5 0 0 1 8.400 12H8a4 4 0 0 1-4-4V5h3V3Zm0 4H6v1a2 2 0 0 0 1 1.700V7Zm10 0v2.700A2 2 0 0 0 18 8V7h-1Z"/></svg>';
@@ -340,7 +350,7 @@ function frigoRankPaint() {
   box.prepend(b);
 }
 
-/* podium (2e à gauche, 1er au centre, 3e à droite) : va dans le bloc sombre */
+/* podium : 2e à gauche, 1er au centre, 3e à droite */
 function rankPodiumHtml(r) {
   if (!r.top.length) return '<div class="rk-empty">' + esc(t(r.current ? "rank_empty" : "rank_empty_past")) + "</div>";
   const step = (e) =>
@@ -349,14 +359,15 @@ function rankPodiumHtml(r) {
       : '<div class="rk-col rk-p' + e.rank + (e.me ? " me" : "") + '"><div class="rk-face">' +
         (e.rank === 1 ? RANK_CROWN : "") + rankAvatar(e) +
         '<div class="rk-who">' + esc(e.me ? t("rank_you") : e.name) + "</div>" +
-        '<div class="rk-tag">' + esc(rankTitle(e)) + "</div></div>" +
+        '<div class="rk-tag">' + esc(e.rank === 1 ? t("rank_t1") : rankTier(e.items).name) + "</div></div>" +
         '<div class="rk-step"><b data-n="' + e.items + '">' + e.items + "</b><span>" + esc(t("rank_items_w", e.items)) + "</span><i>" + e.rank + "</i></div></div>";
   return '<div class="rk-podium">' + step(r.top[1]) + step(r.top[0]) + step(r.top[2]) + "</div>";
 }
+/* sous le podium : sa place et son palier, places 4 à 10 avec ce qu'il manque
+   à chacun pour le palier suivant (mois en cours seulement), les paliers */
 function rankListHtml(r) {
   if (!r.top.length) return "";
-  const me = r.me,
-    max = r.top[0].items || 1;
+  const me = r.me;
   const ord = me ? t("rank_ord", me.rank) : "";
   const second = r.top[1];
   const meTxt = !me
@@ -368,17 +379,35 @@ function rankListHtml(r) {
         : second
           ? t("rank_me_first", me.items, second.name, me.items - second.items)
           : t("rank_me_alone", me.items);
-  let h = '<div class="rk-me' + (me ? "" : " none") + '">' + esc(meTxt) + "</div>";
-  const row = (e) =>
-    '<div class="rk-row' + (e.me ? " me" : "") + '" style="--w:' + Math.max(4, Math.round((e.items / max) * 100)) + '%"><span class="rk-n">' + e.rank +
-    "</span>" + rankAvatar(e, "sm") + '<span class="rk-name"><b>' + esc(e.me ? t("rank_you") : e.name) + "</b><small>" + esc(rankTitle(e)) +
-    '</small></span><span class="rk-q">' + e.items + "</span></div>";
+  const mt = me ? rankTier(me.items) : null;
+  let h = '<div class="rk-me' + (me ? "" : " none") + '"><div>' + esc(meTxt) + "</div>";
+  if (mt && r.current) {
+    h +=
+      '<div class="rk-me-tier">' + esc(mt.next ? t("rank_me_tier", mt.name, mt.left, mt.next) : t("rank_me_tier_max", mt.name)) + "</div>" + rankBar(mt);
+  }
+  h += "</div>";
+  const row = (e) => {
+    const tier = rankTier(e.items);
+    const more = !r.current ? "" : " · " + (tier.next ? t("rank_to_next", tier.left, tier.next) : t("rank_tier_max"));
+    return (
+      '<div class="rk-row' + (e.me ? " me" : "") + '"><span class="rk-n">' + e.rank + "</span>" + rankAvatar(e, "sm") +
+      '<span class="rk-name"><b>' + esc(e.me ? t("rank_you") : e.name) + "</b><small><em>" + esc(tier.name) + "</em>" + esc(more) + "</small>" +
+      (r.current ? rankBar(tier) : "") + '</span><span class="rk-q">' + e.items + "</span></div>"
+    );
+  };
   const rest = r.top.slice(3);
   if (rest.length || (me && me.rank > r.top.length)) {
     h += '<div class="rk-list">' + rest.map(row).join("");
     if (me && me.rank > r.top.length) h += (me.rank > r.top.length + 1 ? '<div class="rk-gap" aria-hidden="true">⋯</div>' : "") + row(me);
     h += "</div>";
   }
+  // les paliers et leur seuil ; ceux qu'on a atteints ce mois-là sont allumés
+  h +=
+    '<div class="rk-tiers"><span class="rk-tiers-l">' + esc(t("rank_tiers")) + "</span>" +
+    RANK_TIERS.slice(1)
+      .map((x) => '<span class="pill' + (me && me.items >= x[0] ? " pill-you" : "") + '">' + esc(t(x[1])) + " · " + x[0] + "</span>")
+      .join("") +
+    "</div>";
   h += '<div class="rk-foot"><div>' + esc(t("rank_total", r.items, r.buyers)) + "</div>";
   if (r.product) h += "<div>" + esc(t("rank_product", r.product.name, r.product.items)) + "</div>";
   return h + "</div>";
@@ -401,12 +430,12 @@ function rankCountUp(root) {
     requestAnimationFrame(tick);
   });
 }
-/* sur le podium : pluie de confettis dans le bloc sombre */
+/* sur le podium : pluie de confettis au-dessus des marches */
 function rankConfetti(arena) {
   if (rankCalm()) return;
   const c = document.createElement("div");
   c.className = "rk-confetti";
-  const cols = ["#ffc94d", "#ff6b6b", "#4dabf7", "#69db7c", "#da77f2", "#fff"];
+  const cols = ["var(--primary)", "var(--amber)", "var(--green)", "var(--red)"];
   let h = "";
   for (let i = 0; i < 34; i++) {
     h +=
@@ -428,12 +457,12 @@ async function openRanking() {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
   ov.innerHTML =
     '<div class="ps-sheet rk-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("rank_title")) + '">' +
-    '<div class="rk-arena"><div class="ps-grab" aria-hidden="true"></div>' +
-    '<div class="rk-top"><div class="rk-title">' + esc(t("rank_title")) + '</div><button class="rk-x" data-x aria-label="' + esc(t("cancel")) + '">' +
-    chev("M18 6 6 18M6 6l12 12") + "</button></div>" +
-    '<div class="rk-month"><button type="button" data-m="1" aria-label="' + esc(t("rank_prev")) + '">' + chev("M15 6l-6 6 6 6") +
-    '</button><b></b><button type="button" data-m="-1" aria-label="' + esc(t("rank_next")) + '">' + chev("M9 6l6 6-6 6") + "</button></div>" +
-    '<div class="rk-stage"></div></div><div class="rk-body"></div></div>';
+    '<div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="ps-head"><div class="ps-name"><div class="t">' + esc(t("rank_title")) + '</div><div class="s">' + esc(t("rank_sub")) +
+    '</div></div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' + chev("M18 6 6 18M6 6l12 12") + "</button></div>" +
+    '<div class="rk-month"><button type="button" class="iconbtn" data-m="1" aria-label="' + esc(t("rank_prev")) + '">' + chev("M15 6l-6 6 6 6") +
+    '</button><b></b><button type="button" class="iconbtn" data-m="-1" aria-label="' + esc(t("rank_next")) + '">' + chev("M9 6l6 6-6 6") + "</button></div>" +
+    '<div class="rk-arena"><div class="rk-stage"></div></div><div class="rk-body"></div></div>';
   const arena = ov.querySelector(".rk-arena"),
     stage = ov.querySelector(".rk-stage"),
     body = ov.querySelector(".rk-body");
