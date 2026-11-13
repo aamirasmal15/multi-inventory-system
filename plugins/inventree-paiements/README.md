@@ -91,6 +91,9 @@ Le strict nécessaire :
 - **Google Pay** (facultatif) : identifiant marchand Google.
 - **Envoi du reçu par e-mail** automatique (désactivé par défaut : l'acheteur
   peut toujours se l'envoyer).
+- **Classement du mois** (`RANKING`, désactivé par défaut) : bandeau et podium
+  dans le frigo de la Scannette, avec les paliers de consos. Éteint, rien ne
+  s'affiche et l'API du classement répond 404.
 
 Rien à remplir pour le reçu : il prend le nom de l'instance InvenTree et le
 logo de la Scannette.

@@ -123,6 +123,8 @@ class ConfigView(PluginView):
                 "locations": sorted(loc.get_descendants(include_self=True).values_list("pk", flat=True)),
             } if loc else None,
             "admin": is_admin(request.user),
+            # classement du mois affiche dans le frigo (reglage RANKING)
+            "ranking": self.plugin.ranking_enabled(),
             # encaisser des recharges en Tap to Pay (admins)
             "can_tap": self.plugin.tap_ready() and self.plugin.can_collect(request.user),
             # sous ce montant, SumUp refuse la carte : portefeuille obligatoire
@@ -243,8 +245,9 @@ class FridgeRankingView(PluginView):
     """
 
     def get(self, request):
-        if self.plugin.fridge_location() is None:
-            return Response({"detail": "Le frigo n'est pas configuré."}, status=status.HTTP_404_NOT_FOUND)
+        # reglage RANKING coupe : rien ne sort, meme pour qui connait l'adresse
+        if not self.plugin.ranking_enabled():
+            return Response({"detail": "Le classement n'est pas activé."}, status=status.HTTP_404_NOT_FOUND)
         return Response(self.plugin.fridge_ranking(request.user, request.query_params.get("month")))
 
 

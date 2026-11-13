@@ -281,12 +281,15 @@ async function frigoPay(via) {
    ouvre une feuille : podium, places 4 à 10, sa place, total du mois. On
    peut remonter les mois précédents. Le serveur ne donne que prénom +
    initiale et un nombre d'articles : ni montant, ni ce que chacun a pris.
-   Plugin trop ancien (404) : pas de bandeau. */
+   S'active par instance avec le réglage RANKING du plugin (éteint par
+   défaut) : éteint, pas de bandeau et l'API répond 404. */
 async function frigoRankLoad() {
-  try {
-    FRIGO_RANK = await api("/plugin/paiements/fridge/ranking");
-  } catch (_) {
-    FRIGO_RANK = null;
+  FRIGO_RANK = null;
+  // coupé par défaut : réglage RANKING du plugin (aucun appel tant qu'il est éteint)
+  if (ACHAT.ranking) {
+    try {
+      FRIGO_RANK = await api("/plugin/paiements/fridge/ranking");
+    } catch (_) {}
   }
   frigoRankPaint();
 }

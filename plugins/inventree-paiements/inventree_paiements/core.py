@@ -108,6 +108,12 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             "default": False,
             "validator": bool,
         },
+        "RANKING": {
+            "name": "Classement du mois",
+            "description": "Affiche dans le frigo de la Scannette le classement du mois (qui a pris le plus d'articles : podium, paliers). Désactivé : ni bandeau ni classement, et l'API ne renvoie rien.",
+            "default": False,
+            "validator": bool,
+        },
     }
 
     # filet de securite : un achat paye dont ni le retour navigateur ni le
@@ -732,6 +738,10 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
         if not first:
             return user.username
         return f"{first} {last[0].upper()}." if last else first
+
+    def ranking_enabled(self):
+        """Classement du mois affiche ? (reglage RANKING, et frigo configure)."""
+        return bool(self.get_setting("RANKING")) and self.fridge_location() is not None
 
     def fridge_ranking(self, user, month=None, limit=10):
         """Classement d'un mois (« AAAA-MM », defaut : le mois en cours).

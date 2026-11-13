@@ -41,6 +41,7 @@ async function loadAchatConfig() {
     ACHAT.googlePay = c.google_pay || null;
     ACHAT.fridge = c.fridge || null;
     ACHAT.admin = !!c.admin;
+    ACHAT.ranking = !!c.ranking; // classement du mois (réglage RANKING du plugin)
     ACHAT.minCard = c.min_card_cents || 100;
     ACHAT.topupMin = c.topup_min_cents || 100;
     ACHAT.topupMax = c.topup_max_cents || 10000;
