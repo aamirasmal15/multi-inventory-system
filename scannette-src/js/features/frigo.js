@@ -12,7 +12,8 @@
    - Gérer (admins) : comptage direct de chaque article du frigo, produits
      sans prix signalés (invisibles des membres tant qu'il n'y en a pas).
    - Classement du mois : bandeau en tête de la grille, feuille avec podium
-     (frigoRankPaint, openRanking) — nombre d'articles pris, jamais de montant.
+     (frigoRankPaint, openRanking) — nombre d'articles pris, jamais de montant
+     ni ce que chacun a pris.
    Le panier survit au rafraîchissement et à l'aller-retour SSO (sessionStorage) ;
    le serveur revalide prix et disponibilité au paiement.
 
@@ -276,10 +277,11 @@ async function frigoPay(via) {
 }
 
 /* ---- Classement du mois : qui a pris le plus d'articles au frigo ----
-   Bandeau en tête de la grille d'achat (leader + sa propre place), qui ouvre
-   une feuille : podium, places 4 à 10, sa place, produit du mois. On peut
-   remonter les mois précédents. Le serveur ne donne que prénom + initiale et
-   un nombre d'articles. Plugin trop ancien (404) : pas de bandeau. */
+   Bandeau en tête de la grille d'achat (sa place, les trois premiers), qui
+   ouvre une feuille : podium, places 4 à 10, sa place, total du mois. On
+   peut remonter les mois précédents. Le serveur ne donne que prénom +
+   initiale et un nombre d'articles : ni montant, ni ce que chacun a pris.
+   Plugin trop ancien (404) : pas de bandeau. */
 async function frigoRankLoad() {
   try {
     FRIGO_RANK = await api("/plugin/paiements/fridge/ranking");
@@ -293,71 +295,128 @@ function rankMonthName(m, withYear) {
   const o = withYear ? { month: "long", year: "numeric" } : { month: "long" };
   return new Date(y, mo - 1, 1).toLocaleDateString(LANG === "fr" ? "fr-FR" : "en-GB", o);
 }
+/* pastille aux initiales, couleur tirée du nom (toujours la même pour une personne) */
+const RANK_COLORS = ["#e8590c", "#1c7ed6", "#2f9e44", "#ae3ec9", "#d6336c", "#0c8599", "#e67700", "#5f3dc4"];
+function rankAvatar(e, cls) {
+  const w = String(e.name).replace(/\./g, "").split(/\s+/);
+  const ini = ((w[0] || "?").charAt(0) + (w[1] || "").charAt(0)).toUpperCase();
+  let h = 0;
+  for (const c of String(e.name)) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return '<span class="rk-av' + (cls ? " " + cls : "") + '" style="background:' + RANK_COLORS[h % RANK_COLORS.length] + '">' + esc(ini) + "</span>";
+}
+/* titre honorifique : par la place sur le podium, sinon par le nombre de consos */
+function rankTitle(e) {
+  if (e.rank <= 3) return t("rank_t" + e.rank);
+  return t(e.items >= 15 ? "rank_l4" : e.items >= 10 ? "rank_l3" : e.items >= 6 ? "rank_l2" : e.items >= 3 ? "rank_l1" : "rank_l0");
+}
+const RANK_CUP =
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.4a5 5 0 0 1-2.600 2.900V18h3v2H8v-2h3v-3.100A5 5 0 0 1 8.400 12H8a4 4 0 0 1-4-4V5h3V3Zm0 4H6v1a2 2 0 0 0 1 1.700V7Zm10 0v2.700A2 2 0 0 0 18 8V7h-1Z"/></svg>';
+const RANK_CROWN =
+  '<svg class="rk-crown" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.500 18h17l1.500-10-5.500 4L12 4.500 7.500 12 2 8l1.500 10Z"/></svg>';
+
 function frigoRankPaint() {
   const box = $("#frigoList");
   const old = box.querySelector(".fr-rank");
   if (old) old.remove();
   const r = FRIGO_RANK;
   if (!r || FRIGO_MODE !== "buy" || !FRIGO || !FRIGO.enabled) return;
-  const month = rankMonthName(r.month);
-  const lead = r.top[0];
+  const lead = r.top[0],
+    me = r.me;
   const sub = !lead
     ? t("rank_ban_empty")
-    : r.me && r.me.rank === 1
-      ? t("rank_ban_first", r.me.items)
-      : r.me
-        ? t("rank_ban_me", t("rank_ord", r.me.rank), lead.name)
-        : t("rank_ban_lead", lead.name);
+    : me && me.rank === 1
+      ? t("rank_ban_first", me.items)
+      : me
+        ? t("rank_ban_me", t("rank_ord", me.rank), me.gap, me.above)
+        : t("rank_ban_lead", lead.name, lead.items);
   const b = document.createElement("button");
   b.type = "button";
   b.className = "fr-rank fr-span";
   b.innerHTML =
-    '<span class="fr-rank-cup" aria-hidden="true">🏆</span>' +
-    '<span class="fr-rank-txt"><b>' + esc(t("rank_ban_title", month)) + "</b><span>" + esc(sub) + "</span></span>" +
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+    '<span class="fr-rank-cup">' + RANK_CUP + "</span>" +
+    '<span class="fr-rank-txt"><b>' + esc(t("rank_ban_title", rankMonthName(r.month))) + "</b><span>" + esc(sub) + "</span></span>" +
+    '<span class="fr-rank-avs" aria-hidden="true">' + r.top.slice(0, 3).map((e) => rankAvatar(e)).join("") + "</span>";
   b.onclick = () => openRanking();
   box.prepend(b);
 }
 
-function rankBodyHtml(r) {
-  if (!r.top.length) {
-    return '<div class="rk-empty"><div class="rk-empty-i" aria-hidden="true">🧊</div>' + esc(t(r.current ? "rank_empty" : "rank_empty_past")) + "</div>";
-  }
-  const medal = ["🥇", "🥈", "🥉"];
-  // podium : 2e à gauche, 1er au centre, 3e à droite
+/* podium (2e à gauche, 1er au centre, 3e à droite) : va dans le bloc sombre */
+function rankPodiumHtml(r) {
+  if (!r.top.length) return '<div class="rk-empty">' + esc(t(r.current ? "rank_empty" : "rank_empty_past")) + "</div>";
   const step = (e) =>
     !e
       ? '<div class="rk-col rk-none"></div>'
-      : '<div class="rk-col rk-p' + e.rank + (e.me ? " me" : "") + '">' +
-        '<div class="rk-medal" aria-hidden="true">' + (e.rank === 1 ? "👑" : medal[e.rank - 1]) + "</div>" +
+      : '<div class="rk-col rk-p' + e.rank + (e.me ? " me" : "") + '"><div class="rk-face">' +
+        (e.rank === 1 ? RANK_CROWN : "") + rankAvatar(e) +
         '<div class="rk-who">' + esc(e.me ? t("rank_you") : e.name) + "</div>" +
-        '<div class="rk-fav">' + esc(e.favorite) + "</div>" +
-        '<div class="rk-step"><b>' + e.items + "</b><span>" + esc(t("rank_items_w", e.items)) + "</span><i>" + e.rank + "</i></div></div>";
-  let h = '<div class="rk-podium">' + step(r.top[1]) + step(r.top[0]) + step(r.top[2]) + "</div>";
-  // sa place, en clair
-  const me = r.me;
+        '<div class="rk-tag">' + esc(rankTitle(e)) + "</div></div>" +
+        '<div class="rk-step"><b data-n="' + e.items + '">' + e.items + "</b><span>" + esc(t("rank_items_w", e.items)) + "</span><i>" + e.rank + "</i></div></div>";
+  return '<div class="rk-podium">' + step(r.top[1]) + step(r.top[0]) + step(r.top[2]) + "</div>";
+}
+function rankListHtml(r) {
+  if (!r.top.length) return "";
+  const me = r.me,
+    max = r.top[0].items || 1;
   const ord = me ? t("rank_ord", me.rank) : "";
+  const second = r.top[1];
   const meTxt = !me
     ? t(r.current ? "rank_me_none" : "rank_me_none_past")
     : !r.current
       ? t("rank_me_past", ord, me.items)
-      : me.rank === 1
-        ? t("rank_me_first", me.items)
-        : t("rank_me_gap", ord, me.items, me.gap, t("rank_ord", me.rank - 1));
-  h += '<div class="rk-me' + (me ? "" : " none") + '">' + esc(meTxt) + "</div>";
+      : me.rank > 1
+        ? t("rank_me_gap", ord, me.items, me.gap, me.above)
+        : second
+          ? t("rank_me_first", me.items, second.name, me.items - second.items)
+          : t("rank_me_alone", me.items);
+  let h = '<div class="rk-me' + (me ? "" : " none") + '">' + esc(meTxt) + "</div>";
   const row = (e) =>
-    '<div class="rk-row' + (e.me ? " me" : "") + '"><span class="rk-n">' + e.rank + '</span><span class="rk-name"><b>' +
-    esc(e.me ? t("rank_you") : e.name) + "</b><small>" + esc(e.favorite) + '</small></span><span class="rk-q">' + e.items + "</span></div>";
+    '<div class="rk-row' + (e.me ? " me" : "") + '" style="--w:' + Math.max(4, Math.round((e.items / max) * 100)) + '%"><span class="rk-n">' + e.rank +
+    "</span>" + rankAvatar(e, "sm") + '<span class="rk-name"><b>' + esc(e.me ? t("rank_you") : e.name) + "</b><small>" + esc(rankTitle(e)) +
+    '</small></span><span class="rk-q">' + e.items + "</span></div>";
   const rest = r.top.slice(3);
   if (rest.length || (me && me.rank > r.top.length)) {
     h += '<div class="rk-list">' + rest.map(row).join("");
     if (me && me.rank > r.top.length) h += (me.rank > r.top.length + 1 ? '<div class="rk-gap" aria-hidden="true">⋯</div>' : "") + row(me);
     h += "</div>";
   }
-  h += '<div class="rk-foot">';
+  h += '<div class="rk-foot"><div>' + esc(t("rank_total", r.items, r.buyers)) + "</div>";
   if (r.product) h += "<div>" + esc(t("rank_product", r.product.name, r.product.items)) + "</div>";
-  h += "<div>" + esc(t("rank_total", r.items, r.buyers)) + "</div></div>";
-  return h;
+  return h + "</div>";
+}
+const rankCalm = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* les scores du podium défilent de 0 à leur valeur */
+function rankCountUp(root) {
+  if (rankCalm()) return;
+  root.querySelectorAll("[data-n]").forEach((el) => {
+    const n = Number(el.dataset.n),
+      t0 = performance.now(),
+      wait = 350,
+      dur = 800;
+    el.textContent = "0";
+    const tick = (now) => {
+      const k = Math.min(1, Math.max(0, (now - t0 - wait) / dur));
+      el.textContent = Math.round(n * (1 - Math.pow(1 - k, 3)));
+      if (k < 1 && document.contains(el)) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+/* sur le podium : pluie de confettis dans le bloc sombre */
+function rankConfetti(arena) {
+  if (rankCalm()) return;
+  const c = document.createElement("div");
+  c.className = "rk-confetti";
+  const cols = ["#ffc94d", "#ff6b6b", "#4dabf7", "#69db7c", "#da77f2", "#fff"];
+  let h = "";
+  for (let i = 0; i < 34; i++) {
+    h +=
+      '<i style="left:' + Math.round(Math.random() * 100) + "%;background:" + cols[i % cols.length] + ";animation-delay:" +
+      (0.9 + Math.random() * 0.7).toFixed(2) + "s;animation-duration:" + (1.5 + Math.random()).toFixed(2) + "s;--r:" +
+      Math.round(Math.random() * 720 - 360) + "deg;--x:" + Math.round(Math.random() * 60 - 30) + 'px"></i>';
+  }
+  c.innerHTML = h;
+  arena.appendChild(c);
+  setTimeout(() => c.remove(), 4200);
 }
 
 async function openRanking() {
@@ -366,16 +425,18 @@ async function openRanking() {
   const ov = document.createElement("div");
   ov.className = "modal-ov sheet-ov";
   const chev = (d) =>
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
   ov.innerHTML =
     '<div class="ps-sheet rk-sheet" role="dialog" aria-modal="true" aria-label="' + esc(t("rank_title")) + '">' +
-    '<div class="ps-grab" aria-hidden="true"></div>' +
-    '<div class="ps-head"><div class="ps-name"><div class="t">🏆 ' + esc(t("rank_title")) + '</div><div class="s">' + esc(t("rank_sub")) +
-    '</div></div><button class="iconbtn" data-x aria-label="' + esc(t("cancel")) + '">' + chev("M18 6 6 18M6 6l12 12") + "</button></div>" +
-    '<div class="rk-month"><button type="button" class="iconbtn" data-m="1" aria-label="' + esc(t("rank_prev")) + '">' + chev("M15 6l-6 6 6 6") +
-    '</button><b></b><button type="button" class="iconbtn" data-m="-1" aria-label="' + esc(t("rank_next")) + '">' + chev("M9 6l6 6-6 6") + "</button></div>" +
-    '<div class="rk-body"></div></div>';
-  const body = ov.querySelector(".rk-body");
+    '<div class="rk-arena"><div class="ps-grab" aria-hidden="true"></div>' +
+    '<div class="rk-top"><div class="rk-title">' + esc(t("rank_title")) + '</div><button class="rk-x" data-x aria-label="' + esc(t("cancel")) + '">' +
+    chev("M18 6 6 18M6 6l12 12") + "</button></div>" +
+    '<div class="rk-month"><button type="button" data-m="1" aria-label="' + esc(t("rank_prev")) + '">' + chev("M15 6l-6 6 6 6") +
+    '</button><b></b><button type="button" data-m="-1" aria-label="' + esc(t("rank_next")) + '">' + chev("M9 6l6 6-6 6") + "</button></div>" +
+    '<div class="rk-stage"></div></div><div class="rk-body"></div></div>';
+  const arena = ov.querySelector(".rk-arena"),
+    stage = ov.querySelector(".rk-stage"),
+    body = ov.querySelector(".rk-body");
   const [prev, next] = ov.querySelectorAll(".rk-month button");
   const paint = () => {
     const i = r.months.indexOf(r.month);
@@ -383,7 +444,12 @@ async function openRanking() {
     // months : du plus récent au plus ancien
     prev.disabled = i < 0 || i >= r.months.length - 1;
     next.disabled = i <= 0;
-    body.innerHTML = rankBodyHtml(r);
+    stage.innerHTML = rankPodiumHtml(r);
+    body.innerHTML = rankListHtml(r);
+    rankCountUp(stage);
+    const old = arena.querySelector(".rk-confetti");
+    if (old) old.remove();
+    if (r.me && r.me.rank <= 3) rankConfetti(arena);
   };
   const go = async (d) => {
     const m = r.months[r.months.indexOf(r.month) + d];
@@ -413,8 +479,8 @@ async function openRanking() {
     if (e.target === ov) close();
   });
   ov.querySelector("[data-x]").onclick = close;
-  paint();
   document.body.appendChild(ov);
+  paint();
 }
 
 /* ---- Gérer (admins) : prix et stock de chaque produit, en direct ----

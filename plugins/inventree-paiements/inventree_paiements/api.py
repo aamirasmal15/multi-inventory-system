@@ -239,7 +239,7 @@ class FridgeRankingView(PluginView):
     """Classement du mois (?month=AAAA-MM) : qui a pris le plus d'articles au frigo.
 
     Ouvert a tout client du frigo : prenom + initiale et nombre d'articles,
-    jamais de montant.
+    jamais de montant ni ce que chacun a pris.
     """
 
     def get(self, request):

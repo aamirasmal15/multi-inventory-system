@@ -770,26 +770,20 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             .values("purchase__user", "name")
             .annotate(q=Sum("quantity"), last=Max("purchase__paid_at"))
         )
+        # ce que chacun achete ne sort pas d'ici : par personne un total, par
+        # produit un total tous membres confondus (« produit du mois »)
         people, products = {}, {}
         for r in rows:
-            p = people.setdefault(r["purchase__user"], {"items": 0, "last": r["last"], "fav": {}})
+            p = people.setdefault(r["purchase__user"], {"items": 0, "last": r["last"]})
             p["items"] += r["q"]
             p["last"] = max(p["last"], r["last"])
-            p["fav"][r["name"]] = r["q"]
             products[r["name"]] = products.get(r["name"], 0) + r["q"]
         order = sorted(people.items(), key=lambda kv: (-kv[1]["items"], kv[1]["last"]))
         users = {u.pk: u for u in type(user).objects.filter(pk__in=people)}
 
         def entry(i):
             pk, p = order[i]
-            fav = max(p["fav"].items(), key=lambda kv: (kv[1], kv[0]))
-            return {
-                "rank": i + 1,
-                "name": self._rank_name(users[pk]),
-                "items": p["items"],
-                "favorite": fav[0],
-                "me": pk == user.pk,
-            }
+            return {"rank": i + 1, "name": self._rank_name(users[pk]), "items": p["items"], "me": pk == user.pk}
 
         me = next((i for i, (pk, _) in enumerate(order) if pk == user.pk), None)
         mine = None
@@ -797,6 +791,7 @@ class PaiementsPlugin(AppMixin, SettingsMixin, ScheduleMixin, UrlsMixin, Validat
             mine = entry(me)
             # ce qu'il manque pour doubler celui de devant (a egalite il reste devant)
             mine["gap"] = order[me - 1][1]["items"] - mine["items"] + 1 if me else 0
+            mine["above"] = self._rank_name(users[order[me - 1][0]]) if me else ""
         best = max(products.items(), key=lambda kv: (kv[1], kv[0])) if products else None
         return {
             "month": month,
