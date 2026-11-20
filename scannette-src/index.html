@@ -48,9 +48,17 @@
         <div class="fl-emoji">🧊</div>
         <div><div class="fl-t" data-i18n="frigo_login_title">Le frigo</div><div class="fl-s" data-i18n="frigo_login_sub">Connecte-toi pour choisir tes boissons et payer en quelques secondes.</div></div>
       </div>
-      <h1 class="title" data-i18n="login_title">Se connecter avec InvenTree</h1>
+      <h1 class="title" data-i18n="login_title">Se connecter</h1>
+      <p class="login-intro" data-i18n-html="login_intro">Membre de l'asso ? Connecte-toi avec <b>ton compte EirbConnect</b>, rien à créer.</p>
       <div class="err" id="loginErr"></div>
-      <div class="card" style="padding:18px">
+      <button class="btn btn-primary btn-block" id="eirbConnectBtn" data-i18n="login_eirb">
+        Se connecter avec EirbConnect
+      </button>
+      <!-- identifiant + mot de passe InvenTree : replié, déplié par ce lien (events.js) -->
+      <button type="button" class="login-pwd-toggle" id="loginPwdToggle" aria-expanded="false" aria-controls="loginPwdCard">
+        <span data-i18n="login_pwd_open">Se connecter avec un identifiant et un mot de passe</span><span class="chev" aria-hidden="true">▾</span>
+      </button>
+      <div class="card login-pwd" id="loginPwdCard" style="padding:18px">
         <div class="field">
           <label class="lbl" for="user" data-i18n="login_user">Identifiant</label>
           <input type="text" id="user" autocomplete="username" autocapitalize="off" autocorrect="off" placeholder="identifiant" data-i18n-ph="login_user_ph" />
@@ -64,10 +72,6 @@
           <span data-i18n="login_btn">Se connecter</span>
         </button>
       </div>
-      <div class="login-or"><span data-i18n="login_or">ou</span></div>
-      <button class="btn btn-primary btn-block" id="eirbConnectBtn" data-i18n="login_eirb">
-        Se connecter avec EirbConnect
-      </button>
     </div>
   </section>
 

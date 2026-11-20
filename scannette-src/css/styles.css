@@ -675,8 +675,9 @@ body.frigo-mode .login-wrap>.login-top{order:0}
 body.frigo-mode .login-wrap>.frigo-login{order:1}
 body.frigo-mode .login-wrap>.err{order:2}
 body.frigo-mode .login-wrap>#eirbConnectBtn{order:3;margin-top:0}
-body.frigo-mode .login-wrap>.login-or{order:4}
+body.frigo-mode .login-wrap>.login-pwd-toggle{order:4}
 body.frigo-mode .login-wrap>.card{order:5}
+body.frigo-mode .login-intro{display:none}
 /* frigo seul (compte sans rôle) : aucune sortie vers l'inventaire */
 body.frigo-only #backBtnFrigo{display:none}
 
@@ -917,8 +918,16 @@ body.noscroll{overflow:hidden}
 .lockup-x{color:var(--muted-2);font-size:14px;line-height:1;user-select:none}
 .login-brand{font-size:18px;min-width:0;margin-left:12px}
 .login-brand .bn,.login-brand small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.login-or{display:flex;align-items:center;gap:12px;margin:16px 2px 14px;color:var(--muted);font-size:12px}
-.login-or::before,.login-or::after{content:"";flex:1;height:1px;background:var(--border)}
+/* EirbConnect en avant ; la connexion par identifiant InvenTree est repliée
+   sous un lien (#loginPwdToggle, events.js) */
+.login-intro{margin:-6px 2px 14px;color:var(--muted);font-size:14px;line-height:1.45}
+.login-intro b{color:var(--text)}
+#screen-login #eirbConnectBtn{min-height:50px;font-size:16px}
+.login-pwd-toggle{display:block;margin:14px auto 12px;padding:6px 8px;background:none;border:0;cursor:pointer;font:inherit;font-size:13px;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.login-pwd-toggle .chev{display:inline-block;margin-left:5px;text-decoration:none;transition:transform .15s}
+.login-wrap.pwd-open .login-pwd-toggle .chev{transform:rotate(180deg)}
+.login-pwd{display:none}
+.login-wrap.pwd-open .login-pwd{display:block}
 /* éléments du lockup réservés aux assos partenaires : masqués par défaut,
    révélés par html.collab (posé par helpers.js si BRAND != MAIN_BRAND) */
 .collab-only{display:none}

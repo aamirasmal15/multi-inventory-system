@@ -9,6 +9,23 @@ applyTheme(document.documentElement.getAttribute("data-theme") || "light");
 $("#themeBtn")?.addEventListener("click", toggleTheme);
 $("#themeBtnLogin")?.addEventListener("click", toggleTheme);
 $("#loginBtn")?.addEventListener("click", login);
+/* connexion par identifiant InvenTree, repliée sous EirbConnect */
+function setLoginPwd(open) {
+  const wrap = $("#screen-login .login-wrap"),
+    tg = $("#loginPwdToggle");
+  if (!wrap || !tg) return;
+  wrap.classList.toggle("pwd-open", open);
+  tg.setAttribute("aria-expanded", open ? "true" : "false");
+  const lbl = tg.querySelector("span");
+  lbl.dataset.i18n = open ? "login_pwd_close" : "login_pwd_open";
+  lbl.textContent = t(lbl.dataset.i18n);
+}
+$("#loginPwdToggle")?.addEventListener("click", () => {
+  const open = !$("#screen-login .login-wrap").classList.contains("pwd-open");
+  setLoginPwd(open);
+  if (open) $("#user")?.focus();
+});
+if (/[?&]mdp=1(&|$)/.test(location.search)) setLoginPwd(true);
 $("#pass")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") login();
 });
