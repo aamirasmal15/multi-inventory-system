@@ -67,17 +67,22 @@
   .eir-pwd-toggle .eir-chev { display: inline-block; margin-left: 4px; transition: transform .15s; text-decoration: none; }
   html.eir-pwd-open .eir-pwd-toggle .eir-chev { transform: rotate(180deg); }
 
-  /* Écran « compte en attente d'approbation » (même contenu que la Scannette). */
+  /* Page « compte en attente d'approbation » (même contenu que la Scannette).
+     Page à part, opaque : l'appli InvenTree reste masquée (eir-hold) tant que
+     le compte n'est pas reconnu comme ayant un rôle — rien ne s'en voit. */
+  html.eir-hold #root { visibility: hidden; }
   .eir-pending {
-    position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center;
-    padding: 16px; background: rgba(15, 18, 25, .55); backdrop-filter: blur(6px);
+    position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 16px; overflow-y: auto; background: var(--mantine-color-gray-1, #f1f3f5);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   .eir-pending-card {
     width: 100%; max-width: 420px; border-radius: 14px; padding: 26px 24px 20px; text-align: center;
     background: var(--mantine-color-body, #fff); color: var(--mantine-color-text, #1a1b1e);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+    border: 1px solid var(--mantine-color-default-border, #dee2e6); box-shadow: 0 8px 30px rgba(0, 0, 0, .08);
   }
+  [data-mantine-color-scheme="dark"] .eir-pending { background: var(--mantine-color-dark-8, #1a1b1e); }
+  .eir-pending-brand { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--mantine-color-dimmed, #868e96); }
   .eir-pending-ic { font-size: 40px; line-height: 1; margin-bottom: 10px; }
   .eir-pending h2 { margin: 0 0 10px; font-size: 20px; }
   .eir-pending p { margin: 0 0 6px; font-size: 14px; line-height: 1.45; }
@@ -177,8 +182,15 @@
   }
 
   /* ---------- compte sans rôle : écran d'attente ---------- */
-  var ov = null, checking = false, lastPath = null;
+  var ov = null, checking = false, lastPath = null, verified = false, holdTimer = null;
   function hidePending() { if (ov) { ov.remove(); ov = null; } }
+  // InvenTree masqué le temps de savoir si le compte a un rôle (une requête) ;
+  // garde-fou : jamais plus de 6 s, même si la vérification ne répond pas
+  function hold(on) {
+    clearTimeout(holdTimer);
+    root.classList.toggle("eir-hold", on);
+    if (on) holdTimer = setTimeout(function () { if (!ov) root.classList.remove("eir-hold"); }, 6000);
+  }
   function btn(label, cls, onClick) {
     var b = document.createElement(onClick.href ? "a" : "button");
     b.className = "eir-btn" + (cls ? " " + cls : "");
@@ -203,6 +215,10 @@
     ov.setAttribute("aria-modal", "true");
     var card = document.createElement("div");
     card.className = "eir-pending-card";
+    var brand = document.createElement("div");
+    brand.className = "eir-pending-brand";
+    brand.textContent = document.title || "InvenTree";
+    ov.appendChild(brand);
     card.innerHTML = '<div class="eir-pending-ic">⏳</div><h2></h2><p></p><p class="eir-mut"></p>';
     card.querySelector("h2").textContent = T.p_title;
     card.querySelectorAll("p")[0].textContent = T.p_1;
@@ -235,28 +251,32 @@
     var p = path();
     if (p === lastPath) return;
     lastPath = p;
-    if (!isSpa() || AUTH_PAGE.test(p)) { hidePending(); return; }
+    if (!isSpa() || AUTH_PAGE.test(p)) { hidePending(); hold(false); verified = false; return; }
+    if (verified) return; // rôle déjà confirmé pendant cette visite
+    if (!ov) hold(true);
     if (checking) { lastPath = null; return; }
     checking = true;
     fetch("/api/user/roles/", { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (!data || hasRole(data)) { hidePending(); return; }
+        if (!data || hasRole(data)) { verified = !!data; hidePending(); hold(false); return; }
         return api("/plugin/paiements/config").catch(function () { return null; }).then(function (cfg) {
           var access = cfg && cfg.access;
           // même règle que la Scannette : un compte qui n'est pas client du
           // frigo dépose sa demande d'accès en arrivant
           if (access && !access.requested && !access.frigo_client)
             api("/plugin/paiements/access", { method: "POST", body: { action: "request" } }).catch(function () {});
-          if (AUTH_PAGE.test(path())) return; // déconnecté entre-temps
+          if (AUTH_PAGE.test(path())) { hold(false); return; } // déconnecté entre-temps
           showPending(cfg);
+          clearTimeout(holdTimer); // la page d'attente garde InvenTree masqué
         });
       })
-      .catch(function () {})
+      .catch(function () { if (!ov) hold(false); })
       .then(function () { checking = false; });
   }
 
   /* ---------- branchement ---------- */
+  if (/^\/web(\/|$)/.test(location.pathname) && !AUTH_PAGE.test(path())) hold(true);
   var queued = false;
   function tick() {
     queued = false;
@@ -265,8 +285,14 @@
   }
   function schedule() { if (!queued) { queued = true; requestAnimationFrame(tick); } }
   function start() {
-    if (!isSpa()) return; // pages d'erreur Django (403/404/500) : rien à faire
-    new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+    if (!isSpa()) { hold(false); return; } // pages d'erreur Django (403/404/500) : rien à faire
+    // contrôle synchrone à chaque mutation (microtâche, avant l'affichage) :
+    // une navigation interne vers l'appli (connexion par mot de passe, sans
+    // rechargement) est masquée avant que le tableau de bord ne se peigne
+    new MutationObserver(function () {
+      if (!verified && !ov && path() !== lastPath && !AUTH_PAGE.test(path())) hold(true);
+      schedule();
+    }).observe(document.body, { childList: true, subtree: true });
     window.addEventListener("popstate", schedule);
     schedule();
   }
