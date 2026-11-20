@@ -1,0 +1,275 @@
+{% load static %}
+{% comment %}
+  Monté à la place de templates/favicon.html dans le conteneur InvenTree
+  (docker-compose.yml de chaque asso, posé par create-asso.sh). Ce gabarit est
+  inclus dans le <head> de l'appli web (web/index.html) : c'est le seul point
+  d'accroche qui ne demande ni de reconstruire le frontend ni un module Caddy.
+
+  1re partie = copie VERBATIM du favicon.html d'InvenTree 1.5.0. À une montée
+  de version, comparer avec l'original de la nouvelle image :
+    docker exec <asso>-server cat /home/inventree/src/backend/InvenTree/templates/favicon.html
+  (le montage le masque : lire l'original dans une image fraîche, ou
+  docker run --rm inventree/inventree:<tag> cat …).
+
+  2e partie = ajout EIR :
+  - page de connexion : EirbConnect mis en avant, connexion par identifiant et
+    mot de passe repliée sous un lien (dépliable, ?mdp=1 l'ouvre d'office) ;
+  - compte sans rôle connecté sur la version PC : écran « compte en attente
+    d'approbation », le même que la Scannette (demande d'accès enregistrée
+    auprès du plugin paiements s'il est installé).
+  Tout est défensif : si la structure de la page change (montée de version),
+  rien n'est masqué et InvenTree s'affiche tel quel. Le masquage de l'écran
+  d'attente est cosmétique, les droits restent vérifiés côté serveur.
+
+  Gabarit Django : jamais de double accolade ni d'accolade-pourcent dans le
+  script ci-dessous.
+  Fichier monté seul : après modification, RECRÉER le conteneur serveur
+  (docker compose up -d --force-recreate inventree-server) — un éditeur qui
+  remplace le fichier casse le montage (inode), cf. Caddyfile du front.
+{% endcomment %}
+<!-- Favicon -->
+<link rel="apple-touch-icon" sizes="57x57" href="{% static 'img/favicon/apple-icon-57x57.png' %}">
+<link rel="apple-touch-icon" sizes="60x60" href="{% static 'img/favicon/apple-icon-60x60.png' %}">
+<link rel="apple-touch-icon" sizes="72x72" href="{% static 'img/favicon/apple-icon-72x72.png' %}">
+<link rel="apple-touch-icon" sizes="76x76" href="{% static 'img/favicon/apple-icon-76x76.png' %}">
+<link rel="apple-touch-icon" sizes="114x114" href="{% static 'img/favicon/apple-icon-114x114.png' %}">
+<link rel="apple-touch-icon" sizes="120x120" href="{% static 'img/favicon/apple-icon-120x120.png' %}">
+<link rel="apple-touch-icon" sizes="144x144" href="{% static 'img/favicon/apple-icon-144x144.png' %}">
+<link rel="apple-touch-icon" sizes="152x152" href="{% static 'img/favicon/apple-icon-152x152.png' %}">
+<link rel="apple-touch-icon" sizes="180x180" href="{% static 'img/favicon/apple-icon-180x180.png' %}">
+<link rel="icon" type="image/png" sizes="192x192"  href="{% static 'img/favicon/android-icon-192x192.png' %}">
+<link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/favicon/favicon-32x32.png' %}">
+<link rel="icon" type="image/png" sizes="96x96" href="{% static 'img/favicon/favicon-96x96.png' %}">
+<link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/favicon/favicon-16x16.png' %}">
+<link rel="manifest" href="{% static 'img/favicon/manifest.json' %}">
+<meta name="msapplication-TileColor" content="#ffffff">
+<meta name="msapplication-TileImage" content="{% static 'img/favicon/ms-icon-144x144.png' %}">
+<meta name="theme-color" content="#ffffff">
+<!-- EIR : connexion EirbConnect + écran d'attente (voir commentaire du gabarit) -->
+<style>
+  /* Page de connexion : la pile qui porte le bouton SSO ET le formulaire. */
+  html.eir-login .mantine-Stack-root:has(> form):has(> .mantine-Group-root a) > .mantine-Group-root a {
+    height: 48px; font-size: 16px;
+  }
+  html.eir-login.eir-pwd-closed .mantine-Stack-root:has(> form):has(> .mantine-Group-root a) > .mantine-Divider-root:has(+ form),
+  html.eir-login.eir-pwd-closed .mantine-Stack-root:has(> form):has(> .mantine-Group-root a) > form,
+  html.eir-login.eir-pwd-closed .mantine-Stack-root:has(> form):has(> .mantine-Group-root a) > form ~ p {
+    display: none !important;
+  }
+  .eir-sso-intro { margin: 4px 0 0; font-size: 14px; line-height: 1.45; color: var(--mantine-color-dimmed, #868e96); text-align: center; }
+  .eir-sso-intro b { color: var(--mantine-color-text, inherit); }
+  .eir-pwd-toggle { display: flex; justify-content: center; margin: 2px 0 10px; }
+  .eir-pwd-toggle button {
+    background: none; border: 0; padding: 4px 6px; cursor: pointer; font: inherit; font-size: 13px;
+    color: var(--mantine-color-dimmed, #868e96); text-decoration: underline; text-underline-offset: 3px;
+  }
+  .eir-pwd-toggle button:hover { color: var(--mantine-color-text, #000); }
+  .eir-pwd-toggle .eir-chev { display: inline-block; margin-left: 4px; transition: transform .15s; text-decoration: none; }
+  html.eir-pwd-open .eir-pwd-toggle .eir-chev { transform: rotate(180deg); }
+
+  /* Écran « compte en attente d'approbation » (même contenu que la Scannette). */
+  .eir-pending {
+    position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(15, 18, 25, .55); backdrop-filter: blur(6px);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .eir-pending-card {
+    width: 100%; max-width: 420px; border-radius: 14px; padding: 26px 24px 20px; text-align: center;
+    background: var(--mantine-color-body, #fff); color: var(--mantine-color-text, #1a1b1e);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+  }
+  .eir-pending-ic { font-size: 40px; line-height: 1; margin-bottom: 10px; }
+  .eir-pending h2 { margin: 0 0 10px; font-size: 20px; }
+  .eir-pending p { margin: 0 0 6px; font-size: 14px; line-height: 1.45; }
+  .eir-pending .eir-mut { color: var(--mantine-color-dimmed, #868e96); }
+  .eir-pending .eir-btn {
+    display: block; width: 100%; margin-top: 10px; padding: 10px 14px; border-radius: 8px; cursor: pointer;
+    font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; box-sizing: border-box;
+    border: 1px solid var(--mantine-color-default-border, #dee2e6); background: transparent; color: inherit;
+  }
+  .eir-pending .eir-btn-primary { background: var(--mantine-primary-color-filled, #4c6ef5); border-color: transparent; color: #fff; }
+  .eir-pending .eir-btn:disabled { opacity: .6; cursor: default; }
+  .eir-pending .eir-first { margin-top: 18px; }
+</style>
+<script>
+(function () {
+  "use strict";
+  var FR = (navigator.language || "fr").toLowerCase().indexOf("fr") === 0 || !navigator.language;
+  var T = FR ? {
+    intro: "Membre de l'asso ? Connectez-vous avec <b>votre compte EirbConnect</b>, rien à créer.",
+    pwd_open: "Se connecter avec un identifiant et un mot de passe",
+    pwd_close: "Masquer la connexion par identifiant",
+    p_title: "Compte en attente d'approbation",
+    p_1: "Votre compte est en attente d'approbation.",
+    p_2: "Contactez un admin si le problème persiste.",
+    p_req: "Demande envoyée aux admins",
+    p_ask: "Demander l'accès à l'inventaire",
+    p_frigo: "🧊 Aller au frigo en attendant",
+    p_retry: "Réessayer",
+    p_logout: "Se déconnecter"
+  } : {
+    intro: "Association member? Sign in with <b>your EirbConnect account</b>, nothing to create.",
+    pwd_open: "Sign in with a username and password",
+    pwd_close: "Hide username sign-in",
+    p_title: "Account awaiting approval",
+    p_1: "Your account is awaiting approval.",
+    p_2: "Contact an admin if this persists.",
+    p_req: "Request sent to the admins",
+    p_ask: "Request access to the inventory",
+    p_frigo: "🧊 Go to the fridge meanwhile",
+    p_retry: "Retry",
+    p_logout: "Sign out"
+  };
+  var root = document.documentElement;
+  function store(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (_) { return null; } }
+  function cookie(n) { var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + n + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : ""; }
+  function path() { return location.pathname.replace(/\/+$/, ""); }
+  function isSpa() { return !!document.getElementById("spa_settings"); }
+  var AUTH_PAGE = /\/(login|logout|logged-in|register|mfa|mfa-setup|change-password|reset-password|set-password)$/;
+
+  /* ---------- page de connexion ---------- */
+  if (/[?&]mdp=1(&|$)/.test(location.search)) store("eir_pwd_open", "1");
+  function setPwd(open) {
+    root.classList.toggle("eir-pwd-open", open);
+    root.classList.toggle("eir-pwd-closed", !open);
+    store("eir_pwd_open", open ? "1" : null);
+    var b = document.querySelector(".eir-pwd-toggle button span");
+    if (b) b.textContent = open ? T.pwd_close : T.pwd_open;
+  }
+  function enhanceLogin() {
+    var onLogin = /\/login$/.test(path());
+    root.classList.toggle("eir-login", onLogin);
+    if (!onLogin) return;
+    var input = document.querySelector('input[aria-label="login-username"]');
+    var form = input && input.closest("form");
+    if (!form) form = document.querySelector(".mantine-Stack-root > form");
+    if (!form) return;
+    var stack = form.parentElement;
+    var group = null;
+    for (var i = 0; i < stack.children.length; i++) {
+      var c = stack.children[i];
+      if (c.classList.contains("mantine-Group-root") && c.querySelector("a")) { group = c; break; }
+    }
+    if (!group) return; // pas de SSO configuré : on laisse la page d'origine
+    if (!root.classList.contains("eir-pwd-open") && !root.classList.contains("eir-pwd-closed")) setPwd(store("eir_pwd_open") === "1");
+    if (!stack.querySelector(":scope > .eir-sso-intro")) {
+      var intro = document.createElement("p");
+      intro.className = "eir-sso-intro";
+      intro.innerHTML = T.intro;
+      stack.insertBefore(intro, group);
+    }
+    var tg = stack.querySelector(":scope > .eir-pwd-toggle");
+    if (!tg) {
+      tg = document.createElement("div");
+      tg.className = "eir-pwd-toggle";
+      var b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = '<span></span><span class="eir-chev">▾</span>';
+      b.addEventListener("click", function () {
+        var open = !root.classList.contains("eir-pwd-open");
+        setPwd(open);
+        if (open) { var u = document.querySelector('input[aria-label="login-username"]'); if (u) u.focus(); }
+      });
+      tg.appendChild(b);
+      b.firstChild.textContent = root.classList.contains("eir-pwd-open") ? T.pwd_close : T.pwd_open;
+    }
+    if (tg.previousElementSibling !== group) stack.insertBefore(tg, group.nextSibling);
+  }
+
+  /* ---------- compte sans rôle : écran d'attente ---------- */
+  var ov = null, checking = false, lastPath = null;
+  function hidePending() { if (ov) { ov.remove(); ov = null; } }
+  function btn(label, cls, onClick) {
+    var b = document.createElement(onClick.href ? "a" : "button");
+    b.className = "eir-btn" + (cls ? " " + cls : "");
+    b.textContent = label;
+    if (onClick.href) b.href = onClick.href; else { b.type = "button"; b.addEventListener("click", onClick); }
+    return b;
+  }
+  function api(url, opts) {
+    opts = opts || {};
+    var h = { Accept: "application/json" };
+    if (opts.method && opts.method !== "GET") { h["Content-Type"] = "application/json"; h["X-CSRFToken"] = cookie("csrftoken"); }
+    return fetch(url, { method: opts.method || "GET", credentials: "same-origin", headers: h, body: opts.body ? JSON.stringify(opts.body) : undefined })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+  }
+  function showPending(cfg) {
+    var access = (cfg && cfg.access) || null;
+    var fridge = !!(cfg && cfg.fridge);
+    hidePending();
+    ov = document.createElement("div");
+    ov.className = "eir-pending";
+    ov.setAttribute("role", "dialog");
+    ov.setAttribute("aria-modal", "true");
+    var card = document.createElement("div");
+    card.className = "eir-pending-card";
+    card.innerHTML = '<div class="eir-pending-ic">⏳</div><h2></h2><p></p><p class="eir-mut"></p>';
+    card.querySelector("h2").textContent = T.p_title;
+    card.querySelectorAll("p")[0].textContent = T.p_1;
+    card.querySelectorAll("p")[1].textContent = T.p_2;
+    var first = "eir-first";
+    if (access && !access.requested && access.frigo_client) {
+      // client du frigo (sans demande en cours) : la demande se fait sur un clic,
+      // comme depuis « Mon compte » de la Scannette
+      var ask = btn(T.p_ask, "eir-btn-primary " + first, function () {
+        ask.disabled = true;
+        api("/plugin/paiements/access", { method: "POST", body: { action: "request" } })
+          .then(function () { ask.textContent = "✓ " + T.p_req; })
+          .catch(function () { ask.disabled = false; });
+      });
+      card.appendChild(ask); first = "";
+    }
+    if (fridge) { card.appendChild(btn(T.p_frigo, (first ? first + " " : "") + (card.querySelector(".eir-btn-primary") ? "" : "eir-btn-primary"), { href: "/scannette/?frigo=1" })); first = ""; }
+    card.appendChild(btn(T.p_retry, first, function () { location.reload(); }));
+    card.appendChild(btn(T.p_logout, "", { href: "/web/logout" }));
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+  }
+  function hasRole(data) {
+    if (data.is_staff || data.is_superuser) return true;
+    var roles = data.roles || {};
+    for (var k in roles) { var v = roles[k]; if (Array.isArray(v) ? v.length > 0 : !!v) return true; }
+    return false;
+  }
+  function checkAccess() {
+    var p = path();
+    if (p === lastPath) return;
+    lastPath = p;
+    if (!isSpa() || AUTH_PAGE.test(p)) { hidePending(); return; }
+    if (checking) { lastPath = null; return; }
+    checking = true;
+    fetch("/api/user/roles/", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || hasRole(data)) { hidePending(); return; }
+        return api("/plugin/paiements/config").catch(function () { return null; }).then(function (cfg) {
+          var access = cfg && cfg.access;
+          // même règle que la Scannette : un compte qui n'est pas client du
+          // frigo dépose sa demande d'accès en arrivant
+          if (access && !access.requested && !access.frigo_client)
+            api("/plugin/paiements/access", { method: "POST", body: { action: "request" } }).catch(function () {});
+          if (AUTH_PAGE.test(path())) return; // déconnecté entre-temps
+          showPending(cfg);
+        });
+      })
+      .catch(function () {})
+      .then(function () { checking = false; });
+  }
+
+  /* ---------- branchement ---------- */
+  var queued = false;
+  function tick() {
+    queued = false;
+    try { enhanceLogin(); } catch (_) {}
+    try { checkAccess(); } catch (_) {}
+  }
+  function schedule() { if (!queued) { queued = true; requestAnimationFrame(tick); } }
+  function start() {
+    if (!isSpa()) return; // pages d'erreur Django (403/404/500) : rien à faire
+    new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("popstate", schedule);
+    schedule();
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+})();
+</script>

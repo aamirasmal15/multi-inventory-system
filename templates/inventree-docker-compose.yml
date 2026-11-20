@@ -58,6 +58,9 @@ services:
           INVENTREE_SERVER: http://inventree-server:${INVENTREE_WEB_PORT}
         volumes:
             - ${INVENTREE_EXT_VOLUME}:/home/inventree/data:z
+            # Page de connexion EirbConnect + écran « en attente d'approbation »
+            # (copie de templates/inventree-head.html, cf. son en-tête).
+            - ./inventree-head.html:/home/inventree/src/backend/InvenTree/templates/favicon.html:ro,z
         restart: unless-stopped
 
     inventree-worker:

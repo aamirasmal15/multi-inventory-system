@@ -371,6 +371,7 @@ docker network create inventree-front 2>/dev/null || true
 # ====== Templates requis à chaque run ======
 require_template "inventree-docker-compose.yml"
 require_template "caddy-blocks.conf"
+require_template "inventree-head.html"
 
 # ====== Exposition publique : VPS direct ou tunnel Cloudflare ======
 # Deux façons d'amener Internet jusqu'au Caddy frontal :
@@ -650,6 +651,13 @@ grep -q '^INVENTREE_FRONTEND_SETTINGS=' .env || echo 'INVENTREE_FRONTEND_SETTING
 
 # ====== docker-compose.yml InvenTree ======
 sed "s/__NAME__/$NAME/g" "$TEMPLATES_DIR/inventree-docker-compose.yml" > docker-compose.yml
+# Ajout à la page web d'InvenTree (connexion EirbConnect en avant, écran
+# d'attente des comptes sans rôle), monté par le compose sur favicon.html.
+# Copie AVANT tout « up » : un montage de fichier absent crée un dossier vide.
+# « cat > » et non « cp » : garde l'inode, sinon un conteneur déjà lancé reste
+# sur l'ancien fichier (montage de fichier). Django garde ses gabarits en
+# cache : le nouveau contenu ne sert qu'après un redémarrage du serveur.
+cat "$TEMPLATES_DIR/inventree-head.html" > inventree-head.html
 docker compose config >/dev/null && echo ">> YAML InvenTree OK"
 
 # Upgrade : récupérer la nouvelle image AVANT les migrations.
