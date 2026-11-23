@@ -67,34 +67,54 @@
   .eir-pwd-toggle .eir-chev { display: inline-block; margin-left: 4px; transition: transform .15s; text-decoration: none; }
   html.eir-pwd-open .eir-pwd-toggle .eir-chev { transform: rotate(180deg); }
 
-  /* Page « compte en attente d'approbation » (même contenu que la Scannette).
+  /* Page « compte en attente d'approbation » : copie de l'écran de la Scannette
+     (#screen-pending : mêmes couleurs, en-tête logo + nom, carte, boutons).
      Page à part, opaque : l'appli InvenTree reste masquée (eir-hold) tant que
      le compte n'est pas reconnu comme ayant un rôle — rien ne s'en voit. */
   html.eir-hold #root { visibility: hidden; }
   .eir-pending {
-    position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px; padding: 16px; overflow-y: auto; background: var(--mantine-color-gray-1, #f1f3f5);
+    --bg: #f1f3f5; --surface: #fff; --surface-2: #f8f9fa; --border: #dee2e6; --border-strong: #ced4da;
+    --text: #212529; --muted: #868e96; --primary: #228be6; --primary-light: #e7f5ff;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, .05), 0 1px 2px rgba(0, 0, 0, .06); --radius: 8px;
+    position: fixed; inset: 0; z-index: 2147483000; overflow-y: auto; display: flex; justify-content: center;
+    padding: 24px 16px; background: var(--bg); color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
-  .eir-pending-card {
-    width: 100%; max-width: 420px; border-radius: 14px; padding: 26px 24px 20px; text-align: center;
-    background: var(--mantine-color-body, #fff); color: var(--mantine-color-text, #1a1b1e);
-    border: 1px solid var(--mantine-color-default-border, #dee2e6); box-shadow: 0 8px 30px rgba(0, 0, 0, .08);
+  [data-mantine-color-scheme="dark"] .eir-pending {
+    --bg: #1a1b1e; --surface: #25262b; --surface-2: #2c2e33; --border: #373a40; --border-strong: #4a4e57;
+    --text: #e9ecef; --muted: #909296; --primary: #4dabf7; --primary-light: #1b3a52;
   }
-  [data-mantine-color-scheme="dark"] .eir-pending { background: var(--mantine-color-dark-8, #1a1b1e); }
-  .eir-pending-brand { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--mantine-color-dimmed, #868e96); }
-  .eir-pending-ic { font-size: 40px; line-height: 1; margin-bottom: 10px; }
-  .eir-pending h2 { margin: 0 0 10px; font-size: 20px; }
-  .eir-pending p { margin: 0 0 6px; font-size: 14px; line-height: 1.45; }
-  .eir-pending .eir-mut { color: var(--mantine-color-dimmed, #868e96); }
-  .eir-pending .eir-btn {
-    display: block; width: 100%; margin-top: 10px; padding: 10px 14px; border-radius: 8px; cursor: pointer;
-    font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; box-sizing: border-box;
-    border: 1px solid var(--mantine-color-default-border, #dee2e6); background: transparent; color: inherit;
-  }
-  .eir-pending .eir-btn-primary { background: var(--mantine-primary-color-filled, #4c6ef5); border-color: transparent; color: #fff; }
-  .eir-pending .eir-btn:disabled { opacity: .6; cursor: default; }
-  .eir-pending .eir-first { margin-top: 18px; }
+  .eir-pending * { box-sizing: border-box; }
+  .eir-pw { width: 100%; max-width: 440px; margin: auto 0; }
+  .eir-pw-top { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .eir-pw-logo { width: 58px; height: 58px; flex: none; border-radius: 10px; overflow: hidden; display: grid; place-items: center;
+    background: var(--surface); border: 1px solid var(--border); }
+  .eir-pw-logo img { width: 100%; height: 100%; object-fit: contain; }
+  .eir-pw-logo.fb { background: var(--primary); border-color: transparent; color: #fff; font-weight: 800; font-size: 26px; }
+  .eir-pw-brand { margin-left: 12px; min-width: 0; }
+  .eir-pw-brand b, .eir-pw-brand small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eir-pw-brand b { font-size: 18px; font-weight: 800; letter-spacing: .01em; }
+  .eir-pw-brand small { font-size: 12px; color: var(--muted); }
+  .eir-pending h1 { font-size: 22px; font-weight: 700; margin: 0 0 14px; letter-spacing: -.01em; }
+  .eir-pw-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    padding: 18px; text-align: center; }
+  .eir-pw-ic { margin: 6px auto 14px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; background: var(--primary-light); color: var(--primary); }
+  .eir-pw-card p { margin: 0; font-size: 15px; }
+  .eir-pw-card .p1 { margin-bottom: 6px; font-weight: 600; }
+  .eir-pw-card .p2 { color: var(--muted); }
+  .eir-pw-admins { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .eir-pw-admins .lbl { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .eir-pw-admins ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .eir-pw-admins li { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 4px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--border); font-size: 14px; font-weight: 600; }
+  .eir-pw-admins li i { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-style: normal;
+    font-size: 11px; font-weight: 700; background: var(--primary-light); color: var(--primary); }
+  .eir-pending .eir-btn { display: flex; align-items: center; justify-content: center; width: 100%; margin-top: 12px; padding: 12px 14px;
+    border-radius: var(--radius); cursor: pointer; font: inherit; font-size: 15px; font-weight: 600; text-decoration: none;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
+  .eir-pending .eir-btn:hover { background: var(--surface-2); }
+  .eir-pending .eir-btn + .eir-btn { margin-top: 8px; }
 </style>
 <script>
 (function () {
@@ -107,9 +127,8 @@
     p_title: "Compte en attente d'approbation",
     p_1: "Votre compte est en attente d'approbation.",
     p_2: "Contactez un admin si le problème persiste.",
-    p_req: "Demande envoyée aux admins",
-    p_ask: "Demander l'accès à l'inventaire",
-    p_frigo: "🧊 Aller au frigo en attendant",
+    p_sub: "Inventaire",
+    p_admins: "Admins de l'asso",
     p_retry: "Réessayer",
     p_logout: "Se déconnecter"
   } : {
@@ -119,13 +138,15 @@
     p_title: "Account awaiting approval",
     p_1: "Your account is awaiting approval.",
     p_2: "Contact an admin if this persists.",
-    p_req: "Request sent to the admins",
-    p_ask: "Request access to the inventory",
-    p_frigo: "🧊 Go to the fridge meanwhile",
+    p_sub: "Inventory",
+    p_admins: "Association admins",
     p_retry: "Retry",
     p_logout: "Sign out"
   };
   var root = document.documentElement;
+  // nom de l'instance : le <title> rendu par le serveur, lu AVANT que l'appli
+  // ne le remplace par le titre de chaque page (« Tableau de bord »…)
+  var INSTANCE = (document.title || "InvenTree").trim();
   function store(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (_) { return null; } }
   function cookie(n) { var m = document.cookie.match(new RegExp("(?:^|;\\s*)" + n + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : ""; }
   function path() { return location.pathname.replace(/\/+$/, ""); }
@@ -205,41 +226,73 @@
     return fetch(url, { method: opts.method || "GET", credentials: "same-origin", headers: h, body: opts.body ? JSON.stringify(opts.body) : undefined })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
   }
-  function showPending(cfg) {
-    var access = (cfg && cfg.access) || null;
-    var fridge = !!(cfg && cfg.fridge);
+  // admins à contacter : comptes staff/superuser actifs ET nommés (le compte
+  // technique superadmin_<asso>, sans nom, n'est pas une personne à joindre).
+  // /api/user/ est lisible par tout compte connecté (InvenTree natif).
+  function loadAdmins() {
+    function get(q) {
+      return api("/api/user/?is_active=true&limit=100&" + q)
+        .then(function (r) { return Array.isArray(r) ? r : (r && r.results) || []; })
+        .catch(function () { return []; });
+    }
+    return Promise.all([get("is_staff=true"), get("is_superuser=true")]).then(function (lists) {
+      var seen = {}, out = [];
+      lists[0].concat(lists[1]).forEach(function (u) {
+        var name = ((u.first_name || "") + " " + (u.last_name || "")).trim();
+        if (!name || seen[u.pk] || /^superadmin_/.test(u.username || "")) return;
+        seen[u.pk] = 1;
+        out.push(name);
+      });
+      return out.sort(function (x, y) { return x.localeCompare(y); });
+    });
+  }
+  function initials(n) { return n.split(/\s+/).map(function (w) { return w.charAt(0); }).join("").slice(0, 2).toUpperCase(); }
+  function showPending() {
     hidePending();
     ov = document.createElement("div");
     ov.className = "eir-pending";
     ov.setAttribute("role", "dialog");
     ov.setAttribute("aria-modal", "true");
-    var card = document.createElement("div");
-    card.className = "eir-pending-card";
-    var brand = document.createElement("div");
-    brand.className = "eir-pending-brand";
-    brand.textContent = document.title || "InvenTree";
-    ov.appendChild(brand);
-    card.innerHTML = '<div class="eir-pending-ic">⏳</div><h2></h2><p></p><p class="eir-mut"></p>';
-    card.querySelector("h2").textContent = T.p_title;
-    card.querySelectorAll("p")[0].textContent = T.p_1;
-    card.querySelectorAll("p")[1].textContent = T.p_2;
-    var first = "eir-first";
-    if (access && !access.requested && access.frigo_client) {
-      // client du frigo (sans demande en cours) : la demande se fait sur un clic,
-      // comme depuis « Mon compte » de la Scannette
-      var ask = btn(T.p_ask, "eir-btn-primary " + first, function () {
-        ask.disabled = true;
-        api("/plugin/paiements/access", { method: "POST", body: { action: "request" } })
-          .then(function () { ask.textContent = "✓ " + T.p_req; })
-          .catch(function () { ask.disabled = false; });
-      });
-      card.appendChild(ask); first = "";
-    }
-    if (fridge) { card.appendChild(btn(T.p_frigo, (first ? first + " " : "") + (card.querySelector(".eir-btn-primary") ? "" : "eir-btn-primary"), { href: "/scannette/?frigo=1" })); first = ""; }
-    card.appendChild(btn(T.p_retry, first, function () { location.reload(); }));
-    card.appendChild(btn(T.p_logout, "", { href: "/web/logout" }));
-    ov.appendChild(card);
+    var name = INSTANCE;
+    ov.innerHTML =
+      '<div class="eir-pw">' +
+        '<div class="eir-pw-top"><span class="eir-pw-logo"><img alt=""></span>' +
+          '<div class="eir-pw-brand"><b></b><small></small></div></div>' +
+        '<h1></h1>' +
+        '<div class="eir-pw-card">' +
+          '<div class="eir-pw-ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>' +
+          '<p class="p1"></p><p class="p2"></p>' +
+          '<div class="eir-pw-admins" hidden><div class="lbl"></div><ul></ul></div>' +
+        '</div>' +
+      '</div>';
+    var logo = ov.querySelector(".eir-pw-logo"), img = logo.querySelector("img");
+    // logo d'asso d'InvenTree (static/img/custom_logo.png) ; à défaut, l'initiale
+    // sur fond bleu, comme le logo de secours de la Scannette
+    img.onerror = function () { logo.classList.add("fb"); logo.textContent = name.charAt(0).toUpperCase(); };
+    img.src = "/static/img/custom_logo.png";
+    ov.querySelector(".eir-pw-brand b").textContent = name.toUpperCase();
+    ov.querySelector(".eir-pw-brand small").textContent = T.p_sub;
+    ov.querySelector("h1").textContent = T.p_title;
+    ov.querySelector(".p1").textContent = T.p_1;
+    ov.querySelector(".p2").textContent = T.p_2;
+    ov.querySelector(".eir-pw-admins .lbl").textContent = T.p_admins;
+    var wrap = ov.querySelector(".eir-pw");
+    wrap.appendChild(btn(T.p_retry, "", function () { location.reload(); }));
+    wrap.appendChild(btn(T.p_logout, "", { href: "/web/logout" }));
     document.body.appendChild(ov);
+    var box = ov;
+    loadAdmins().then(function (names) {
+      if (!names.length || box !== ov) return;
+      var ul = box.querySelector(".eir-pw-admins ul");
+      names.forEach(function (n) {
+        var li = document.createElement("li"), i = document.createElement("i");
+        i.textContent = initials(n);
+        li.appendChild(i);
+        li.appendChild(document.createTextNode(n));
+        ul.appendChild(li);
+      });
+      box.querySelector(".eir-pw-admins").hidden = false;
+    });
   }
   function hasRole(data) {
     if (data.is_staff || data.is_superuser) return true;
@@ -262,12 +315,12 @@
         if (!data || hasRole(data)) { verified = !!data; hidePending(); hold(false); return; }
         return api("/plugin/paiements/config").catch(function () { return null; }).then(function (cfg) {
           var access = cfg && cfg.access;
-          // même règle que la Scannette : un compte qui n'est pas client du
-          // frigo dépose sa demande d'accès en arrivant
-          if (access && !access.requested && !access.frigo_client)
+          // ouvrir l'inventaire sur PC = vouloir y accéder : la demande part
+          // d'office, client du frigo compris (plugin paiements seulement)
+          if (access && !access.requested)
             api("/plugin/paiements/access", { method: "POST", body: { action: "request" } }).catch(function () {});
           if (AUTH_PAGE.test(path())) { hold(false); return; } // déconnecté entre-temps
-          showPending(cfg);
+          showPending();
           clearTimeout(holdTimer); // la page d'attente garde InvenTree masqué
         });
       })
