@@ -47,7 +47,9 @@ mêmes deux fichiers = un seul thème existe, il sert pour les deux.
 Un même logo alimente **deux** cibles à chaque déploiement :
 - **Scannette** : `html/img/<nom>-{white,black}.png` (en-tête, login, interstitiel mobile) ;
 - **InvenTree** (PUI) : `static/img/custom_logo.png` + `customize.logo` (navbar, après connexion,
-  servi public via `/static/`). Pas de favicon (on garde celui d'InvenTree).
+  servi public via `/static/`) ;
+- **Favicons** InvenTree (donc aussi l'onglet de la Scannette, même domaine) : régénérés depuis
+  `custom_logo.png` par `scripts/inventree-favicons.py`.
 
 Pour une asso **partenaire** (nom ≠ `MAIN_ASSO`), le login de la Scannette affiche en plus le
 lockup collab « <PRINCIPALE> × <ASSO> » : le logo de l'asso principale est recopié dans chaque

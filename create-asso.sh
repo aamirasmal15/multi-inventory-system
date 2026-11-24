@@ -827,7 +827,7 @@ if [ "$WITH_SCANNETTE" = "1" ]; then
   # ====== Le même logo pour InvenTree (customize.logo, PUI) ======
   # Copié vers static/img/custom_logo.png (servi public via /static/, pas /media/
   # qui est token-gated). À refaire à chaque run : 'invoke update' passe un
-  # collectstatic --clear qui vide static/img aux upgrades. Pas de favicon (choix).
+  # collectstatic --clear qui vide static/img aux upgrades. Favicons : plus bas.
   if [ -n "$LOGO_WHITE" ] && [ -f "$SCANDIR/html/img/$LOGO_WHITE" ]; then
     IT_STATIC="$DIR/$NAME-data/static/img"
     sudo mkdir -p "$IT_STATIC"
@@ -1363,6 +1363,15 @@ PY
 done
 if [ "$PATCHED_BUNDLE" = "1" ]; then
   docker restart "$NAME-server" >/dev/null 2>&1 || true
+fi
+
+# ====== Favicons InvenTree (et Scannette, même domaine) = logo de l'asso ======
+# Régénérés depuis static/img/custom_logo.png par Pillow, dans le conteneur.
+# À refaire à chaque run : collectstatic --clear remet ceux d'InvenTree aux
+# upgrades. Sans custom_logo.png, le script ne touche à rien. Non bloquant.
+if docker exec -i "$NAME-server" python3 - < "$SCRIPT_DIR/scripts/inventree-favicons.py" 2>/dev/null \
+    | sed 's/^/>> InvenTree : /'; then :; else
+  echo "!! Favicons : génération échouée (favicons d'InvenTree conservés)."
 fi
 
 # ====== Bilan de santé de l'exposition publique ======
